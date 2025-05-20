@@ -1,0 +1,19 @@
+[project]
+name = "videomeg-browser"
+version = "0.1.0"
+description = "Browse video data recorded with video-MEG system"
+readme = "README.md"
+authors = [
+    { name = "Teemu Taivainen", email = "teemu.taivainen@hotmail.fi" }
+]
+requires-python = ">=3.10"
+dependencies = ["mne"]
+
+[project.optional-dependencies]
+dev = [
+  "pytest"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
