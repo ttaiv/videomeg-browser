@@ -13,7 +13,15 @@ import sys
 import cv2
 import pyqtgraph as pg
 from cv2.typing import MatLike
-from qtpy.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel
+from qtpy.QtWidgets import (
+    QApplication,
+    QLabel,
+    QMainWindow,
+    QPushButton,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
 
 pg.setConfigOptions(imageAxisOrder="row-major")
 
@@ -72,6 +80,19 @@ class VideoFile:
         self._set_next_frame(self.next_frame_idx - 2)
         return self.read_next_frame()
 
+    def read_frame_at_position(self, frame_idx: int) -> MatLike | None:
+        """
+        Read a specific frame from the video file.
+        """
+        if not self.cap.isOpened():
+            raise ValueError("Trying to read from a closed video file.")
+
+        if frame_idx < 0 or frame_idx >= self.frame_count:
+            raise ValueError(f"Frame index out of bounds: {frame_idx}")
+
+        self._set_next_frame(frame_idx)
+        return self.read_next_frame()
+
     def _set_next_frame(self, frame_idx: int) -> None:
         """
         Set the next frame to be read from the video file.
@@ -90,21 +111,16 @@ class VideoBrowser(QMainWindow):
 
         self.setWindowTitle("Video Browser Prototype")
 
-        # Create container to hold the plot and button
+        # Create container to hold UI elements
         container = QWidget()
         self.setCentralWidget(container)
         layout = QVBoxLayout()
         container.setLayout(layout)
 
-        # Create an ImageView widget to display the video frames
+        # Create an ImageView widget and display first frame of the video
         self.im_view = pg.ImageView()
-        self.im_view.setImage(self.video.read_next_frame())
         layout.addWidget(self.im_view)
-
-        # Create a label to display the current frame index
-        self.frame_label = QLabel()
-        self.update_frame_label()
-        layout.addWidget(self.frame_label)
+        self.im_view.setImage(self.video.read_next_frame())
 
         # Create a button for navigating to the next frame
         self.button = QPushButton("Next Frame")
@@ -115,6 +131,19 @@ class VideoBrowser(QMainWindow):
         self.prev_button = QPushButton("Previous Frame")
         self.prev_button.clicked.connect(self.display_previous_frame)
         layout.addWidget(self.prev_button)
+
+        # Create a slider for navigating to a specific frame
+        self.frame_slider = QSlider(Qt.Horizontal)
+        self.frame_slider.setMinimum(1)
+        self.frame_slider.setMaximum(self.video.frame_count)
+        self.frame_slider.setValue(1)  # 1-based index of the first frame
+        self.frame_slider.valueChanged.connect(self.slider_frame_changed)
+        layout.addWidget(self.frame_slider)
+
+        # Create a label to display the current frame index
+        self.frame_label = QLabel()
+        self.frame_label.setText(f"Current Frame: 1/{self.video.frame_count}")
+        layout.addWidget(self.frame_label)
 
     def display_next_frame(self):
         """
@@ -127,6 +156,7 @@ class VideoBrowser(QMainWindow):
 
         self.im_view.setImage(frame)
         self.update_frame_label()
+        self.update_slider()
 
     def display_previous_frame(self):
         """
@@ -139,18 +169,43 @@ class VideoBrowser(QMainWindow):
 
         self.im_view.setImage(frame)
         self.update_frame_label()
+        self.update_slider()
+
+    def slider_frame_changed(self, value: int):
+        """
+        Update the video to display the frame corresponding to the slider's position.
+        """
+        frame = self.video.read_frame_at_position(value - 1)  # Convert to 0-based index
+        if frame is None:
+            raise ValueError(f"Invalid frame index {value} selected with the slider.")
+
+        self.im_view.setImage(frame)
+        self.update_frame_label()
 
     def update_frame_label(self):
         """
         Update the frame label to show the current frame index.
         """
-        self.frame_label.setText(f"Current Frame: {self.video.next_frame_idx}/{self.video.frame_count}")
+        # One-based index for display so we can use next_frame_idx directly
+        current_frame_number = self.video.next_frame_idx
+        self.frame_label.setText(
+            f"Current Frame: {current_frame_number}/{self.video.frame_count}"
+        )
+
+    def update_slider(self):
+        """
+        Update the slider to reflect the current frame index.
+        """
+        # One-based index for display so we can use next_frame_idx directly
+        self.frame_slider.setValue(self.video.next_frame_idx)
 
 
 if __name__ == "__main__":
     app = QApplication([])
 
-    video = VideoFile("/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/export_video/animal_meg_subject_2_240614.avi")
+    video = VideoFile(
+        "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/export_video/animal_meg_subject_2_240614.avi"
+    )
     window = VideoBrowser(video)
     window.resize(1000, 800)
     window.show()
