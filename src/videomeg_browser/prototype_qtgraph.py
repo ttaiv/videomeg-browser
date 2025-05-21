@@ -13,7 +13,7 @@ import sys
 import cv2
 import pyqtgraph as pg
 from cv2.typing import MatLike
-from qtpy.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget
+from qtpy.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel
 
 pg.setConfigOptions(imageAxisOrder="row-major")
 
@@ -101,6 +101,11 @@ class VideoBrowser(QMainWindow):
         self.im_view.setImage(self.video.read_next_frame())
         layout.addWidget(self.im_view)
 
+        # Create a label to display the current frame index
+        self.frame_label = QLabel()
+        self.update_frame_label()
+        layout.addWidget(self.frame_label)
+
         # Create a button for navigating to the next frame
         self.button = QPushButton("Next Frame")
         self.button.clicked.connect(self.display_next_frame)
@@ -121,6 +126,7 @@ class VideoBrowser(QMainWindow):
             return
 
         self.im_view.setImage(frame)
+        self.update_frame_label()
 
     def display_previous_frame(self):
         """
@@ -132,17 +138,20 @@ class VideoBrowser(QMainWindow):
             return
 
         self.im_view.setImage(frame)
+        self.update_frame_label()
+
+    def update_frame_label(self):
+        """
+        Update the frame label to show the current frame index.
+        """
+        self.frame_label.setText(f"Current Frame: {self.video.next_frame_idx}/{self.video.frame_count}")
 
 
 if __name__ == "__main__":
     app = QApplication([])
 
-    video = VideoFile(
-        "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/export_video/animal_meg_subject_2_240614_cropped.avi"
-    )
-
+    video = VideoFile("/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/export_video/animal_meg_subject_2_240614.avi")
     window = VideoBrowser(video)
-    window.resize(800, 600)
+    window.resize(1000, 800)
     window.show()
-
     sys.exit(app.exec_())
