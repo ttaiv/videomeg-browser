@@ -27,9 +27,7 @@ pg.setConfigOptions(imageAxisOrder="row-major")
 
 
 class VideoFile:
-    """
-    Data object that holds a video file and provides methods to read frames from it.
-    """
+    """Container that holds a video file and provides methods to read frames from it."""
 
     def __init__(self, fname: str) -> None:
         self.fname = fname
@@ -44,13 +42,12 @@ class VideoFile:
         self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        # Matches to cv2.CAP_PROP_POS_FRAMES and tells the index of the next frame to be read
+        # Matches to cv2.CAP_PROP_POS_FRAMES and tells the index of the next
+        # frame to be read
         self.next_frame_idx = 0
 
     def read_next_frame(self) -> MatLike | None:
-        """
-        Read the next frame from the video file.
-        """
+        """Read the next frame from the video file."""
         if not self.cap.isOpened():
             raise ValueError("Trying to read from a closed video file.")
 
@@ -66,9 +63,7 @@ class VideoFile:
         return frame
 
     def read_previous_frame(self) -> MatLike | None:
-        """
-        Read the frame before the last read frame from the video file.
-        """
+        """Read the frame before the last read frame from the video file."""
         if not self.cap.isOpened():
             raise ValueError("Trying to read from a closed video file.")
 
@@ -81,9 +76,7 @@ class VideoFile:
         return self.read_next_frame()
 
     def read_frame_at_position(self, frame_idx: int) -> MatLike | None:
-        """
-        Read a specific frame from the video file.
-        """
+        """Read a specific frame from the video file."""
         if not self.cap.isOpened():
             raise ValueError("Trying to read from a closed video file.")
 
@@ -94,9 +87,7 @@ class VideoFile:
         return self.read_next_frame()
 
     def _set_next_frame(self, frame_idx: int) -> None:
-        """
-        Set the next frame to be read from the video file.
-        """
+        """Set the next frame to be read from the video file."""
         if frame_idx < 0 or frame_idx >= self.frame_count:
             raise ValueError(f"Frame index out of bounds: {frame_idx}")
 
@@ -105,6 +96,14 @@ class VideoFile:
 
 
 class VideoBrowser(QMainWindow):
+    """A browser for viewing video frames.
+
+    Parameters
+    ----------
+    video : VideoFile
+        The video file to be displayed.
+    """
+
     def __init__(self, video: VideoFile):
         super().__init__()
         self.video = video
@@ -146,9 +145,7 @@ class VideoBrowser(QMainWindow):
         layout.addWidget(self.frame_label)
 
     def display_next_frame(self):
-        """
-        Display the next frame in the video.
-        """
+        """Display the next frame in the video."""
         frame = self.video.read_next_frame()
         if frame is None:
             print("End of video reached.")
@@ -159,9 +156,7 @@ class VideoBrowser(QMainWindow):
         self.update_slider()
 
     def display_previous_frame(self):
-        """
-        Display the previous frame in the video.
-        """
+        """Display the previous frame in the video."""
         frame = self.video.read_previous_frame()
         if frame is None:
             print("Already at the first frame.")
@@ -172,9 +167,7 @@ class VideoBrowser(QMainWindow):
         self.update_slider()
 
     def slider_frame_changed(self, value: int):
-        """
-        Update the video to display the frame corresponding to the slider's position.
-        """
+        """Update view to display the frame corresponding to the slider's position."""
         frame = self.video.read_frame_at_position(value - 1)  # Convert to 0-based index
         if frame is None:
             raise ValueError(f"Invalid frame index {value} selected with the slider.")
@@ -183,9 +176,7 @@ class VideoBrowser(QMainWindow):
         self.update_frame_label()
 
     def update_frame_label(self):
-        """
-        Update the frame label to show the current frame index.
-        """
+        """Update the frame label to show the current frame index."""
         # One-based index for display so we can use next_frame_idx directly
         current_frame_number = self.video.next_frame_idx
         self.frame_label.setText(
@@ -193,9 +184,7 @@ class VideoBrowser(QMainWindow):
         )
 
     def update_slider(self):
-        """
-        Update the slider to reflect the current frame index.
-        """
+        """Update the slider to reflect the current frame index."""
         # One-based index for display so we can use next_frame_idx directly
         self.frame_slider.setValue(self.video.next_frame_idx)
 
