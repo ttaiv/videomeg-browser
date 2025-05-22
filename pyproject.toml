@@ -17,3 +17,21 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.ruff.lint]
+select = ["A", "B006", "D", "E", "F", "I", "UP", "UP031", "W"]
+ignore = [
+  "D100",  # Missing docstring in public module
+  "D104",  # Missing docstring in public package
+  "D413",  # Missing blank line after last section
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+ignore-decorators = [
+  "mne.utils.copy_doc",
+  "mne.utils.copy_function_doc_to_method_doc",
+  "mne.utils.deprecated",
+  "property",
+  "setter",
+]
