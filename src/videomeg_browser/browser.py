@@ -16,7 +16,6 @@ from cv2.typing import MatLike
 from qtpy.QtWidgets import (
     QApplication,
     QLabel,
-    QMainWindow,
     QPushButton,
     QSlider,
     QVBoxLayout,
@@ -95,7 +94,7 @@ class VideoFile:
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
 
 
-class VideoBrowser(QMainWindow):
+class VideoBrowser(QWidget):
     """A browser for viewing video frames.
 
     Parameters
@@ -110,11 +109,7 @@ class VideoBrowser(QMainWindow):
 
         self.setWindowTitle("Video Browser Prototype")
 
-        # Create container to hold UI elements
-        container = QWidget()
-        self.setCentralWidget(container)
-        layout = QVBoxLayout()
-        container.setLayout(layout)
+        layout = QVBoxLayout(self)
 
         # Create an ImageView widget and display first frame of the video
         self.im_view = pg.ImageView()
