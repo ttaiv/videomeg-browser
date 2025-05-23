@@ -196,7 +196,7 @@ def _read_attrib(data_file, ver):
     return ts, block_id, sz, total_sz
 
 
-class VideoData:
+class VideoFileHelsinkiVideoMEG(VideoFile):
     """
     To read a video file initialize VideoData object with file name. You can
     then get the frame times from the object's ts variable. To get individual
@@ -237,15 +237,55 @@ class VideoData:
             assert self._file.tell() + sz <= end_data
             self._file.seek(sz, 1)
 
-        self.nframes = self.ts.size
+        self._nframes = self.ts.size
+        # Use first frame to determine width and height
+        first_frame = self.get_frame_at(0)
+        if first_frame is None:
+            raise ValueError("Could not read the first frame of the video.")
+        self._frame_width = first_frame.shape[1]
+        self._frame_height = first_frame.shape[0]
 
-    def __del__(self):
-        self._file.close()
+    @property
+    def frame_count(self) -> int:
+        return self._nframes
 
-    def get_frame(self, indx):
-        """
-        Return indx-th frame a jpg image in the memory.
-        """
-        offset, sz = self._frame_ptrs[indx]
+    @property
+    def fps(self) -> int:
+        # TODO: Implement a proper FPS calculation
+        return 0
+
+    @property
+    def frame_width(self) -> int:
+        return self._frame_width
+
+    @property
+    def frame_height(self) -> int:
+        return self._frame_height
+
+    def close(self) -> None:
+        """Close the video file."""
+        if not self._file.closed:
+            self._file.close()
+
+    def __del__(self) -> None:
+        """Ensure the video file is closed when the object is deleted."""
+        self.close()
+
+    def __enter__(self) -> "VideoFileHelsinkiVideoMEG":
+        """Enter the runtime context for the video file."""
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        """Exit the runtime context and close the video file."""
+        self.close()
+
+    def get_frame_at(self, frame_idx: int):
+        """Read a specific frame from the video file."""
+        offset, sz = self._frame_ptrs[frame_idx]
         self._file.seek(offset)
-        return self._file.read(sz)
+        frame_bytes = self._file.read(sz)
+        frame_arr = np.frombuffer(frame_bytes, dtype=np.uint8)
+        frame = cv2.imdecode(frame_arr, cv2.IMREAD_COLOR)
+
+        # Convert the frame from BGR to RGB format
+        return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
