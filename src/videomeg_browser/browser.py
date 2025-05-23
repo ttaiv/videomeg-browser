@@ -37,6 +37,7 @@ class VideoBrowser(QWidget):
     def __init__(self, video: VideoFile):
         super().__init__()
         self.video = video
+        self.current_frame_idx = 0
 
         self.setWindowTitle("Video Browser Prototype")
 
@@ -45,7 +46,10 @@ class VideoBrowser(QWidget):
         # Create an ImageView widget and display first frame of the video
         self.im_view = pg.ImageView()
         layout.addWidget(self.im_view)
-        self.im_view.setImage(self.video.read_next_frame())
+        first_frame = self.video.get_frame_at(0)
+        if first_frame is None:
+            raise ValueError("Could not read the first frame of the video.")
+        self.im_view.setImage(first_frame)
 
         # Create a button for navigating to the next frame
         self.button = QPushButton("Next Frame")
@@ -72,29 +76,32 @@ class VideoBrowser(QWidget):
 
     def display_next_frame(self):
         """Display the next frame in the video."""
-        frame = self.video.read_next_frame()
+        frame = self.video.get_frame_at(self.current_frame_idx + 1)
         if frame is None:
             print("End of video reached.")
             return
 
+        self.current_frame_idx += 1
         self.im_view.setImage(frame)
         self.update_frame_label()
         self.update_slider()
 
     def display_previous_frame(self):
         """Display the previous frame in the video."""
-        frame = self.video.read_previous_frame()
+        frame = self.video.get_frame_at(self.current_frame_idx - 1)
         if frame is None:
             print("Already at the first frame.")
             return
 
+        self.current_frame_idx -= 1
         self.im_view.setImage(frame)
         self.update_frame_label()
         self.update_slider()
 
     def slider_frame_changed(self, value: int):
         """Update view to display the frame corresponding to the slider's position."""
-        frame = self.video.read_frame_at_position(value - 1)  # Convert to 0-based index
+        self.current_frame_idx = value - 1  # Convert to 0-based index
+        frame = self.video.get_frame_at(self.current_frame_idx)
         if frame is None:
             raise ValueError(f"Invalid frame index {value} selected with the slider.")
 
@@ -102,17 +109,16 @@ class VideoBrowser(QWidget):
         self.update_frame_label()
 
     def update_frame_label(self):
-        """Update the frame label to show the current frame index."""
-        # One-based index for display so we can use next_frame_idx directly
-        current_frame_number = self.video.next_frame_idx
+        """Update the frame label to show the current frame number."""
+        # Use one-based index for display
         self.frame_label.setText(
-            f"Current Frame: {current_frame_number}/{self.video.frame_count}"
+            f"Current Frame: {self.current_frame_idx + 1}/{self.video.frame_count}"
         )
 
     def update_slider(self):
         """Update the slider to reflect the current frame index."""
-        # One-based index for display so we can use next_frame_idx directly
-        self.frame_slider.setValue(self.video.next_frame_idx)
+        # Use one-based index for display
+        self.frame_slider.setValue(self.current_frame_idx + 1)
 
 
 if __name__ == "__main__":

@@ -51,13 +51,14 @@ class VideoFile:
         self._set_next_frame(self.next_frame_idx - 2)
         return self.read_next_frame()
 
-    def read_frame_at_position(self, frame_idx: int) -> MatLike | None:
+    def get_frame_at(self, frame_idx: int) -> MatLike | None:
         """Read a specific frame from the video file."""
         if not self.cap.isOpened():
             raise ValueError("Trying to read from a closed video file.")
 
         if frame_idx < 0 or frame_idx >= self.frame_count:
-            raise ValueError(f"Frame index out of bounds: {frame_idx}")
+            print(f"Frame index out of bounds: {frame_idx}, returning None.")
+            return None
 
         self._set_next_frame(frame_idx)
         return self.read_next_frame()
