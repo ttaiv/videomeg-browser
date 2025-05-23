@@ -279,8 +279,14 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         """Exit the runtime context and close the video file."""
         self.close()
 
-    def get_frame_at(self, frame_idx: int):
+    def get_frame_at(self, frame_idx: int) -> MatLike | None:
         """Read a specific frame from the video file."""
+        if self._file.closed:
+            raise ValueError("Trying to read from a closed video file.")
+        if frame_idx < 0 or frame_idx >= self._nframes:
+            print(f"Frame index out of bounds: {frame_idx}, returning None.")
+            return None
+
         offset, sz = self._frame_ptrs[frame_idx]
         self._file.seek(offset)
         frame_bytes = self._file.read(sz)
