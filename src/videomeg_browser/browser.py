@@ -20,7 +20,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from .video import VideoFile
+from .video import VideoFile, VideoFileCV2
 
 pg.setConfigOptions(imageAxisOrder="row-major")
 
@@ -124,7 +124,7 @@ class VideoBrowser(QWidget):
 if __name__ == "__main__":
     app = QApplication([])
 
-    video = VideoFile(
+    video = VideoFileCV2(
         "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/Video_MEG/kapsu.mp4"
     )
     window = VideoBrowser(video)

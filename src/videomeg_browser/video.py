@@ -1,11 +1,65 @@
 import struct
+from abc import ABC, abstractmethod
 
 import cv2
 import numpy as np
 from cv2.typing import MatLike
 
 
-class VideoFile:
+class VideoFile(ABC):
+    """Container that holds a video file and provides method to read frames from it."""
+
+    @abstractmethod
+    def get_frame_at(self, frame_idx: int) -> MatLike | None:
+        """Read a specific frame from the video file."""
+        pass
+
+    @abstractmethod
+    def close(self) -> None:
+        """Release the video file."""
+        pass
+
+    @abstractmethod
+    def __del__(self) -> None:
+        """Ensure the video file is released when the object is deleted."""
+        pass
+
+    @abstractmethod
+    def __enter__(self) -> "VideoFile":
+        """Enter the runtime context for the video file."""
+        pass
+
+    @abstractmethod
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Exit the runtime context and release the video file."""
+        pass
+
+    @property
+    @abstractmethod
+    def frame_count(self) -> int:
+        """Return the number of frames in the video file."""
+        pass
+
+    @property
+    @abstractmethod
+    def fps(self) -> int:
+        """Return the frames per second of the video file."""
+        pass
+
+    @property
+    @abstractmethod
+    def frame_width(self) -> int:
+        """Return the width of the video frames."""
+        pass
+
+    @property
+    @abstractmethod
+    def frame_height(self) -> int:
+        """Return the height of the video frames."""
+        pass
+
+
+class VideoFileCV2(VideoFile):
     """Container that holds a video file and provides methods to read frames from it."""
 
     def __init__(self, fname: str) -> None:
@@ -15,15 +69,25 @@ class VideoFile:
         if not self._cap.isOpened():
             raise ValueError(f"Could not open video file: {fname}")
 
-        # Store video properties
-        self.frame_count = int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.fps = int(self._cap.get(cv2.CAP_PROP_FPS))
-        self.frame_width = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.frame_height = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
         # Matches to cv2.CAP_PROP_POS_FRAMES and tells the index of the next
         # frame to be read
         self._next_frame_idx = 0
+
+    @property
+    def frame_count(self) -> int:
+        return int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    @property
+    def fps(self) -> int:
+        return int(self._cap.get(cv2.CAP_PROP_FPS))
+
+    @property
+    def frame_width(self) -> int:
+        return int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+
+    @property
+    def frame_height(self) -> int:
+        return int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     def _read_next_frame(self) -> MatLike | None:
         """Read the next frame from the video file."""
@@ -81,6 +145,14 @@ class VideoFile:
 
     def __del__(self) -> None:
         """Ensure the video capture object is released when the object is deleted."""
+        self.close()
+
+    def __enter__(self) -> "VideoFileCV2":
+        """Enter the runtime context for the video file."""
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        """Exit the runtime context and release the video file."""
         self.close()
 
 
