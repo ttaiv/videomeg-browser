@@ -1,4 +1,7 @@
+import struct
+
 import cv2
+import numpy as np
 from cv2.typing import MatLike
 
 
@@ -79,3 +82,98 @@ class VideoFile:
     def __del__(self) -> None:
         """Ensure the video capture object is released when the object is deleted."""
         self.close()
+
+
+# --- Code below is adapted from PyVideoMEG project ---
+
+
+class UnknownVersionError(Exception):
+    """Error due to unknown file version."""
+
+    pass
+
+
+def _read_attrib(data_file, ver):
+    """
+    Read data block attributes. If cannot read the attributes (EOF?), return
+    -1 in ts
+    """
+    if ver == 1:
+        attrib = data_file.read(12)
+        if len(attrib) == 12:
+            ts, sz = struct.unpack("QI", attrib)
+        else:
+            ts = -1
+            sz = -1
+        block_id = 0
+        total_sz = sz + 12
+
+    elif ver == 2 or ver == 3:
+        attrib = data_file.read(20)
+        if len(attrib) == 20:
+            ts, block_id, sz = struct.unpack("QQI", attrib)
+        else:
+            ts = -1
+            block_id = 0
+            sz = -1
+        total_sz = sz + 20
+
+    else:
+        raise UnknownVersionError()
+
+    return ts, block_id, sz, total_sz
+
+
+class VideoData:
+    """
+    To read a video file initialize VideoData object with file name. You can
+    then get the frame times from the object's ts variable. To get individual
+    frames use get_frame function.
+    """
+
+    def __init__(self, file_name):
+        self._file = open(file_name, "rb")
+        assert (
+            self._file.read(len("ELEKTA_VIDEO_FILE")) == b"ELEKTA_VIDEO_FILE"
+        )  # make sure the magic string is OK
+        self.ver = struct.unpack("I", self._file.read(4))[0]
+
+        if self.ver == 1 or self.ver == 2:
+            self.site_id = -1
+            self.is_sender = -1
+
+        elif self.ver == 3:
+            self.site_id, self.is_sender = struct.unpack("BB", self._file.read(2))
+
+        else:
+            raise UnknownVersionError()
+
+        # get the file size
+        begin_data = self._file.tell()
+        self._file.seek(0, 2)
+        end_data = self._file.tell()
+        self._file.seek(begin_data, 0)
+
+        self.ts = np.array([])
+        self._frame_ptrs = []
+
+        while self._file.tell() < end_data:  # we did not reach end of file
+            ts, block_id, sz, total_sz = _read_attrib(self._file, self.ver)
+            assert ts != -1
+            self.ts = np.append(self.ts, ts)
+            self._frame_ptrs.append((self._file.tell(), sz))
+            assert self._file.tell() + sz <= end_data
+            self._file.seek(sz, 1)
+
+        self.nframes = self.ts.size
+
+    def __del__(self):
+        self._file.close()
+
+    def get_frame(self, indx):
+        """
+        Return indx-th frame a jpg image in the memory.
+        """
+        offset, sz = self._frame_ptrs[indx]
+        self._file.seek(offset)
+        return self._file.read(sz)
