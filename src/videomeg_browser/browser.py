@@ -93,6 +93,15 @@ class VideoFile:
         self.next_frame_idx = frame_idx
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
 
+    def close(self) -> None:
+        """Release the video capture object."""
+        if self.cap.isOpened():
+            self.cap.release()
+
+    def __del__(self) -> None:
+        """Ensure the video capture object is released when the object is deleted."""
+        self.close()
+
 
 class VideoBrowser(QWidget):
     """A browser for viewing video frames.
@@ -188,7 +197,7 @@ if __name__ == "__main__":
     app = QApplication([])
 
     video = VideoFile(
-        "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/export_video/animal_meg_subject_2_240614.avi"
+        "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/Video_MEG/kapsu.mp4"
     )
     window = VideoBrowser(video)
     window.resize(1000, 800)
