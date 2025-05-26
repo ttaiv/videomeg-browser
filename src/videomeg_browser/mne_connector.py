@@ -43,7 +43,7 @@ class TimeStampMapper:
 
         # Convert raw index to unix timestamp in milliseconds
         raw_ts = self.raw_ts[raw_idx]
-        print(f"Raw timestamp at index {raw_idx}: {raw_ts}")
+        print(f"Raw unix timestamp at index {raw_idx}: {raw_ts} ms")
 
         # Now we have temporal location of the raw data point in same units as video
         # timestamps, so we can compare them directly.
@@ -58,6 +58,31 @@ class TimeStampMapper:
         idx = np.searchsorted(self.vid_ts, raw_ts)
 
         return int(idx)
+
+    def video_frame_index_to_raw_time(self, vid_idx: int) -> float | None:
+        """Convert a video frame index to a raw data time point (in seconds)."""
+        if vid_idx < 0 or vid_idx >= len(self.vid_ts):
+            print(f"Video frame index {vid_idx} is out of bounds.")
+            return None
+
+        # Get unix timestamp of the video frame
+        vid_ts = self.vid_ts[vid_idx]
+        print(f"Video unix timestamp at index {vid_idx}: {vid_ts} ms")
+
+        if vid_ts < self.raw_ts[0] or vid_ts > self.raw_ts[-1]:
+            print("Video timestamp is out of raw data bounds, returning None.")
+            return None
+
+        # Find the first raw timestamp that is greater than
+        # or equal to the video timestamp
+        # TODO: Consider what other methods could be used here
+        raw_idx = np.searchsorted(self.raw_ts, vid_ts)
+        print(f"Raw index for video unix timestamp {vid_idx}: {raw_idx}")
+
+        raw_t = self.raw.times[raw_idx]
+        print(f"Raw time at index {raw_idx}: {raw_t} seconds")
+
+        return raw_t
 
 
 class ScrollBarSynchronizer:
@@ -101,7 +126,19 @@ class ScrollBarSynchronizer:
         """Update the raw data browser's scroll bar based on the video slider."""
         if not self._syncing:
             self._syncing = True
-            self.raw_scroll_bar.setValue(value)
+
+            print()
+            print(f"Syncing video slider value: {value}")
+            raw_t = self.ts_mapper.video_frame_index_to_raw_time(value)
+            if raw_t is None:
+                print("No corresponding raw time found for this video frame index.")
+            else:
+                print(f"Corresponding raw time in seconds: {raw_t:.6f}")
+                # Convert raw time to scroll bar value
+                scroll_value = int(raw_t * self.raw_scroll_bar.step_factor)
+                print(f"Setting raw scroll bar value to: {scroll_value}")
+                self.raw_scroll_bar.setValue(scroll_value)
+
             self._syncing = False
 
 
