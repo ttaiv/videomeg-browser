@@ -58,6 +58,11 @@ class VideoFile(ABC):
         """Return the height of the video frames."""
         pass
 
+    @abstractmethod
+    def frame_idx_to_ms(self, frame_idx: int) -> float:
+        """Convert frame index to milliseconds since the start of the video."""
+        pass
+
 
 class VideoFileCV2(VideoFile):
     """Container that holds a video file and provides methods to read frames from it."""
@@ -154,6 +159,17 @@ class VideoFileCV2(VideoFile):
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         """Exit the runtime context and release the video file."""
         self.close()
+
+    def frame_idx_to_ms(self, frame_idx: int) -> float:
+        """Convert frame index to milliseconds passed since the start of the video.
+
+        This is estimated using the frames per second (FPS) of the video.
+        """
+        if frame_idx < 0 or frame_idx >= self.frame_count:
+            raise ValueError(f"Frame index out of bounds: {frame_idx}")
+
+        # Calculate the timestamp in milliseconds
+        return (frame_idx / self.fps) * 1000.0
 
 
 # --- Code below is adapted from PyVideoMEG project ---
@@ -318,3 +334,13 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
 
         # Convert the frame from BGR to RGB format
         return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    def frame_idx_to_ms(self, frame_idx: int) -> float:
+        """Convert frame index to milliseconds since the start of the video."""
+        if frame_idx < 0 or frame_idx >= self._nframes:
+            raise ValueError(f"Frame index out of bounds: {frame_idx}")
+
+        unix_ts = self.ts[frame_idx]
+        start_ts = self.ts[0]
+
+        return unix_ts - start_ts
