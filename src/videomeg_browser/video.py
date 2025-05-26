@@ -42,7 +42,7 @@ class VideoFile(ABC):
 
     @property
     @abstractmethod
-    def fps(self) -> int:
+    def fps(self) -> float:
         """Return the frames per second of the video file."""
         pass
 
@@ -78,8 +78,8 @@ class VideoFileCV2(VideoFile):
         return int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     @property
-    def fps(self) -> int:
-        return int(self._cap.get(cv2.CAP_PROP_FPS))
+    def fps(self) -> float:
+        return self._cap.get(cv2.CAP_PROP_FPS)
 
     @property
     def frame_width(self) -> int:
@@ -244,15 +244,38 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
             raise ValueError("Could not read the first frame of the video.")
         self._frame_width = first_frame.shape[1]
         self._frame_height = first_frame.shape[0]
+        self._fps = self._estimate_fps(estimate_with="mean")
+
+    def _estimate_fps(self, estimate_with: str = "mean") -> float:
+        """Estimate frames per second (FPS) based on timestamps."""
+        if self._nframes < 2:
+            return 0
+
+        ts_in_seconds = self.ts / 1000
+        time_diff = np.diff(ts_in_seconds)
+
+        if estimate_with == "mean":
+            avg_time_diff = np.mean(time_diff)
+        elif estimate_with == "median":
+            avg_time_diff = np.median(time_diff)
+        else:
+            raise ValueError(f"Unknown estimation method: {estimate_with}")
+
+        if avg_time_diff <= 0:
+            raise ValueError(
+                f"Average time difference is non-positive: {avg_time_diff}. "
+                "Cannot estimate FPS."
+            )
+
+        return float(1 / avg_time_diff)
 
     @property
     def frame_count(self) -> int:
         return self._nframes
 
     @property
-    def fps(self) -> int:
-        # TODO: Implement a proper FPS calculation
-        return 0
+    def fps(self) -> float:
+        return self._fps
 
     @property
     def frame_width(self) -> int:
