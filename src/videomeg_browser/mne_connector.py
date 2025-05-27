@@ -1,6 +1,5 @@
 import logging
 import os.path as op
-import sys
 
 import mne
 import numpy as np
@@ -10,7 +9,7 @@ from qtpy.QtCore import Qt
 
 from .browser import VideoBrowser
 from .comp_tstamps import comp_tstamps
-from .video import VideoFile, VideoFileHelsinkiVideoMEG
+from .video import VideoFileHelsinkiVideoMEG
 
 logger = logging.getLogger(__name__)
 
@@ -26,71 +25,92 @@ class TimeIndexMapper:
         self, raw: mne.io.Raw, raw_timing_ch: str, video: VideoFileHelsinkiVideoMEG
     ):
         self.raw = raw
-        picks_timing = mne.pick_types(raw.info, meg=False, include=[raw_timing_ch])
+        self.vid_timestamps_ms = video.ts
 
-        dt_timing = raw[picks_timing, :][0].squeeze()
+        logger.info("Initializing mapping from raw data time points to video frames.")
+        logger.info(
+            f"Using timing channel '{raw_timing_ch}' for timestamp computation."
+        )
 
-        logger.info("Beginning timestamp computation...")
-        self.raw_ts = comp_tstamps(dt_timing, raw.info["sfreq"])
-        logger.info("Timestamp computation done.")
-        self.vid_ts = video.ts
+        timing_data = raw.get_data(picks=raw_timing_ch, return_times=False)
+        # Remove the channel dimension
+        # Ignoring warning about timing_data possibly being tuple,
+        # as we do not ask times from raw.get_data
+        timing_data = timing_data.squeeze()  # type: ignore
+        logger.debug(f"Timing channel data shape: {timing_data.shape}, ")
 
-        logger.info(f"Number of raw timestamps: {len(self.raw_ts)}")
-        logger.info(f"Number of video timestamps: {len(self.vid_ts)}")
+        self.raw_timestamps_ms = comp_tstamps(timing_data, raw.info["sfreq"])
 
-    def raw_time_to_video_frame_index(self, raw_t: float) -> int | None:
+        if len(self.raw_timestamps_ms) != len(raw.times):
+            raise ValueError(
+                "The number of timestamps in the raw data does not match "
+                "the number of time points."
+            )
+
+        logger.info(f"Number of raw timestamps: {len(self.raw_timestamps_ms)}")
+        logger.info(f"Number of video timestamps: {len(self.vid_timestamps_ms)}")
+
+    def raw_time_to_video_frame_index(self, raw_time_seconds: float) -> int | None:
         """Convert a time point from raw data (in seconds) to video frame index."""
-        raw_idx = self.raw.time_as_index(raw_t, use_rounding=False)
+        raw_idx = self.raw.time_as_index(raw_time_seconds, use_rounding=False)
         if len(raw_idx) > 1:
             raise ValueError(
-                f"Multiple indices found for raw timestamp {raw_t}: {raw_idx}. "
-                "This should not happen."
+                "Multiple indices found for raw timestamp "
+                f"{raw_time_seconds}: {raw_idx}. This should not happen."
             )
         raw_idx = raw_idx[0]
-        logger.debug(f"Raw index for time {raw_t}: {raw_idx}")
+        logger.debug(f"Raw index for time {raw_time_seconds}: {raw_idx}")
 
         # Convert raw index to unix timestamp in milliseconds
-        raw_ts = self.raw_ts[raw_idx]
-        logger.debug(f"Raw unix timestamp at index {raw_idx}: {raw_ts} ms")
+        raw_timestamp_ms = self.raw_timestamps_ms[raw_idx]
+        logger.debug(f"Raw unix timestamp at index {raw_idx}: {raw_timestamp_ms} ms")
 
         # Now we have temporal location of the raw data point in same units as video
         # timestamps, so we can compare them directly.
 
-        if raw_ts < self.vid_ts[0] or raw_ts > self.vid_ts[-1]:
-            logger.info("Raw timestamp is out of video bounds, returning None.")
+        if (
+            raw_timestamp_ms < self.vid_timestamps_ms[0]
+            or raw_timestamp_ms > self.vid_timestamps_ms[-1]
+        ):
+            logger.debug("Raw timestamp is out of video bounds, returning None.")
             return None
 
         # Find the first video frame index that is greater than
         # or equal to the raw timestamp
         # TODO: Consider what other methods could be used here
-        idx = np.searchsorted(self.vid_ts, raw_ts)
+        idx = np.searchsorted(self.vid_timestamps_ms, raw_timestamp_ms)
 
         return int(idx)
 
     def video_frame_index_to_raw_time(self, vid_idx: int) -> float | None:
         """Convert a video frame index to a raw data time point (in seconds)."""
-        if vid_idx < 0 or vid_idx >= len(self.vid_ts):
-            logger.info(f"Video frame index {vid_idx} is out of bounds.")
-            return None
+        if vid_idx < 0 or vid_idx >= len(self.vid_timestamps_ms):
+            raise ValueError(
+                f"Video frame index {vid_idx} is out of bounds. "
+                f"Valid range is 0 to {len(self.vid_timestamps_ms) - 1}."
+            )
 
         # Get unix timestamp of the video frame
-        vid_ts = self.vid_ts[vid_idx]
-        logger.debug(f"Video unix timestamp at index {vid_idx}: {vid_ts} ms")
+        vid_timestamp_ms = self.vid_timestamps_ms[vid_idx]
+        logger.debug(f"Video unix timestamp at index {vid_idx}: {vid_timestamp_ms} ms")
 
-        if vid_ts < self.raw_ts[0] or vid_ts > self.raw_ts[-1]:
-            logger.info("Video timestamp is out of raw data bounds, returning None.")
+        if (
+            vid_timestamp_ms < self.raw_timestamps_ms[0]
+            or vid_timestamp_ms > self.raw_timestamps_ms[-1]
+        ):
+            logger.debug("Video timestamp is out of raw data bounds, returning None.")
             return None
 
         # Find the first raw timestamp that is greater than
         # or equal to the video timestamp
         # TODO: Consider what other methods could be used here
-        raw_idx = np.searchsorted(self.raw_ts, vid_ts)
+        raw_idx = np.searchsorted(self.raw_timestamps_ms, vid_timestamp_ms)
         logger.debug(f"Raw index for video unix timestamp {vid_idx}: {raw_idx}")
 
-        raw_t = self.raw.times[raw_idx]
-        logger.debug(f"Raw time at index {raw_idx}: {raw_t} seconds")
+        raw_time_seconds = self.raw.times[raw_idx]
+        logger.debug(f"Raw time at index {raw_idx}: {raw_time_seconds} seconds")
 
-        return raw_t
+        return raw_time_seconds
 
 
 class ScrollBarSynchronizer:
@@ -191,6 +211,10 @@ class SyncedRawVideoBrowser:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+    )
     base_path = "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna"
     # Create a video file object
     video_file = VideoFileHelsinkiVideoMEG(
