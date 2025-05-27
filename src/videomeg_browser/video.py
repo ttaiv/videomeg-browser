@@ -1,9 +1,12 @@
+import logging
 import struct
 from abc import ABC, abstractmethod
 
 import cv2
 import numpy as np
 from cv2.typing import MatLike
+
+logger = logging.getLogger(__name__)
 
 
 class VideoFile(ABC):
@@ -116,7 +119,7 @@ class VideoFileCV2(VideoFile):
             raise ValueError("Trying to read from a closed video file.")
 
         if frame_idx < 0 or frame_idx >= self.frame_count:
-            print(f"Frame index out of bounds: {frame_idx}, returning None.")
+            logger.debug(f"Frame index out of bounds: {frame_idx}, returning None.")
             return None
 
         self._set_next_frame(frame_idx)
@@ -310,7 +313,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         if self._file.closed:
             raise ValueError("Trying to read from a closed video file.")
         if frame_idx < 0 or frame_idx >= self._nframes:
-            print(f"Frame index out of bounds: {frame_idx}, returning None.")
+            logger.debug(f"Frame index out of bounds: {frame_idx}, returning None.")
             return None
 
         offset, sz = self._frame_ptrs[frame_idx]

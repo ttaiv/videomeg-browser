@@ -8,6 +8,8 @@ except Exception as exc:
     else:
         raise
 
+
+import logging
 import sys
 
 import pyqtgraph as pg
@@ -20,7 +22,9 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from .video import VideoFile, VideoFileCV2
+from .video import VideoFile, VideoFileCV2, VideoFileHelsinkiVideoMEG
+
+logger = logging.getLogger(__name__)
 
 pg.setConfigOptions(imageAxisOrder="row-major")
 
@@ -78,7 +82,9 @@ class VideoBrowser(QWidget):
         """Display the next frame in the video."""
         frame = self.video.get_frame_at(self.current_frame_idx + 1)
         if frame is None:
-            print("End of video reached.")
+            logger.debug(
+                "Skipping updating to the next frame, already at the last frame."
+            )
             return
 
         self.current_frame_idx += 1
@@ -90,7 +96,9 @@ class VideoBrowser(QWidget):
         """Display the previous frame in the video."""
         frame = self.video.get_frame_at(self.current_frame_idx - 1)
         if frame is None:
-            print("Already at the first frame.")
+            logger.debug(
+                "Skipping updating to the previous frame, already at the first frame."
+            )
             return
 
         self.current_frame_idx -= 1
@@ -122,12 +130,20 @@ class VideoBrowser(QWidget):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+    )
     app = QApplication([])
 
-    video = VideoFileCV2(
-        "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/Video_MEG/kapsu.mp4"
+    video_videomeg = VideoFileHelsinkiVideoMEG(
+        "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/Video_MEG/animal_meg_subject_2_240614.video.dat"
     )
-    window = VideoBrowser(video)
+    video_exported = VideoFileCV2(
+        "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/export_video/animal_meg_subject_2_240614.avi"
+    )
+
+    window = VideoBrowser(video_videomeg)
     window.resize(1000, 800)
     window.show()
     sys.exit(app.exec_())
