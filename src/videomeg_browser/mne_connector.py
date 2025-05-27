@@ -180,6 +180,11 @@ class SyncedRawVideoBrowser:
         self.raw_scroll_bar.valueChanged.connect(self.sync_video_to_raw)
         self.vid_slider.valueChanged.connect(self.sync_raw_to_video)
 
+        # Consider raw data browser to be the main browser and start by
+        # synchronizing the video browser to the raw data browser's scroll bar
+        initial_value = self.raw_scroll_bar.value()
+        self.sync_video_to_raw(initial_value)
+
     def sync_video_to_raw(self, value):
         """Update the video position based on the raw data browser's scroll bar."""
         if self._syncing:
