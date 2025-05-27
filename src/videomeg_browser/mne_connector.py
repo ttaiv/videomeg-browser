@@ -15,7 +15,7 @@ from .video import VideoFile, VideoFileHelsinkiVideoMEG
 logger = logging.getLogger(__name__)
 
 
-class TimeStampMapper:
+class TimeIndexMapper:
     """Maps time points from raw data to video frames and vice versa.
 
     Currently, this is tailored for the Helsinki Video MEG data format,
@@ -100,11 +100,11 @@ class ScrollBarSynchronizer:
         self,
         raw_scroll_bar: TimeScrollBar,
         vid_slider: QtWidgets.QSlider,
-        ts_mapper: TimeStampMapper,
+        time_mapper: TimeIndexMapper,
     ):
         self.raw_scroll_bar = raw_scroll_bar
         self.vid_slider = vid_slider
-        self.ts_mapper = ts_mapper
+        self.time_mapper = time_mapper
         self._syncing = False
 
         self.raw_scroll_bar.valueChanged.connect(self._sync_video_to_raw)
@@ -120,7 +120,7 @@ class ScrollBarSynchronizer:
             raw_t = value / self.raw_scroll_bar.step_factor
             print(f"Corresponding raw time in seconds: {raw_t:.6f}")
 
-            vid_idx = self.ts_mapper.raw_time_to_video_frame_index(raw_t)
+            vid_idx = self.time_mapper.raw_time_to_video_frame_index(raw_t)
             print(f"Corresponding video frame index: {vid_idx}")
 
             if vid_idx is None:
@@ -137,7 +137,7 @@ class ScrollBarSynchronizer:
 
             print()
             print(f"Syncing video slider value: {value}")
-            raw_t = self.ts_mapper.video_frame_index_to_raw_time(value)
+            raw_t = self.time_mapper.video_frame_index_to_raw_time(value)
             if raw_t is None:
                 print("No corresponding raw time found for this video frame index.")
             else:
@@ -157,11 +157,11 @@ class SyncedRawVideoBrowser:
         self,
         raw: mne.io.Raw,
         video_file: VideoFileHelsinkiVideoMEG,
-        ts_mapper: TimeStampMapper,
+        time_mapper: TimeIndexMapper,
     ):
         self.raw = raw
         self.video_file = video_file
-        self.ts_mapper = ts_mapper
+        self.time_mapper = time_mapper
 
         # Set up Qt application
         self.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -179,7 +179,9 @@ class SyncedRawVideoBrowser:
 
         # Sync the scroll bars
         self.sync = ScrollBarSynchronizer(
-            self.raw_browser.mne.ax_hscroll, self.video_browser.frame_slider, ts_mapper
+            self.raw_browser.mne.ax_hscroll,
+            self.video_browser.frame_slider,
+            time_mapper,
         )
 
     def show(self):
@@ -202,7 +204,7 @@ if __name__ == "__main__":
 
     # Set up mapping between time points of raw data and video frame indices
     # This is tailored for the Helsinki Video MEG data format
-    ts_mapper = TimeStampMapper(raw, raw_timing_ch="STI016", video=video_file)
+    time_mapper = TimeIndexMapper(raw, raw_timing_ch="STI016", video=video_file)
 
-    browser = SyncedRawVideoBrowser(raw, video_file, ts_mapper)
+    browser = SyncedRawVideoBrowser(raw, video_file, time_mapper)
     browser.show()
