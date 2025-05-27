@@ -1,5 +1,7 @@
 import logging
 import os.path as op
+from dataclasses import dataclass
+from enum import Enum, auto
 
 import mne
 import numpy as np
@@ -12,6 +14,30 @@ from .comp_tstamps import comp_tstamps
 from .video import VideoFileHelsinkiVideoMEG
 
 logger = logging.getLogger(__name__)
+
+
+class MapFailureReason(Enum):
+    """Enum telling why mapping from frame index to raw time or vice versa failed."""
+
+    # Index to map is smaller than the first frame or raw time point
+    INDEX_TOO_SMALL = auto()
+    # Index to map is larger than the last frame or raw time point
+    INDEX_TOO_LARGE = auto()
+
+
+@dataclass
+class MappingResult:
+    """Result of mapping a video frame index to a raw time point or vice versa."""
+
+    result: int | None
+    failure_reason: MapFailureReason | None = None
+
+    def __post_init__(self):
+        """Check that mapping yielded either a result or a failure reason."""
+        if (self.result is not None and self.failure_reason is not None) or (
+            self.result is None and self.failure_reason is None
+        ):
+            raise ValueError("Exactly one of 'result' or 'failure_reason' must be set.")
 
 
 class TimeIndexMapper:
@@ -50,7 +76,7 @@ class TimeIndexMapper:
         logger.info(f"Number of raw timestamps: {len(self.raw_timestamps_ms)}")
         logger.info(f"Number of video timestamps: {len(self.vid_timestamps_ms)}")
 
-    def raw_time_to_video_frame_index(self, raw_time_seconds: float) -> int | None:
+    def raw_time_to_video_frame_index(self, raw_time_seconds: float) -> MappingResult:
         """Convert a time point from raw data (in seconds) to video frame index."""
         raw_idx = self.raw.time_as_index(raw_time_seconds, use_rounding=False)
         if len(raw_idx) > 1:
@@ -68,21 +94,23 @@ class TimeIndexMapper:
         # Now we have temporal location of the raw data point in same units as video
         # timestamps, so we can compare them directly.
 
-        if (
-            raw_timestamp_ms < self.vid_timestamps_ms[0]
-            or raw_timestamp_ms > self.vid_timestamps_ms[-1]
-        ):
-            logger.debug("Raw timestamp is out of video bounds, returning None.")
-            return None
+        if raw_timestamp_ms < self.vid_timestamps_ms[0]:
+            return MappingResult(
+                result=None, failure_reason=MapFailureReason.INDEX_TOO_SMALL
+            )
+        if raw_timestamp_ms > self.vid_timestamps_ms[-1]:
+            return MappingResult(
+                result=None, failure_reason=MapFailureReason.INDEX_TOO_LARGE
+            )
 
         # Find the first video frame index that is greater than
         # or equal to the raw timestamp
         # TODO: Consider what other methods could be used here
         idx = np.searchsorted(self.vid_timestamps_ms, raw_timestamp_ms)
 
-        return int(idx)
+        return MappingResult(result=int(idx), failure_reason=None)
 
-    def video_frame_index_to_raw_time(self, vid_idx: int) -> float | None:
+    def video_frame_index_to_raw_time(self, vid_idx: int) -> MappingResult:
         """Convert a video frame index to a raw data time point (in seconds)."""
         if vid_idx < 0 or vid_idx >= len(self.vid_timestamps_ms):
             raise ValueError(
@@ -94,12 +122,14 @@ class TimeIndexMapper:
         vid_timestamp_ms = self.vid_timestamps_ms[vid_idx]
         logger.debug(f"Video unix timestamp at index {vid_idx}: {vid_timestamp_ms} ms")
 
-        if (
-            vid_timestamp_ms < self.raw_timestamps_ms[0]
-            or vid_timestamp_ms > self.raw_timestamps_ms[-1]
-        ):
-            logger.debug("Video timestamp is out of raw data bounds, returning None.")
-            return None
+        if vid_timestamp_ms < self.raw_timestamps_ms[0]:
+            return MappingResult(
+                result=None, failure_reason=MapFailureReason.INDEX_TOO_SMALL
+            )
+        if vid_timestamp_ms > self.raw_timestamps_ms[-1]:
+            return MappingResult(
+                result=None, failure_reason=MapFailureReason.INDEX_TOO_LARGE
+            )
 
         # Find the first raw timestamp that is greater than
         # or equal to the video timestamp
@@ -110,7 +140,7 @@ class TimeIndexMapper:
         raw_time_seconds = self.raw.times[raw_idx]
         logger.debug(f"Raw time at index {raw_idx}: {raw_time_seconds} seconds")
 
-        return raw_time_seconds
+        return MappingResult(result=raw_time_seconds, failure_reason=None)
 
 
 class SyncedRawVideoBrowser:
@@ -164,17 +194,31 @@ class SyncedRawVideoBrowser:
         raw_time = value / self.raw_scroll_bar.step_factor
         logger.debug(f"Corresponding raw time in seconds: {raw_time:.3f}")
 
-        vid_idx = self.time_mapper.raw_time_to_video_frame_index(raw_time)
-        logger.debug(f"Corresponding video frame index: {vid_idx}")
-
-        if vid_idx is None:
-            logger.debug(
-                "No corresponding video frame found for this raw timestamp. "
-                "Skipping update."
-            )
-        else:
+        mapping = self.time_mapper.raw_time_to_video_frame_index(raw_time)
+        if mapping.result is not None:
+            # Raw time point has a corresponding video frame index
+            vid_idx = mapping.result
+            logger.debug(f"Setting video slider to frame index: {vid_idx}")
             self.vid_slider.setValue(vid_idx)
-
+        else:
+            # Raw time point is out of bounds of the video bounds
+            # Update the video slider to the closest valid index
+            if mapping.failure_reason == MapFailureReason.INDEX_TOO_SMALL:
+                logger.debug(
+                    "Raw time is before the first video frame. "
+                    "Setting video to the first frame."
+                )
+                self.vid_slider.setValue(0)
+            elif mapping.failure_reason == MapFailureReason.INDEX_TOO_LARGE:
+                logger.debug(
+                    "Raw time is after the last video frame "
+                    "Setting video to the last frame."
+                )
+                self.vid_slider.setValue(self.video_file.frame_count - 1)
+            else:
+                raise ValueError(
+                    f"Unexpected mapping failure reason: {mapping.failure_reason}"
+                )
         self._syncing = False
 
     def sync_raw_to_video(self, value):
@@ -187,15 +231,39 @@ class SyncedRawVideoBrowser:
 
         logger.debug("")  # Clear debug log for clarity
         logger.debug(f"Syncing raw to video slider value: {value}")
-        raw_time = self.time_mapper.video_frame_index_to_raw_time(value)
-        if raw_time is None:
-            logger.debug("No corresponding raw time found for this video frame index.")
-        else:
+        mapping = self.time_mapper.video_frame_index_to_raw_time(value)
+        if mapping.result is not None:
+            # Video frame index has a corresponding raw time point
+            raw_time = mapping.result
             logger.debug(f"Corresponding raw time in seconds: {raw_time:.3f}")
-            # Convert raw time to scroll bar value
             scroll_value = int(raw_time * self.raw_scroll_bar.step_factor)
-            logger.debug(f"Corresponding scroll bar value: {scroll_value}")
+            logger.debug(f"Setting raw scroll bar value: {scroll_value}")
             self.raw_scroll_bar.setValue(scroll_value)
+        else:
+            # Video frame index is out of bounds of the raw data bounds
+            # Update the raw scroll bar to the closest valid index
+            if mapping.failure_reason == MapFailureReason.INDEX_TOO_SMALL:
+                logger.debug(
+                    "Video frame index is before the first raw time point. "
+                    "Setting raw scroll bar to the first time point."
+                )
+                self.raw_scroll_bar.setValue(0)
+            elif mapping.failure_reason == MapFailureReason.INDEX_TOO_LARGE:
+                logger.debug(
+                    "Video frame index is after the last raw time point. "
+                    "Setting raw scroll bar to the last time point."
+                )
+                # Calculate maximum raw scroll bar value
+                # Taken from raw data browser's scroll bar code
+                raw_scroll_max = int(
+                    (self.raw_scroll_bar.mne.xmax - self.raw_scroll_bar.mne.duration)
+                    * self.raw_scroll_bar.step_factor
+                )
+                self.raw_scroll_bar.setValue(raw_scroll_max)
+            else:
+                raise ValueError(
+                    f"Unexpected mapping failure reason: {mapping.failure_reason}"
+                )
 
         self._syncing = False
 
