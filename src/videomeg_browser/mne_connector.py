@@ -142,32 +142,42 @@ class ScrollBarSynchronizer:
             self._syncing = False
 
 
-def plot_raw_with_video(raw: mne.io.Raw, video: VideoFile):
+class SyncedRawVideoBrowser:
     """Run mne raw data browser in sync with video browser."""
-    # Set up Qt application
-    app = QtWidgets.QApplication([])
-    # Instantiate the MNE Qt Browser
-    raw_browser = raw.plot(block=False)
 
-    # Set up the video browser
-    video_browser = VideoBrowser(video_file)
+    def __init__(
+        self,
+        raw: mne.io.Raw,
+        video_file: VideoFileHelsinkiVideoMEG,
+        ts_mapper: TimeStampMapper,
+    ):
+        self.raw = raw
+        self.video_file = video_file
+        self.ts_mapper = ts_mapper
 
-    # Dock the video browser to the raw data browser with Qt magic
-    dock = QtWidgets.QDockWidget("Video Browser", raw_browser)
-    dock.setWidget(video_browser)
-    dock.setFloating(True)
-    raw_browser.addDockWidget(Qt.RightDockWidgetArea, dock)
+        # Set up Qt application
+        self.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        # Instantiate the MNE Qt Browser
+        self.raw_browser = raw.plot(block=False)
 
-    ts_mapper = TimeStampMapper(raw, raw_timing_ch="STI016", video=video_file)
+        # Set up the video browser
+        self.video_browser = VideoBrowser(video_file)
 
-    # Sync the scroll bars
-    sync = ScrollBarSynchronizer(
-        raw_browser.mne.ax_hscroll, video_browser.frame_slider, ts_mapper
-    )
+        # Dock the video browser to the raw data browser with Qt magic
+        self.dock = QtWidgets.QDockWidget("Video Browser", self.raw_browser)
+        self.dock.setWidget(self.video_browser)
+        self.dock.setFloating(True)
+        self.raw_browser.addDockWidget(Qt.RightDockWidgetArea, self.dock)
 
-    # Profit
-    raw_browser.show()
-    sys.exit(app.exec_())
+        # Sync the scroll bars
+        self.sync = ScrollBarSynchronizer(
+            self.raw_browser.mne.ax_hscroll, self.video_browser.frame_slider, ts_mapper
+        )
+
+    def show(self):
+        """Show the synchronized raw and video browsers."""
+        self.raw_browser.show()
+        self.app.exec_()
 
 
 if __name__ == "__main__":
@@ -182,4 +192,9 @@ if __name__ == "__main__":
         op.join(base_path, "Raw", "animal_meg_subject_2_240614.fif"), preload=True
     )
 
-    plot_raw_with_video(raw, video_file)
+    # Set up mapping between time points of raw data and video frame indices
+    # This is tailored for the Helsinki Video MEG data format
+    ts_mapper = TimeStampMapper(raw, raw_timing_ch="STI016", video=video_file)
+
+    browser = SyncedRawVideoBrowser(raw, video_file, ts_mapper)
+    browser.show()
