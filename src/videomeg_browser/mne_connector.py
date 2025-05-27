@@ -5,11 +5,10 @@ from enum import Enum, auto
 
 import mne
 import numpy as np
-from mne_qt_browser._pg_figure import TimeScrollBar
 from qtpy import QtWidgets
 from qtpy.QtCore import Qt
 
-from .browser import VideoBrowser
+from .browser import SyncStatus, VideoBrowser
 from .comp_tstamps import comp_tstamps
 from .video import VideoFileHelsinkiVideoMEG
 
@@ -162,7 +161,7 @@ class SyncedRawVideoBrowser:
         self.raw_browser = raw.plot(block=False)
 
         # Set up the video browser
-        self.video_browser = VideoBrowser(video_file)
+        self.video_browser = VideoBrowser(video_file, show_sync_status=True)
 
         # Dock the video browser to the raw data browser with Qt magic
         self.dock = QtWidgets.QDockWidget("Video Browser", self.raw_browser)
@@ -200,9 +199,11 @@ class SyncedRawVideoBrowser:
             vid_idx = mapping.result
             logger.debug(f"Setting video slider to frame index: {vid_idx}")
             self.vid_slider.setValue(vid_idx)
+            self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
         else:
             # Raw time point is out of bounds of the video bounds
             # Update the video slider to the closest valid index
+            self.video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
             if mapping.failure_reason == MapFailureReason.INDEX_TOO_SMALL:
                 logger.debug(
                     "Raw time is before the first video frame. "
@@ -239,9 +240,11 @@ class SyncedRawVideoBrowser:
             scroll_value = int(raw_time * self.raw_scroll_bar.step_factor)
             logger.debug(f"Setting raw scroll bar value: {scroll_value}")
             self.raw_scroll_bar.setValue(scroll_value)
+            self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
         else:
             # Video frame index is out of bounds of the raw data bounds
             # Update the raw scroll bar to the closest valid index
+            self.video_browser.set_sync_status(SyncStatus.NO_RAW_DATA)
             if mapping.failure_reason == MapFailureReason.INDEX_TOO_SMALL:
                 logger.debug(
                     "Video frame index is before the first raw time point. "

@@ -11,6 +11,7 @@ except Exception as exc:
 
 import logging
 import sys
+from enum import Enum, auto
 
 import pyqtgraph as pg
 from qtpy.QtWidgets import (
@@ -29,6 +30,14 @@ logger = logging.getLogger(__name__)
 pg.setConfigOptions(imageAxisOrder="row-major")
 
 
+class SyncStatus(Enum):
+    """Tells the sync status of the video and raw data."""
+
+    SYNCHRONIZED = auto()  # Video and raw data are synchronized
+    NO_RAW_DATA = auto()  # No raw data available for the current frame
+    NO_VIDEO_DATA = auto()  # No video data available for the current raw data
+
+
 class VideoBrowser(QWidget):
     """A browser for viewing video frames.
 
@@ -36,9 +45,12 @@ class VideoBrowser(QWidget):
     ----------
     video : VideoFile
         The video file to be displayed.
+    show_sync_status : bool, optional
+        Whether to show a label indicating the synchronization status of the video and
+        and raw data, by default False
     """
 
-    def __init__(self, video: VideoFile):
+    def __init__(self, video: VideoFile, show_sync_status: bool = False):
         super().__init__()
         self.video = video
         self.current_frame_idx = 0
@@ -46,6 +58,14 @@ class VideoBrowser(QWidget):
         self.setWindowTitle("Video Browser Prototype")
 
         layout = QVBoxLayout(self)
+
+        self._has_sync_status_label = show_sync_status
+        if show_sync_status:
+            self.sync_status_label = QLabel("Synchronized")
+            self.sync_status_label.setStyleSheet("color: green; font-weight: bold;")
+            layout.addWidget(self.sync_status_label)
+        else:
+            self.sync_status_label = None
 
         # Create an ImageView widget and display first frame of the video
         self.im_view = pg.ImageView()
@@ -127,6 +147,22 @@ class VideoBrowser(QWidget):
         """Update the slider to reflect the current frame index."""
         # Use one-based index for display
         self.frame_slider.setValue(self.current_frame_idx)
+
+    def set_sync_status(self, status: SyncStatus):
+        """Set the sync status label and color."""
+        if not self._has_sync_status_label or self.sync_status_label is None:
+            return
+        if status == SyncStatus.SYNCHRONIZED:
+            self.sync_status_label.setText("Synchronized")
+            self.sync_status_label.setStyleSheet("color: green; font-weight: bold;")
+        elif status == SyncStatus.NO_RAW_DATA:
+            self.sync_status_label.setText("No raw data for this frame")
+            self.sync_status_label.setStyleSheet("color: red; font-weight: bold;")
+        elif status == SyncStatus.NO_VIDEO_DATA:
+            self.sync_status_label.setText("No video for this raw data")
+            self.sync_status_label.setStyleSheet("color: red; font-weight: bold;")
+        else:
+            raise ValueError(f"Unknown sync status: {status}")
 
 
 if __name__ == "__main__":
