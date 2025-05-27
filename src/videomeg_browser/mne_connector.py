@@ -113,72 +113,6 @@ class TimeIndexMapper:
         return raw_time_seconds
 
 
-class ScrollBarSynchronizer:
-    """Keep the scroll bar of the raw data browser synced with the video browser."""
-
-    def __init__(
-        self,
-        raw_scroll_bar: TimeScrollBar,
-        vid_slider: QtWidgets.QSlider,
-        time_mapper: TimeIndexMapper,
-    ):
-        self.raw_scroll_bar = raw_scroll_bar
-        self.vid_slider = vid_slider
-        self.time_mapper = time_mapper
-        self._syncing = False
-
-        self.raw_scroll_bar.valueChanged.connect(self._sync_video_to_raw)
-        self.vid_slider.valueChanged.connect(self._sync_raw_to_video)
-
-    def _sync_video_to_raw(self, value):
-        """Update the video position based on the raw data browser's scroll bar."""
-        if self._syncing:
-            # Prevent infinite recursion
-            logger.debug("Already syncing, skip updating video slider.")
-            return
-        self._syncing = True
-
-        logger.debug("")  # Clear debug log for clarity
-        logger.debug(f"Syncing video to raw scroll bar value: {value}")
-        raw_time = value / self.raw_scroll_bar.step_factor
-        logger.debug(f"Corresponding raw time in seconds: {raw_time:.3f}")
-
-        vid_idx = self.time_mapper.raw_time_to_video_frame_index(raw_time)
-        logger.debug(f"Corresponding video frame index: {vid_idx}")
-
-        if vid_idx is None:
-            logger.debug(
-                "No corresponding video frame found for this raw timestamp. "
-                "Skipping update."
-            )
-        else:
-            self.vid_slider.setValue(vid_idx)
-
-        self._syncing = False
-
-    def _sync_raw_to_video(self, value):
-        """Update the raw data browser's scroll bar based on the video slider."""
-        if self._syncing:
-            # Prevent infinite recursion
-            logger.debug("Already syncing, skip updating raw scroll bar.")
-            return
-        self._syncing = True
-
-        logger.debug("")  # Clear debug log for clarity
-        logger.debug(f"Syncing raw to video slider value: {value}")
-        raw_time = self.time_mapper.video_frame_index_to_raw_time(value)
-        if raw_time is None:
-            logger.debug("No corresponding raw time found for this video frame index.")
-        else:
-            logger.debug(f"Corresponding raw time in seconds: {raw_time:.3f}")
-            # Convert raw time to scroll bar value
-            scroll_value = int(raw_time * self.raw_scroll_bar.step_factor)
-            logger.debug(f"Corresponding scroll bar value: {scroll_value}")
-            self.raw_scroll_bar.setValue(scroll_value)
-
-        self._syncing = False
-
-
 class SyncedRawVideoBrowser:
     """Run mne raw data browser in sync with video browser."""
 
@@ -206,12 +140,64 @@ class SyncedRawVideoBrowser:
         self.dock.setFloating(True)
         self.raw_browser.addDockWidget(Qt.RightDockWidgetArea, self.dock)
 
-        # Sync the scroll bars
-        self.sync = ScrollBarSynchronizer(
-            self.raw_browser.mne.ax_hscroll,
-            self.video_browser.frame_slider,
-            time_mapper,
-        )
+        # Extract the raw data browser's scroll bar and video browser's slider
+        # for easy synchronization
+        self.vid_slider = self.video_browser.frame_slider
+        self.raw_scroll_bar = self.raw_browser.mne.ax_hscroll
+        # Flag to prevent infinite recursion during synchronization
+        self._syncing = False
+
+        # Synch the bars
+        self.raw_scroll_bar.valueChanged.connect(self.sync_video_to_raw)
+        self.vid_slider.valueChanged.connect(self.sync_raw_to_video)
+
+    def sync_video_to_raw(self, value):
+        """Update the video position based on the raw data browser's scroll bar."""
+        if self._syncing:
+            # Prevent infinite recursion
+            logger.debug("Already syncing, skip updating video slider.")
+            return
+        self._syncing = True
+
+        logger.debug("")  # Clear debug log for clarity
+        logger.debug(f"Syncing video to raw scroll bar value: {value}")
+        raw_time = value / self.raw_scroll_bar.step_factor
+        logger.debug(f"Corresponding raw time in seconds: {raw_time:.3f}")
+
+        vid_idx = self.time_mapper.raw_time_to_video_frame_index(raw_time)
+        logger.debug(f"Corresponding video frame index: {vid_idx}")
+
+        if vid_idx is None:
+            logger.debug(
+                "No corresponding video frame found for this raw timestamp. "
+                "Skipping update."
+            )
+        else:
+            self.vid_slider.setValue(vid_idx)
+
+        self._syncing = False
+
+    def sync_raw_to_video(self, value):
+        """Update the raw data browser's scroll bar based on the video slider."""
+        if self._syncing:
+            # Prevent infinite recursion
+            logger.debug("Already syncing, skip updating raw scroll bar.")
+            return
+        self._syncing = True
+
+        logger.debug("")  # Clear debug log for clarity
+        logger.debug(f"Syncing raw to video slider value: {value}")
+        raw_time = self.time_mapper.video_frame_index_to_raw_time(value)
+        if raw_time is None:
+            logger.debug("No corresponding raw time found for this video frame index.")
+        else:
+            logger.debug(f"Corresponding raw time in seconds: {raw_time:.3f}")
+            # Convert raw time to scroll bar value
+            scroll_value = int(raw_time * self.raw_scroll_bar.step_factor)
+            logger.debug(f"Corresponding scroll bar value: {scroll_value}")
+            self.raw_scroll_bar.setValue(scroll_value)
+
+        self._syncing = False
 
     def show(self):
         """Show the synchronized raw and video browsers."""
