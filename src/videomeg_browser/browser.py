@@ -63,9 +63,9 @@ class VideoBrowser(QWidget):
 
         # Create a slider for navigating to a specific frame
         self.frame_slider = QSlider(Qt.Horizontal)
-        self.frame_slider.setMinimum(1)
-        self.frame_slider.setMaximum(self.video.frame_count)
-        self.frame_slider.setValue(1)  # 1-based index of the first frame
+        self.frame_slider.setMinimum(0)
+        self.frame_slider.setMaximum(self.video.frame_count - 1)
+        self.frame_slider.setValue(0)
         self.frame_slider.valueChanged.connect(self.slider_frame_changed)
         layout.addWidget(self.frame_slider)
 
@@ -100,7 +100,7 @@ class VideoBrowser(QWidget):
 
     def slider_frame_changed(self, value: int):
         """Update view to display the frame corresponding to the slider's position."""
-        self.current_frame_idx = value - 1  # Convert to 0-based index
+        self.current_frame_idx = value
         frame = self.video.get_frame_at(self.current_frame_idx)
         if frame is None:
             raise ValueError(f"Invalid frame index {value} selected with the slider.")
@@ -118,7 +118,7 @@ class VideoBrowser(QWidget):
     def update_slider(self):
         """Update the slider to reflect the current frame index."""
         # Use one-based index for display
-        self.frame_slider.setValue(self.current_frame_idx + 1)
+        self.frame_slider.setValue(self.current_frame_idx)
 
 
 if __name__ == "__main__":
