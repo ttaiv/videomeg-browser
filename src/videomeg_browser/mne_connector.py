@@ -1,3 +1,4 @@
+import logging
 import os.path as op
 import sys
 
@@ -11,24 +12,31 @@ from .browser import VideoBrowser
 from .comp_tstamps import comp_tstamps
 from .video import VideoFile, VideoFileHelsinkiVideoMEG
 
+logger = logging.getLogger(__name__)
+
 
 class TimeStampMapper:
-    """Maps time points from raw data to video frames."""
+    """Maps time points from raw data to video frames and vice versa.
+
+    Currently, this is tailored for the Helsinki Video MEG data format,
+    but this could be extended to other formats as well.
+    """
 
     def __init__(
         self, raw: mne.io.Raw, raw_timing_ch: str, video: VideoFileHelsinkiVideoMEG
     ):
         self.raw = raw
         picks_timing = mne.pick_types(raw.info, meg=False, include=[raw_timing_ch])
+
         dt_timing = raw[picks_timing, :][0].squeeze()
 
-        print("Beginning timestamp computation...")
+        logger.info("Beginning timestamp computation...")
         self.raw_ts = comp_tstamps(dt_timing, raw.info["sfreq"])
-        print("Timestamp computation done.")
+        logger.info("Timestamp computation done.")
         self.vid_ts = video.ts
 
-        print(f"Number of raw timestamps: {len(self.raw_ts)}")
-        print(f"Number of video timestamps: {len(self.vid_ts)}")
+        logger.info(f"Number of raw timestamps: {len(self.raw_ts)}")
+        logger.info(f"Number of video timestamps: {len(self.vid_ts)}")
 
     def raw_time_to_video_frame_index(self, raw_t: float) -> int | None:
         """Convert a time point from raw data (in seconds) to video frame index."""
@@ -39,17 +47,17 @@ class TimeStampMapper:
                 "This should not happen."
             )
         raw_idx = raw_idx[0]
-        print(f"Raw index for time {raw_t}: {raw_idx}")
+        logger.debug(f"Raw index for time {raw_t}: {raw_idx}")
 
         # Convert raw index to unix timestamp in milliseconds
         raw_ts = self.raw_ts[raw_idx]
-        print(f"Raw unix timestamp at index {raw_idx}: {raw_ts} ms")
+        logger.debug(f"Raw unix timestamp at index {raw_idx}: {raw_ts} ms")
 
         # Now we have temporal location of the raw data point in same units as video
         # timestamps, so we can compare them directly.
 
         if raw_ts < self.vid_ts[0] or raw_ts > self.vid_ts[-1]:
-            print("Raw timestamp is out of video bounds, returning None.")
+            logger.info("Raw timestamp is out of video bounds, returning None.")
             return None
 
         # Find the first video frame index that is greater than
@@ -62,25 +70,25 @@ class TimeStampMapper:
     def video_frame_index_to_raw_time(self, vid_idx: int) -> float | None:
         """Convert a video frame index to a raw data time point (in seconds)."""
         if vid_idx < 0 or vid_idx >= len(self.vid_ts):
-            print(f"Video frame index {vid_idx} is out of bounds.")
+            logger.info(f"Video frame index {vid_idx} is out of bounds.")
             return None
 
         # Get unix timestamp of the video frame
         vid_ts = self.vid_ts[vid_idx]
-        print(f"Video unix timestamp at index {vid_idx}: {vid_ts} ms")
+        logger.debug(f"Video unix timestamp at index {vid_idx}: {vid_ts} ms")
 
         if vid_ts < self.raw_ts[0] or vid_ts > self.raw_ts[-1]:
-            print("Video timestamp is out of raw data bounds, returning None.")
+            logger.info("Video timestamp is out of raw data bounds, returning None.")
             return None
 
         # Find the first raw timestamp that is greater than
         # or equal to the video timestamp
         # TODO: Consider what other methods could be used here
         raw_idx = np.searchsorted(self.raw_ts, vid_ts)
-        print(f"Raw index for video unix timestamp {vid_idx}: {raw_idx}")
+        logger.debug(f"Raw index for video unix timestamp {vid_idx}: {raw_idx}")
 
         raw_t = self.raw.times[raw_idx]
-        print(f"Raw time at index {raw_idx}: {raw_t} seconds")
+        logger.debug(f"Raw time at index {raw_idx}: {raw_t} seconds")
 
         return raw_t
 
