@@ -110,19 +110,6 @@ class VideoFileCV2(VideoFile):
 
         return frame
 
-    def _read_previous_frame(self) -> MatLike | None:
-        """Read the frame before the last read frame from the video file."""
-        if not self._cap.isOpened():
-            raise ValueError("Trying to read from a closed video file.")
-
-        if self._next_frame_idx < 2:
-            print("Already at the first frame.")
-            return None
-
-        # Last read frame is one step back, the frame before that is two steps back
-        self._set_next_frame(self._next_frame_idx - 2)
-        return self._read_next_frame()
-
     def get_frame_at(self, frame_idx: int) -> MatLike | None:
         """Read a specific frame from the video file."""
         if not self._cap.isOpened():
