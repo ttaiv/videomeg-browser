@@ -8,9 +8,9 @@ import numpy as np
 from qtpy import QtWidgets
 from qtpy.QtCore import Qt
 
-from .browser import SyncStatus, VideoBrowser
 from .comp_tstamps import comp_tstamps
 from .video import VideoFileHelsinkiVideoMEG
+from .video_browser import SyncStatus, VideoBrowser
 
 logger = logging.getLogger(__name__)
 
