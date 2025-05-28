@@ -153,12 +153,14 @@ class SyncedRawVideoBrowser:
         self.raw = raw
         self.video_file = video_file
         self.time_mapper = time_mapper
+        # Flag to prevent infinite recursion during synchronization
+        self._syncing = False
 
         # Set up Qt application
         self.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
         # Instantiate the MNE Qt Browser
         self.raw_browser = raw.plot(block=False)
-
         # Set up the video browser
         self.video_browser = VideoBrowser(video_file, show_sync_status=True)
 
@@ -172,8 +174,6 @@ class SyncedRawVideoBrowser:
         # for easy synchronization
         self.vid_slider = self.video_browser.frame_slider
         self.raw_scroll_bar = self.raw_browser.mne.ax_hscroll
-        # Flag to prevent infinite recursion during synchronization
-        self._syncing = False
 
         # Synch the bars
         self.raw_scroll_bar.valueChanged.connect(self.sync_video_to_raw)
