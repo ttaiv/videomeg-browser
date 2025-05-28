@@ -13,7 +13,7 @@ import logging
 from enum import Enum, auto
 
 import pyqtgraph as pg
-from qtpy.QtCore import Slot
+from qtpy.QtCore import QTimer, Slot
 from qtpy.QtWidgets import (
     QLabel,
     QPushButton,
@@ -97,20 +97,47 @@ class VideoBrowser(QWidget):
         self.frame_label.setText(f"Current Frame: 1/{self.video.frame_count}")
         layout.addWidget(self.frame_label)
 
+        # Initialize attributes for video playing
+        self.is_playing = False
+        self.play_timer = QTimer(parent=self)
+        # How many milliseconds between frame updates so that
+        # video is played with original fps
+        self.play_timer_interval_ms = int(1000 / video.fps)
+
+        self.play_timer.setInterval(self.play_timer_interval_ms)
+        self.play_timer.timeout.connect(self._play_next_frame)
+
+        # Add play button to start/stop video playback
+        self.play_pause_button = QPushButton("Play")
+        self.play_pause_button.clicked.connect(self.toggle_play_pause)
+        layout.addWidget(self.play_pause_button)
+
+        self.update_play_button_enabled()
+
     @Slot()
-    def display_next_frame(self):
-        """Display the next frame in the video."""
+    def display_next_frame(self) -> bool:
+        """Display the next frame in the video.
+
+        Returns
+        -------
+        bool
+            True if the next frame was displayed, False if next frame could not be
+            retrieved (end of video?)
+        """
         frame = self.video.get_frame_at(self.current_frame_idx + 1)
         if frame is None:
             logger.debug(
                 "Skipping updating to the next frame, already at the last frame."
             )
-            return
+            return False
 
         self.current_frame_idx += 1
         self.im_view.setImage(frame)
         self.update_frame_label()
         self.update_slider()
+        self.update_play_button_enabled()
+
+        return True
 
     @Slot()
     def display_previous_frame(self):
@@ -126,6 +153,7 @@ class VideoBrowser(QWidget):
         self.im_view.setImage(frame)
         self.update_frame_label()
         self.update_slider()
+        self.update_play_button_enabled()
 
     @Slot(int)
     def slider_frame_changed(self, value: int):
@@ -137,6 +165,7 @@ class VideoBrowser(QWidget):
 
         self.im_view.setImage(frame)
         self.update_frame_label()
+        self.update_play_button_enabled()
 
     @Slot()
     def update_frame_label(self):
@@ -168,3 +197,54 @@ class VideoBrowser(QWidget):
             self.sync_status_label.setStyleSheet("color: red; font-weight: bold;")
         else:
             raise ValueError(f"Unknown sync status: {status}")
+
+    @Slot()
+    def play_video(self):
+        """Play the video frame by frame with its original fps."""
+        if self.is_playing:
+            logger.debug(
+                "Received signal to play video even though video should be "
+                "already playing. Skipping action."
+            )
+            return
+        logger.debug("Playing video.")
+        self.is_playing = True
+        # Start the timer that controls automatic frame updates
+        self.play_timer.start()
+        self.play_pause_button.setText("Pause")  # Change play button to pause button
+
+    @Slot()
+    def pause_video(self):
+        """Pause video playing and stop at current frame."""
+        if not self.is_playing:
+            logger.debug(
+                "Received signal to pause video even though video should not "
+                "be playing. Skipping action."
+            )
+        logger.debug("Pausing video.")
+        self.is_playing = False
+        self.play_timer.stop()
+        self.play_pause_button.setText("Play")
+
+    @Slot()
+    def toggle_play_pause(self):
+        """Either play or pause the video based on the current state."""
+        if self.is_playing:
+            self.pause_video()
+        else:
+            self.play_video()
+
+    @Slot()
+    def _play_next_frame(self):
+        """Play next frame when play timer timeouts."""
+        success = self.display_next_frame()
+        if not success:
+            # Pause the video if we are in the end
+            self.pause_video()
+
+    def update_play_button_enabled(self):
+        """Enable play button unless at the last frame."""
+        if self.current_frame_idx >= self.video.frame_count - 1:
+            self.play_pause_button.setEnabled(False)
+        else:
+            self.play_pause_button.setEnabled(True)
