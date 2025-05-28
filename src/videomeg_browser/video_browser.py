@@ -10,12 +10,10 @@ except Exception as exc:
 
 
 import logging
-import sys
 from enum import Enum, auto
 
 import pyqtgraph as pg
 from qtpy.QtWidgets import (
-    QApplication,
     QLabel,
     QPushButton,
     QSlider,
@@ -23,7 +21,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from .video import VideoFile, VideoFileCV2, VideoFileHelsinkiVideoMEG
+from .video import VideoFile
 
 logger = logging.getLogger(__name__)
 
@@ -163,23 +161,3 @@ class VideoBrowser(QWidget):
             self.sync_status_label.setStyleSheet("color: red; font-weight: bold;")
         else:
             raise ValueError(f"Unknown sync status: {status}")
-
-
-if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-    )
-    app = QApplication([])
-
-    video_videomeg = VideoFileHelsinkiVideoMEG(
-        "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/Video_MEG/animal_meg_subject_2_240614.video.dat"
-    )
-    video_exported = VideoFileCV2(
-        "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/export_video/animal_meg_subject_2_240614.avi"
-    )
-
-    window = VideoBrowser(video_videomeg)
-    window.resize(1000, 800)
-    window.show()
-    sys.exit(app.exec_())
