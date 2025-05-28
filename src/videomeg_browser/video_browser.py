@@ -47,32 +47,40 @@ class VideoBrowser(QWidget):
     show_sync_status : bool, optional
         Whether to show a label indicating the synchronization status of the video and
         and raw data, by default False
+    parent : QWidget, optional
+        The parent widget for this browser, by default None
     """
 
-    def __init__(self, video: VideoFile, show_sync_status: bool = False):
-        super().__init__()
+    def __init__(
+        self,
+        video: VideoFile,
+        show_sync_status: bool = False,
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent=parent)
         self.video = video
+        self.show_sync_status = show_sync_status
+
         self.current_frame_idx = 0
+        self.is_playing = False  # Whether the frame updates are currently automatic
+
+        # Set up timer that allow automatic frame updates (playing the video)
+        self.play_timer = QTimer(parent=self)
+        # Milliseconds between frame updates so that video is played with original fps
+        self.play_timer_interval_ms = int(1000 / video.fps)
+        self.play_timer.setInterval(self.play_timer_interval_ms)
+        self.play_timer.timeout.connect(self._play_next_frame)
 
         self.setWindowTitle("Video Browser Prototype")
 
+        # Create layout that will hold widgets that make up the browser
         layout = QVBoxLayout(self)
 
-        self._has_sync_status_label = show_sync_status
-        if show_sync_status:
-            self.sync_status_label = QLabel("Synchronized")
-            self.sync_status_label.setStyleSheet("color: green; font-weight: bold;")
-            layout.addWidget(self.sync_status_label)
-        else:
-            self.sync_status_label = None
+        # Create widgets for displaying video frames and navigation controls
 
-        # Create an ImageView widget and display first frame of the video
+        # Create an widget for displaying video frames
         self.im_view = pg.ImageView()
         layout.addWidget(self.im_view)
-        first_frame = self.video.get_frame_at(0)
-        if first_frame is None:
-            raise ValueError("Could not read the first frame of the video.")
-        self.im_view.setImage(first_frame)
 
         # Create a button for navigating to the next frame
         self.button = QPushButton("Next Frame")
@@ -94,24 +102,27 @@ class VideoBrowser(QWidget):
 
         # Create a label to display the current frame index
         self.frame_label = QLabel()
-        self.frame_label.setText(f"Current Frame: 1/{self.video.frame_count}")
         layout.addWidget(self.frame_label)
-
-        # Initialize attributes for video playing
-        self.is_playing = False
-        self.play_timer = QTimer(parent=self)
-        # How many milliseconds between frame updates so that
-        # video is played with original fps
-        self.play_timer_interval_ms = int(1000 / video.fps)
-
-        self.play_timer.setInterval(self.play_timer_interval_ms)
-        self.play_timer.timeout.connect(self._play_next_frame)
 
         # Add play button to start/stop video playback
         self.play_pause_button = QPushButton("Play")
         self.play_pause_button.clicked.connect(self.toggle_play_pause)
         layout.addWidget(self.play_pause_button)
 
+        if show_sync_status:
+            self.sync_status_label = QLabel()
+            layout.addWidget(self.sync_status_label)
+        else:
+            self.sync_status_label = None
+
+        # Set up initial state
+
+        first_frame = self.video.get_frame_at(0)
+        if first_frame is None:
+            raise ValueError("Could not read the first frame of the video.")
+        self.im_view.setImage(first_frame)
+
+        self.frame_label.setText(f"Current Frame: 1/{self.video.frame_count}")
         self.update_play_button_enabled()
 
     @Slot()
@@ -184,7 +195,7 @@ class VideoBrowser(QWidget):
     @Slot(SyncStatus)
     def set_sync_status(self, status: SyncStatus):
         """Set the sync status label and color."""
-        if not self._has_sync_status_label or self.sync_status_label is None:
+        if not self.show_sync_status or self.sync_status_label is None:
             return
         if status == SyncStatus.SYNCHRONIZED:
             self.sync_status_label.setText("Synchronized")
