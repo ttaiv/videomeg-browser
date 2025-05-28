@@ -5,7 +5,7 @@ from enum import Enum, auto
 import mne
 import numpy as np
 from qtpy import QtWidgets
-from qtpy.QtCore import Qt
+from qtpy.QtCore import Qt, Slot
 
 from .comp_tstamps import comp_tstamps
 from .video import VideoFileHelsinkiVideoMEG
@@ -184,7 +184,8 @@ class SyncedRawVideoBrowser:
         initial_value = self.raw_scroll_bar.value()
         self.sync_video_to_raw(initial_value)
 
-    def sync_video_to_raw(self, value):
+    @Slot(int)
+    def sync_video_to_raw(self, value: int):
         """Update the video position based on the raw data browser's scroll bar."""
         if self._syncing:
             # Prevent infinite recursion
@@ -226,7 +227,8 @@ class SyncedRawVideoBrowser:
                 )
         self._syncing = False
 
-    def sync_raw_to_video(self, value):
+    @Slot(int)
+    def sync_raw_to_video(self, value: int):
         """Update the raw data browser's scroll bar based on the video slider."""
         if self._syncing:
             # Prevent infinite recursion

@@ -13,6 +13,7 @@ import logging
 from enum import Enum, auto
 
 import pyqtgraph as pg
+from qtpy.QtCore import Slot
 from qtpy.QtWidgets import (
     QLabel,
     QPushButton,
@@ -96,6 +97,7 @@ class VideoBrowser(QWidget):
         self.frame_label.setText(f"Current Frame: 1/{self.video.frame_count}")
         layout.addWidget(self.frame_label)
 
+    @Slot()
     def display_next_frame(self):
         """Display the next frame in the video."""
         frame = self.video.get_frame_at(self.current_frame_idx + 1)
@@ -110,6 +112,7 @@ class VideoBrowser(QWidget):
         self.update_frame_label()
         self.update_slider()
 
+    @Slot()
     def display_previous_frame(self):
         """Display the previous frame in the video."""
         frame = self.video.get_frame_at(self.current_frame_idx - 1)
@@ -124,6 +127,7 @@ class VideoBrowser(QWidget):
         self.update_frame_label()
         self.update_slider()
 
+    @Slot(int)
     def slider_frame_changed(self, value: int):
         """Update view to display the frame corresponding to the slider's position."""
         self.current_frame_idx = value
@@ -134,6 +138,7 @@ class VideoBrowser(QWidget):
         self.im_view.setImage(frame)
         self.update_frame_label()
 
+    @Slot()
     def update_frame_label(self):
         """Update the frame label to show the current frame number."""
         # Use one-based index for display
@@ -141,11 +146,13 @@ class VideoBrowser(QWidget):
             f"Current Frame: {self.current_frame_idx + 1}/{self.video.frame_count}"
         )
 
+    @Slot()
     def update_slider(self):
         """Update the slider to reflect the current frame index."""
         # Use one-based index for display
         self.frame_slider.setValue(self.current_frame_idx)
 
+    @Slot(SyncStatus)
     def set_sync_status(self, status: SyncStatus):
         """Set the sync status label and color."""
         if not self._has_sync_status_label or self.sync_status_label is None:
