@@ -13,7 +13,7 @@ import logging
 from enum import Enum, auto
 
 import pyqtgraph as pg
-from qtpy.QtCore import QTimer, Slot
+from qtpy.QtCore import QTimer, Signal, Slot
 from qtpy.QtWidgets import (
     QLabel,
     QPushButton,
@@ -50,6 +50,10 @@ class VideoBrowser(QWidget):
     parent : QWidget, optional
         The parent widget for this browser, by default None
     """
+
+    # Emits a signal when the displayed frame changes.
+    # The signal carries the index of the new currently displayed frame.
+    frame_changed = Signal(int)
 
     def __init__(
         self,
@@ -159,6 +163,10 @@ class VideoBrowser(QWidget):
         self.update_frame_label()
         self.update_slider()
         self.update_play_button_enabled()
+
+        # Emit signal that the frame has changed
+        self.frame_changed.emit(self.current_frame_idx)
+
         return True
 
     @Slot()
@@ -188,16 +196,9 @@ class VideoBrowser(QWidget):
     @Slot(int)
     def slider_frame_changed(self, value: int):
         """Update view to display the frame corresponding to the slider's position."""
-        self.current_frame_idx = value
-        frame = self.video.get_frame_at(self.current_frame_idx)
-        if frame is None:
-            raise ValueError(f"Invalid frame index {value} selected with the slider.")
-
-        # Same updates as in display_frame_at method but without updating the slider
-        # since the slider is already at the correct position
-        self.im_view.setImage(frame)
-        self.update_frame_label()
-        self.update_play_button_enabled()
+        success = self.display_frame_at(value)
+        if not success:
+            raise ValueError(f"Invalid index {value} selected with the slider.")
 
     @Slot()
     def update_frame_label(self):
