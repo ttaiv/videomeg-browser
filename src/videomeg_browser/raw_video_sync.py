@@ -169,6 +169,7 @@ class SyncedRawVideoBrowser:
         self.dock.setWidget(self.video_browser)
         self.dock.setFloating(True)
         self.raw_browser.addDockWidget(Qt.RightDockWidgetArea, self.dock)
+        self.dock.resize(1000, 800)  # Set initial size of the video browser
 
         # Extract the raw data browser's scroll bar and video browser's slider
         # for easy synchronization

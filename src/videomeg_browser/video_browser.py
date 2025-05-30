@@ -72,6 +72,7 @@ class VideoBrowser(QWidget):
         self.play_timer.timeout.connect(self._play_next_frame)
 
         self.setWindowTitle("Video Browser Prototype")
+        self.resize(1000, 800)  # Set initial size of the window
 
         # Create layout that will hold widgets that make up the browser
         layout = QVBoxLayout(self)
