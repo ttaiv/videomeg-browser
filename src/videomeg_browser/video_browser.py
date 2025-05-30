@@ -126,6 +126,41 @@ class VideoBrowser(QWidget):
         self.frame_label.setText(f"Current Frame: 1/{self.video.frame_count}")
         self.update_play_button_enabled()
 
+    @Slot(int)
+    def display_frame_at(self, frame_idx: int) -> bool:
+        """Display the frame at the specified index.
+
+        Parameters
+        ----------
+        frame_idx : int
+            The index of the frame to display.
+
+        Returns
+        -------
+        bool
+            True if the frame was displayed, False if the index is out of bounds.
+        """
+        if frame_idx < 0 or frame_idx >= self.video.frame_count:
+            logger.debug(
+                f"Skipping updating to frame {frame_idx}, index is out of bounds "
+                f"(0 to {self.video.frame_count - 1})."
+            )
+            return False
+
+        self.current_frame_idx = frame_idx
+        frame = self.video.get_frame_at(frame_idx)
+        if frame is None:
+            raise ValueError(
+                f"Could not retrieve frame at index {frame_idx} event even though the "
+                f"index is within bounds (0 to {self.video.frame_count - 1})."
+            )
+
+        self.im_view.setImage(frame)
+        self.update_frame_label()
+        self.update_slider()
+        self.update_play_button_enabled()
+        return True
+
     @Slot()
     def display_next_frame(self) -> bool:
         """Display the next frame in the video.
@@ -136,36 +171,19 @@ class VideoBrowser(QWidget):
             True if the next frame was displayed, False if next frame could not be
             retrieved (end of video?)
         """
-        frame = self.video.get_frame_at(self.current_frame_idx + 1)
-        if frame is None:
-            logger.debug(
-                "Skipping updating to the next frame, already at the last frame."
-            )
-            return False
-
-        self.current_frame_idx += 1
-        self.im_view.setImage(frame)
-        self.update_frame_label()
-        self.update_slider()
-        self.update_play_button_enabled()
-
-        return True
+        return self.display_frame_at(self.current_frame_idx + 1)
 
     @Slot()
-    def display_previous_frame(self):
-        """Display the previous frame in the video."""
-        frame = self.video.get_frame_at(self.current_frame_idx - 1)
-        if frame is None:
-            logger.debug(
-                "Skipping updating to the previous frame, already at the first frame."
-            )
-            return
+    def display_previous_frame(self) -> bool:
+        """Display the previous frame in the video.
 
-        self.current_frame_idx -= 1
-        self.im_view.setImage(frame)
-        self.update_frame_label()
-        self.update_slider()
-        self.update_play_button_enabled()
+        Returns
+        -------
+        bool
+            True if the previous frame was displayed, False if previous frame could not
+            be retrieved (beginning of video?)
+        """
+        return self.display_frame_at(self.current_frame_idx - 1)
 
     @Slot(int)
     def slider_frame_changed(self, value: int):
@@ -175,6 +193,8 @@ class VideoBrowser(QWidget):
         if frame is None:
             raise ValueError(f"Invalid frame index {value} selected with the slider.")
 
+        # Same updates as in display_frame_at method but without updating the slider
+        # since the slider is already at the correct position
         self.im_view.setImage(frame)
         self.update_frame_label()
         self.update_play_button_enabled()
