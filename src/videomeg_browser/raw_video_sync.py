@@ -4,6 +4,7 @@ from enum import Enum, auto
 
 import mne
 import numpy as np
+import pyqtgraph as pg
 from qtpy import QtWidgets
 from qtpy.QtCore import Qt, Slot
 
@@ -161,6 +162,13 @@ class SyncedRawVideoBrowser:
 
         # Instantiate the MNE Qt Browser
         self.raw_browser = raw.plot(block=False)
+
+        # Add a vertical line marker for the video frame position
+        self.video_marker = pg.InfiniteLine(
+            pos=0, angle=90, movable=False, pen=pg.mkPen("r", width=2)
+        )
+        self.raw_browser.mne.plt.addItem(self.video_marker)
+
         # Set up the video browser
         self.video_browser = VideoBrowser(video_file, show_sync_status=True)
 
@@ -202,21 +210,26 @@ class SyncedRawVideoBrowser:
         self._syncing = True
 
         # Get the middle time of the raw data browser's view
-        raw_time_seconds = (raw_xrange[0] + raw_xrange[1]) / 2
-        logger.debug(f"Syncing video to raw time: {raw_time_seconds:.3f} seconds")
+        raw_middle_time_seconds = (raw_xrange[0] + raw_xrange[1]) / 2
+        logger.debug(
+            f"Syncing video to raw time: {raw_middle_time_seconds:.3f} seconds"
+        )
 
         logger.debug("")  # Clear debug log for clarity
         logger.debug(
             f"Syncing video to raw middle time: {raw_middle_time_seconds:.3f} seconds"
         )
 
-        mapping = self.time_mapper.raw_time_to_video_frame_index(raw_time_seconds)
+        mapping = self.time_mapper.raw_time_to_video_frame_index(
+            raw_middle_time_seconds
+        )
         if mapping.result is not None:
             # Raw time point has a corresponding video frame index
             video_idx = mapping.result
             logger.debug(f"Setting video browser to show frame with index: {video_idx}")
             self.video_browser.display_frame_at(video_idx)
             self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
+            self.video_marker.setValue(raw_middle_time_seconds)
         else:
             # Raw time point is out of bounds of the video bounds
             # Update the video slider to the closest valid index
