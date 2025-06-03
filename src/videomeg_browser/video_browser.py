@@ -128,7 +128,7 @@ class VideoBrowser(QWidget):
         self.im_view.setImage(first_frame)
 
         self.frame_label.setText(f"Current Frame: 1/{self.video.frame_count}")
-        self.update_play_button_enabled()
+        self._update_play_button_enabled()
 
     @Slot(int)
     def display_frame_at(self, frame_idx: int) -> bool:
@@ -160,9 +160,9 @@ class VideoBrowser(QWidget):
             )
 
         self.im_view.setImage(frame)
-        self.update_frame_label()
-        self.update_slider()
-        self.update_play_button_enabled()
+        self._update_frame_label()
+        self._update_slider_internal()
+        self._update_play_button_enabled()
 
         # Emit signal that the frame has changed
         self.frame_changed.emit(self.current_frame_idx)
@@ -193,18 +193,22 @@ class VideoBrowser(QWidget):
         """
         return self.display_frame_at(self.current_frame_idx - 1)
 
-    @Slot()
-    def update_frame_label(self):
+    def _update_frame_label(self):
         """Update the frame label to show the current frame number."""
         # Use one-based index for display
         self.frame_label.setText(
             f"Current Frame: {self.current_frame_idx + 1}/{self.video.frame_count}"
         )
 
-    @Slot()
-    def update_slider(self):
-        """Update the slider to reflect the current frame index."""
+    def _update_slider_internal(self):
+        """Update the slider to reflect the current frame index.
+
+        This is a helper method to update the slider value without
+        triggering the valueChanged signal of the slider.
+        """
+        self.frame_slider.blockSignals(True)
         self.frame_slider.setValue(self.current_frame_idx)
+        self.frame_slider.blockSignals(False)
 
     @Slot(SyncStatus)
     def set_sync_status(self, status: SyncStatus):
@@ -267,7 +271,7 @@ class VideoBrowser(QWidget):
             # Pause the video if we are in the end
             self.pause_video()
 
-    def update_play_button_enabled(self):
+    def _update_play_button_enabled(self):
         """Enable play button unless at the last frame."""
         if self.current_frame_idx >= self.video.frame_count - 1:
             self.play_pause_button.setEnabled(False)
