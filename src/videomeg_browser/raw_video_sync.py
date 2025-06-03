@@ -157,7 +157,7 @@ class SyncedRawVideoBrowser:
         # Flag to prevent infinite recursion during synchronization
         self._syncing = False
         # Relative position of the video marker in the raw data browser's view
-        self.marker_pos_fraction = 0.3
+        self.marker_pos_fraction = 0.5
 
         # Set up Qt application
         self.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
