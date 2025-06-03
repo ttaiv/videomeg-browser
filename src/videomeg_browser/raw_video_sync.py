@@ -252,24 +252,7 @@ class SyncedRawVideoBrowser:
             self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
         else:
             # Video frame index is out of bounds of the raw data bounds
-            # Update the raw view to the closest valid time point
             self.video_browser.set_sync_status(SyncStatus.NO_RAW_DATA)
-            if mapping.failure_reason == MapFailureReason.INDEX_TOO_SMALL:
-                logger.debug(
-                    "Video frame index is before the first raw time point. "
-                    "Setting raw view to the start."
-                )
-                self.set_raw_view_start()
-            elif mapping.failure_reason == MapFailureReason.INDEX_TOO_LARGE:
-                logger.debug(
-                    "Video frame index is after the last raw time point. "
-                    "Setting raw view to the end."
-                )
-                self.set_raw_view_to_end()
-            else:
-                raise ValueError(
-                    f"Unexpected mapping failure reason: {mapping.failure_reason}"
-                )
 
         self._syncing = False
 
