@@ -186,7 +186,8 @@ class SyncedRawVideoBrowser:
 
         # When video browser frame changes, update the raw data browser's view
         self.video_browser.frame_changed.connect(self.sync_raw_to_video)
-        # And when raw data browser's xRange (time axis) changes...
+        # And when raw data browser's xRange (time axis) changes, update raw time
+        # selector (to keep it in the same relative position) and displayed video frame
         self.raw_browser.mne.plt.sigXRangeChanged.connect(
             lambda _, xrange: self.update_raw_time_selector_and_video(xrange)
         )
@@ -208,7 +209,8 @@ class SyncedRawVideoBrowser:
         logger.debug("Detected change in raw data browser's xRange, syncing video.")
 
         logger.debug("Updating raw time selector value based on raw view.")
-        raw_time_seconds = self._update_raw_time_selector_value(raw_xrange)
+        # Returns the new time selector position in seconds
+        raw_time_seconds = self._update_raw_time_selector_based_on_raw_view(raw_xrange)
 
         logger.debug("Using updated raw time selector value to sync video.")
         logger.debug(f"Syncing video to raw time: {raw_time_seconds:.3f} seconds")
@@ -228,7 +230,7 @@ class SyncedRawVideoBrowser:
 
     @Slot(int)
     def sync_raw_to_video(self, video_frame_idx: int):
-        """Update the raw data browser's view based on the displayed video frame."""
+        """Update raw data browser's view and time selector when video frame changes."""
         if self._syncing:
             # Prevent infinite recursion
             logger.debug("Already syncing, skip updating raw view.")
@@ -236,14 +238,17 @@ class SyncedRawVideoBrowser:
         self._syncing = True
 
         logger.debug("")  # Clear debug log for clarity
-        logger.debug(f"Syncing raw to video frame index: {video_frame_idx}")
+        logger.debug(f"Syncing raw browser to video frame index: {video_frame_idx}")
         mapping = self.time_mapper.video_frame_index_to_raw_time(video_frame_idx)
         if mapping.result is not None:
             # Video frame index has a corresponding raw time point
             raw_time = mapping.result
             logger.debug(f"Corresponding raw time in seconds: {raw_time:.3f}")
+            # Set the time selector value based on the video frame
             self.raw_time_selector.setValue(raw_time)
-            self.set_raw_view_according_to_marker()
+            # And update the raw data browser's view so that the selector
+            # remains at the same relative position in the view
+            self.update_raw_view_based_on_raw_time_selector()
             self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
         else:
             # Video frame index is out of bounds of the raw data bounds
@@ -268,8 +273,13 @@ class SyncedRawVideoBrowser:
 
         self._syncing = False
 
-    def _update_raw_time_selector_value(self, raw_xrange: tuple[float, float]) -> float:
+    def _update_raw_time_selector_based_on_raw_view(
+        self, raw_xrange: tuple[float, float]
+    ) -> float:
         """Update time point selector's value using raw view and marker_pos_fraction.
+
+        This changes the value of the selector so that it remains at the same
+        relative position in the raw data browser's view.
 
         Parameters
         ----------
@@ -292,19 +302,14 @@ class SyncedRawVideoBrowser:
 
         return selector_pos
 
-    def set_raw_view_according_to_marker(self):
-        """Set raw view so that video marker is self.marker_fraction of the way through the view."""
+    def update_raw_view_based_on_raw_time_selector(self):
+        """Set raw view so that video marker is at the same relative position.""" ""
 
         # Get specs for the raw data browser's view
         window_len_seconds = self.raw_browser.mne.duration
         view_xmin = 0  # self.raw_browser.mne.xmin
         view_xmax = self.raw_browser.mne.xmax
-        logger.debug(
-            f"Raw data browser view range: [{view_xmin:.3f}, {view_xmax:.3f}] seconds."
-        )
-        logger.debug(f"Raw data browser duration: {window_len_seconds:.3f} seconds.")
 
-        # Get the current position of the video marker
         marker_pos = float(self.raw_time_selector.value())
         logger.debug(f"Video marker position: {marker_pos:.3f} seconds.")
 
