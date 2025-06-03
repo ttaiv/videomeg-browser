@@ -291,29 +291,45 @@ class SyncedRawVideoBrowser:
         The raw time selector will stay at the same relative position in the view.
         """
         # Get specs for the raw data browser's view
-        window_len_seconds = self.raw_browser.mne.duration
-        view_xmin = 0  # self.raw_browser.mne.xmin
+        # All are in seconds
+        window_len = self.raw_browser.mne.duration
+        view_xmin = 0
         view_xmax = self.raw_browser.mne.xmax
 
         time_selector_pos = float(self.raw_time_selector.value())
         logger.debug(
-            f"Video marker position for raw view updating: {time_selector_pos:.3f} seconds."
+            f"Video marker position for raw view updating: {time_selector_pos:.3f} "
+            "seconds."
         )
 
         # Calculate new xmin and xmax for the raw data browser's view
-        xmin = max(
-            view_xmin, time_selector_pos - window_len_seconds * self.marker_pos_fraction
-        )
-        xmax = min(
-            view_xmax,
-            time_selector_pos + window_len_seconds * (1 - self.marker_pos_fraction),
-        )
+        xmin = time_selector_pos - window_len * self.marker_pos_fraction
+        xmax = time_selector_pos + window_len * (1 - self.marker_pos_fraction)
 
-        logger.debug(
-            f"Setting raw view to show video marker at {time_selector_pos:.3f} seconds "
-            f"with range [{xmin:.3f}, {xmax:.3f}] seconds."
-        )
-        self.raw_browser.mne.plt.setXRange(xmin, xmax, padding=0)
+        if xmin < view_xmin:
+            logger.debug(
+                f"Raw view xmin {xmin:.3f} is less than the minimum view time "
+                f"{view_xmin:.3f}. Setting view to range "
+                f"[{view_xmin:.3f}, {view_xmin + window_len}] seconds."
+            )
+            self.raw_browser.mne.plt.setXRange(
+                view_xmin, view_xmin + window_len, padding=0
+            )
+        elif xmax > view_xmax:
+            logger.debug(
+                f"Raw view xmax {xmax:.3f} is greater than the maximum view time "
+                f"{view_xmax:.3f}. Setting view to range "
+                f"[{view_xmax - window_len:.3f}, {view_xmax:.3f}] seconds."
+            )
+            self.raw_browser.mne.plt.setXRange(
+                view_xmax - window_len, view_xmax, padding=0
+            )
+        else:
+            logger.debug(
+                f"Setting raw view to show video marker at {time_selector_pos:.3f} seconds "
+                f"with range [{xmin:.3f}, {xmax:.3f}] seconds."
+            )
+            self.raw_browser.mne.plt.setXRange(xmin, xmax, padding=0)
 
     def set_raw_view_time(self, raw_time_seconds: float):
         """Set the raw data browser's view to show a specific time point.
