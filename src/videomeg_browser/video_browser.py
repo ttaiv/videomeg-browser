@@ -102,7 +102,7 @@ class VideoBrowser(QWidget):
         self.frame_slider.setMinimum(0)
         self.frame_slider.setMaximum(self.video.frame_count - 1)
         self.frame_slider.setValue(0)
-        self.frame_slider.valueChanged.connect(self.slider_frame_changed)
+        self.frame_slider.valueChanged.connect(self.display_frame_at)
         layout.addWidget(self.frame_slider)
 
         # Create a label to display the current frame index
@@ -193,13 +193,6 @@ class VideoBrowser(QWidget):
         """
         return self.display_frame_at(self.current_frame_idx - 1)
 
-    @Slot(int)
-    def slider_frame_changed(self, value: int):
-        """Update view to display the frame corresponding to the slider's position."""
-        success = self.display_frame_at(value)
-        if not success:
-            raise ValueError(f"Invalid index {value} selected with the slider.")
-
     @Slot()
     def update_frame_label(self):
         """Update the frame label to show the current frame number."""
@@ -211,7 +204,6 @@ class VideoBrowser(QWidget):
     @Slot()
     def update_slider(self):
         """Update the slider to reflect the current frame index."""
-        # Use one-based index for display
         self.frame_slider.setValue(self.current_frame_idx)
 
     @Slot(SyncStatus)
