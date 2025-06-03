@@ -286,26 +286,31 @@ class SyncedRawVideoBrowser:
         return selector_pos
 
     def update_raw_view_based_on_raw_time_selector(self):
-        """Set raw view so that video marker is at the same relative position.""" ""
+        """Set raw view based on the raw time selector.
 
+        The raw time selector will stay at the same relative position in the view.
+        """
         # Get specs for the raw data browser's view
         window_len_seconds = self.raw_browser.mne.duration
         view_xmin = 0  # self.raw_browser.mne.xmin
         view_xmax = self.raw_browser.mne.xmax
 
-        marker_pos = float(self.raw_time_selector.value())
-        logger.debug(f"Video marker position: {marker_pos:.3f} seconds.")
+        time_selector_pos = float(self.raw_time_selector.value())
+        logger.debug(
+            f"Video marker position for raw view updating: {time_selector_pos:.3f} seconds."
+        )
 
         # Calculate new xmin and xmax for the raw data browser's view
         xmin = max(
-            view_xmin, marker_pos - window_len_seconds * self.marker_pos_fraction
+            view_xmin, time_selector_pos - window_len_seconds * self.marker_pos_fraction
         )
         xmax = min(
-            view_xmax, marker_pos + window_len_seconds * (1 - self.marker_pos_fraction)
+            view_xmax,
+            time_selector_pos + window_len_seconds * (1 - self.marker_pos_fraction),
         )
 
         logger.debug(
-            f"Setting raw view to show video marker at {marker_pos:.3f} seconds "
+            f"Setting raw view to show video marker at {time_selector_pos:.3f} seconds "
             f"with range [{xmin:.3f}, {xmax:.3f}] seconds."
         )
         self.raw_browser.mne.plt.setXRange(xmin, xmax, padding=0)
