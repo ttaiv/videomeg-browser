@@ -156,6 +156,8 @@ class SyncedRawVideoBrowser:
         self.time_mapper = time_mapper
         # Flag to prevent infinite recursion during synchronization
         self._syncing = False
+        # Relative position of the video marker in the raw data browser's view
+        self.marker_pos_fraction = 0.3
 
         # Set up Qt application
         self.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -163,11 +165,12 @@ class SyncedRawVideoBrowser:
         # Instantiate the MNE Qt Browser
         self.raw_browser = raw.plot(block=False)
 
-        # Add a vertical line marker for the video frame position
-        self.video_marker = pg.InfiniteLine(
-            pos=0, angle=90, movable=False, pen=pg.mkPen("r", width=2)
+        # Vertical line that shows the time point in the raw data browser
+        # that corresponds to the currently displayed video frame
+        self.raw_time_selector = pg.InfiniteLine(
+            pos=0, angle=90, movable=False, pen=pg.mkPen("r", width=3)
         )
-        self.raw_browser.mne.plt.addItem(self.video_marker)
+        self.raw_browser.mne.plt.addItem(self.raw_time_selector)
 
         # Set up the video browser
         self.video_browser = VideoBrowser(video_file, show_sync_status=True)
@@ -183,78 +186,44 @@ class SyncedRawVideoBrowser:
 
         # When video browser frame changes, update the raw data browser's view
         self.video_browser.frame_changed.connect(self.sync_raw_to_video)
-        # And when raw data browser's xRange (time axis) changes
-        # update the video browser's frame
+        # And when raw data browser's xRange (time axis) changes...
         self.raw_browser.mne.plt.sigXRangeChanged.connect(
-            lambda _, xrange: self.sync_video_to_raw(xrange)
+            lambda _, xrange: self.update_raw_time_selector_and_video(xrange)
         )
 
         # Consider raw data browser to be the main browser and start by
         # synchronizing the video browser to the raw data browser's view
-        initial_xrange = self.raw_browser.mne.viewbox.viewRange()[0]
-
-        logger.debug(
-            f"Initial raw data view range: {initial_xrange[0]:.3f} to "
-            f"{initial_xrange[1]:.3f} seconds."
-        )
-
-        self.sync_video_to_raw(initial_xrange)
+        initial_xrange = self.raw_browser.mne.plt.getViewBox().viewRange()[0]
+        self.update_raw_time_selector_and_video(initial_xrange)
 
     @Slot(tuple)
-    def sync_video_to_raw(self, raw_xrange: tuple[float, float]):
-        """Update the displayed video frame based on raw data view."""
+    def update_raw_time_selector_and_video(self, raw_xrange: tuple[float, float]):
+        """Update raw time selector and displayed video frame when raw view changes."""
         if self._syncing:
             # Prevent infinite recursion
-            logger.debug("Already syncing, skip updating video slider.")
+            logger.debug("Already syncing, skip updating video view.")
             return
         self._syncing = True
-
-        # Get the middle time of the raw data browser's view
-        raw_middle_time_seconds = (raw_xrange[0] + raw_xrange[1]) / 2
-        logger.debug(
-            f"Syncing video to raw time: {raw_middle_time_seconds:.3f} seconds"
-        )
-
         logger.debug("")  # Clear debug log for clarity
-        logger.debug(
-            f"Syncing video to raw middle time: {raw_middle_time_seconds:.3f} seconds"
-        )
+        logger.debug("Detected change in raw data browser's xRange, syncing video.")
 
-        mapping = self.time_mapper.raw_time_to_video_frame_index(
-            raw_middle_time_seconds
-        )
+        logger.debug("Updating raw time selector value based on raw view.")
+        raw_time_seconds = self._update_raw_time_selector_value(raw_xrange)
+
+        logger.debug("Using updated raw time selector value to sync video.")
+        logger.debug(f"Syncing video to raw time: {raw_time_seconds:.3f} seconds")
+
+        mapping = self.time_mapper.raw_time_to_video_frame_index(raw_time_seconds)
         if mapping.result is not None:
             # Raw time point has a corresponding video frame index
             video_idx = mapping.result
             logger.debug(f"Setting video browser to show frame with index: {video_idx}")
             self.video_browser.display_frame_at(video_idx)
             self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
-            self.video_marker.setValue(raw_middle_time_seconds)
         else:
             # Raw time point is out of bounds of the video bounds
-            # Update the video slider to the closest valid index
-            raise RuntimeError("This should not happen with middle time point.")
-            """
             self.video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
-            if mapping.failure_reason == MapFailureReason.INDEX_TOO_SMALL:
-                logger.debug(
-                    "Raw time is before the first video frame. "
-                    "Setting video to the first frame."
-                )
-                self.video_browser.display_frame_at(0)
-            elif mapping.failure_reason == MapFailureReason.INDEX_TOO_LARGE:
-                logger.debug(
-                    "Raw time is after the last video frame "
-                    "Setting video to the last frame."
-                )
-                self.video_browser.display_frame_at(
-                    self.video_browser.video.frame_count - 1
-                )
-            else:
-                raise ValueError(
-                    f"Unexpected mapping failure reason: {mapping.failure_reason}"
-                )
-            """
+
         self._syncing = False
 
     @Slot(int)
@@ -273,8 +242,8 @@ class SyncedRawVideoBrowser:
             # Video frame index has a corresponding raw time point
             raw_time = mapping.result
             logger.debug(f"Corresponding raw time in seconds: {raw_time:.3f}")
-            self.set_raw_view_time(raw_time)
-            self.video_marker.setValue(raw_time)
+            self.raw_time_selector.setValue(raw_time)
+            self.set_raw_view_according_to_marker()
             self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
         else:
             # Video frame index is out of bounds of the raw data bounds
@@ -298,6 +267,60 @@ class SyncedRawVideoBrowser:
                 )
 
         self._syncing = False
+
+    def _update_raw_time_selector_value(self, raw_xrange: tuple[float, float]) -> float:
+        """Update time point selector's value using raw view and marker_pos_fraction.
+
+        Parameters
+        ----------
+        raw_xrange : tuple[float, float]
+            The current view range of the raw data browser, given as (xmin, xmax).
+
+        Returns
+        -------
+        float
+            The new position of the time point selector in seconds
+        """
+        # Get the current view range of the raw data browser
+        raw_xmin = raw_xrange[0]
+        raw_xmax = raw_xrange[1]
+
+        # Calculate the new position of the time point selector
+        selector_pos = raw_xmin + (raw_xmax - raw_xmin) * self.marker_pos_fraction
+        logger.debug(f"Setting raw time point selector to {selector_pos:.3f} seconds.")
+        self.raw_time_selector.setValue(selector_pos)
+
+        return selector_pos
+
+    def set_raw_view_according_to_marker(self):
+        """Set raw view so that video marker is self.marker_fraction of the way through the view."""
+
+        # Get specs for the raw data browser's view
+        window_len_seconds = self.raw_browser.mne.duration
+        view_xmin = 0  # self.raw_browser.mne.xmin
+        view_xmax = self.raw_browser.mne.xmax
+        logger.debug(
+            f"Raw data browser view range: [{view_xmin:.3f}, {view_xmax:.3f}] seconds."
+        )
+        logger.debug(f"Raw data browser duration: {window_len_seconds:.3f} seconds.")
+
+        # Get the current position of the video marker
+        marker_pos = float(self.raw_time_selector.value())
+        logger.debug(f"Video marker position: {marker_pos:.3f} seconds.")
+
+        # Calculate new xmin and xmax for the raw data browser's view
+        xmin = max(
+            view_xmin, marker_pos - window_len_seconds * self.marker_pos_fraction
+        )
+        xmax = min(
+            view_xmax, marker_pos + window_len_seconds * (1 - self.marker_pos_fraction)
+        )
+
+        logger.debug(
+            f"Setting raw view to show video marker at {marker_pos:.3f} seconds "
+            f"with range [{xmin:.3f}, {xmax:.3f}] seconds."
+        )
+        self.raw_browser.mne.plt.setXRange(xmin, xmax, padding=0)
 
     def set_raw_view_time(self, raw_time_seconds: float):
         """Set the raw data browser's view to show a specific time point.
