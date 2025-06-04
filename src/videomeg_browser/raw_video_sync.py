@@ -338,34 +338,6 @@ class SyncedRawVideoBrowser:
             )
             self.raw_browser.mne.plt.setXRange(xmin, xmax, padding=0)
 
-    def set_raw_view_time(self, raw_time_seconds: float):
-        """Set the raw data browser's view to show a specific time point.
-
-        If possible, the view will be centered around the specified time point.
-        """
-        # Get specs for the raw data browser's view
-        window_len_seconds = self.raw_browser.mne.duration
-        view_xmin = 0
-        view_xmax = self.raw_browser.mne.xmax
-        logger.debug(
-            f"Raw data browser view range: [{view_xmin:.3f}, {view_xmax:.3f}] seconds."
-        )
-        logger.debug(f"Raw data browser duration: {window_len_seconds:.3f} seconds.")
-
-        xmin = max(view_xmin, raw_time_seconds - window_len_seconds / 2)
-        # xmax = min(raw_time_seconds + window_len_seconds / 2, view_xmax)
-        xmax = xmin + window_len_seconds
-        if xmax > view_xmax:
-            logger.warning(
-                f"Setting raw view max to a time point {xmax} that exceeds the "
-                "maximum time point of the raw data."
-            )
-        logger.debug(
-            f"Setting raw view to show time point {raw_time_seconds:.3f} seconds "
-            f"with range [{xmin:.3f}, {xmax:.3f}] seconds."
-        )
-        self.raw_browser.mne.plt.setXRange(xmin, xmax, padding=0)
-
     def set_raw_view_start(self):
         """Set the raw data browser's view to the beginning of the data."""
         xmin = self.raw_browser.mne.xmin
