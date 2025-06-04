@@ -253,7 +253,25 @@ class SyncedRawVideoBrowser:
             self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
         else:
             # Video frame index is out of bounds of the raw data bounds
+            # Signal video browser that there is no raw data for this frame
+            # and move the raw view either to the start or end of the raw data
             self.video_browser.set_sync_status(SyncStatus.NO_RAW_DATA)
+            if mapping.failure_reason == MapFailureReason.INDEX_TOO_SMALL:
+                logger.debug(
+                    "No raw data for this small video frame, moving raw view to start."
+                )
+                self.set_raw_view_start()
+                self.raw_time_selector.setValue(0.0)
+            elif mapping.failure_reason == MapFailureReason.INDEX_TOO_LARGE:
+                logger.debug(
+                    "No raw data for this large video frame, moving raw view to end."
+                )
+                self.set_raw_view_to_end()
+                self.raw_time_selector.setValue(self.raw_browser.mne.xmax)
+            else:
+                raise ValueError(
+                    f"Unexpected mapping failure reason: {mapping.failure_reason}"
+                )
 
         self._syncing = False
 
@@ -340,11 +358,11 @@ class SyncedRawVideoBrowser:
 
     def set_raw_view_start(self):
         """Set the raw data browser's view to the beginning of the data."""
-        xmin = self.raw_browser.mne.xmin
+        xmin = 0.0
         xmax = xmin + self.raw_browser.mne.duration
         logger.debug(
-            f"Setting raw view to beginning at time {xmin:.3f} seconds "
-            f"with range [{xmin:.3f}, {xmax:.3f}] seconds."
+            f"Setting raw view to range [{xmin:.3f}, {xmax:.3f}] seconds "
+            "at the start of the data."
         )
         self.raw_browser.mne.plt.setXRange(xmin, xmax, padding=0)
 
@@ -353,8 +371,8 @@ class SyncedRawVideoBrowser:
         xmax = self.raw_browser.mne.xmax
         xmin = xmax - self.raw_browser.mne.duration
         logger.debug(
-            f"Setting raw view to end at time {xmax:.3f} seconds "
-            f"with range [{xmin:.3f}, {xmax:.3f}] seconds."
+            f"Setting raw view to range [{xmin:.3f}, {xmax:.3f}] seconds "
+            "at the end of the data."
         )
         self.raw_browser.mne.plt.setXRange(xmin, xmax, padding=0)
 
