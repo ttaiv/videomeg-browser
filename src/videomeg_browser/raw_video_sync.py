@@ -225,7 +225,23 @@ class SyncedRawVideoBrowser:
             self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
         else:
             # Raw time point is out of bounds of the video bounds
+            # Signal video browser that there is no video data for this raw time point
+            # and show the first or last frame of the video
             self.video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
+            if mapping.failure_reason == MapFailureReason.INDEX_TOO_SMALL:
+                logger.debug(
+                    "No video data for this small raw time point, showing first frame."
+                )
+                self.video_browser.display_frame_at(0)
+            elif mapping.failure_reason == MapFailureReason.INDEX_TOO_LARGE:
+                logger.debug(
+                    "No video data for this large raw time point, showing last frame."
+                )
+                self.video_browser.display_frame_at(self.video_file.frame_count - 1)
+            else:
+                raise ValueError(
+                    f"Unexpected mapping failure reason: {mapping.failure_reason}"
+                )
 
         self._syncing = False
 
