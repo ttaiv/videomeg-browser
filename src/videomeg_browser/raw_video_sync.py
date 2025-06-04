@@ -191,7 +191,7 @@ class SyncedRawVideoBrowser:
         # When either raw time selector value or raw data browser's view changes,
         # update the video browser
         self.raw_time_selector.sigPositionChanged.connect(
-            lambda selector: self.handle_time_selector_change(selector.value())
+            self.handle_time_selector_change
         )
         self.raw_browser.mne.plt.sigXRangeChanged.connect(
             lambda _, xrange: self.sync_video_to_raw_xrange_change(xrange)
@@ -204,14 +204,8 @@ class SyncedRawVideoBrowser:
         self.sync_video_to_raw_xrange_change(initial_xrange)
 
     @Slot(float)
-    def handle_time_selector_change(self, raw_time_seconds: float):
-        """Update video browser and default time selector position.
-
-        Parameters
-        ----------
-        raw_time_seconds : float
-            The new value of the raw time selector in seconds.
-        """
+    def handle_time_selector_change(self):
+        """Update video browser and default time selector position when user drags time selector."""
         if self._syncing:
             # Prevent infinite recursion
             logger.debug(
@@ -219,6 +213,14 @@ class SyncedRawVideoBrowser:
             )
             return
         self._syncing = True
+
+        # Clamp the raw time selector to the current view range
+        # (for some reason it is possible to drag it outside the view range)
+        self._set_clamped_time_selector_value(
+            self.raw_time_selector.value(), padding=0.1
+        )
+        # Take the clamped value and use it for updates
+        raw_time_seconds = self.raw_time_selector.value()
 
         logger.debug("")  # Clear debug log for clarity
         logger.debug(
@@ -228,6 +230,27 @@ class SyncedRawVideoBrowser:
         self._update_default_time_selector_position(raw_time_seconds)
         self._update_video(raw_time_seconds)
         self._syncing = False
+
+    def _set_clamped_time_selector_value(self, new_value: float, padding: float):
+        """Set raw time selector value, clamped to current raw view range.
+
+        Used to ensure that user cannot drag the time selector outside
+        the current view range of the raw data browser.
+
+        Parameters
+        ----------
+        new_value : float
+            The value to set the raw time selector to, in seconds.
+        padding : float
+            Padding to apply to the view range when clamping the value.
+            This is useful to ensure that the time selector does not
+            get too close to the edges of the view range.
+        """
+        # Get the current view range of the raw data browser
+        xmin, xmax = self.raw_browser.mne.plt.getViewBox().viewRange()[0]
+        # Clamp the new value to the current view range
+        clamped_value = np.clip(new_value, xmin + padding, xmax - padding)
+        self.raw_time_selector.setValue(clamped_value)
 
     def _update_default_time_selector_position(self, new_selector_value: float):
         """Update the default position of the time selector in the raw data browser."""
