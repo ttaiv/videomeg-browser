@@ -9,6 +9,7 @@ from qtpy import QtWidgets
 from qtpy.QtCore import Qt, Slot
 
 from .comp_tstamps import comp_tstamps
+from .raw_browser_manager import RawBrowserManager
 from .video import VideoFileHelsinkiVideoMEG
 from .video_browser import SyncStatus, VideoBrowser
 
@@ -156,32 +157,25 @@ class SyncedRawVideoBrowser:
         self.time_mapper = time_mapper
         # Flag to prevent infinite recursion during synchronization
         self._syncing = False
-        # Default relative position of the time selector (marker that shows the time
-        # point that is used to determine which video frame to display) in the raw data
-        # browser's view. In the boundaries of raw data, this will not be obeyed.
-        self.time_selector_fraction = 0.5
 
         # Set up Qt application
         self.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
         # Instantiate the MNE Qt Browser
-        self.raw_browser = raw.plot(block=False)
-
-        # Vertical line that shows the time point in the raw data browser
-        # that corresponds to the currently displayed video frame
-        self.raw_time_selector = pg.InfiniteLine(
-            pos=0, angle=90, movable=True, pen=pg.mkPen("r", width=3)
-        )
-        self.raw_browser.mne.plt.addItem(self.raw_time_selector)
+        self.raw_browser_manager = RawBrowserManager(raw)
 
         # Set up the video browser
         self.video_browser = VideoBrowser(video_file, show_sync_status=True)
 
         # Dock the video browser to the raw data browser with Qt magic
-        self.dock = QtWidgets.QDockWidget("Video Browser", self.raw_browser)
+        self.dock = QtWidgets.QDockWidget(
+            "Video Browser", self.raw_browser_manager.browser
+        )
         self.dock.setWidget(self.video_browser)
         self.dock.setFloating(True)
-        self.raw_browser.addDockWidget(Qt.RightDockWidgetArea, self.dock)
+        self.raw_browser_manager.browser.addDockWidget(
+            Qt.RightDockWidgetArea, self.dock
+        )
         self.dock.resize(1000, 800)  # Set initial size of the video browser
 
         # Set up synchronization
@@ -190,111 +184,26 @@ class SyncedRawVideoBrowser:
         self.video_browser.frame_changed.connect(self.sync_raw_to_video)
         # When either raw time selector value or raw data browser's view changes,
         # update the video browser
-        self.raw_time_selector.sigPositionChanged.connect(
-            self.handle_time_selector_change
-        )
-        self.raw_browser.mne.plt.sigXRangeChanged.connect(
-            lambda _, xrange: self.sync_video_to_raw_xrange_change(xrange)
-        )
+        self.raw_browser_manager.sigSelectedTimeChanged.connect(self.sync_video_to_raw)
 
         # Consider raw data browser to be the main browser and start by
         # synchronizing the video browser to the raw data browser's view
-        initial_xrange = self.raw_browser.mne.plt.getViewBox().viewRange()[0]
+        initial_raw_time = self.raw_browser_manager.get_selected_time()
         # Also updates the raw time selector
-        self.sync_video_to_raw_xrange_change(initial_xrange)
-
-    @Slot(float)
-    def handle_time_selector_change(self):
-        """Update video browser and default time selector position when user drags time selector."""
-        if self._syncing:
-            # Prevent infinite recursion
-            logger.debug(
-                "Already syncing, skip updating video due to changed time selector."
-            )
-            return
-        self._syncing = True
-
-        # Clamp the raw time selector to the current view range
-        # (for some reason it is possible to drag it outside the view range)
-        self._set_clamped_time_selector_value(
-            self.raw_time_selector.value(), padding=0.1
-        )
-        # Take the clamped value and use it for updates
-        raw_time_seconds = self.raw_time_selector.value()
-
-        logger.debug("")  # Clear debug log for clarity
-        logger.debug(
-            "Detected change in raw time selector, setting new default position "
-            "and syncing video."
-        )
-        self._update_default_time_selector_position(raw_time_seconds)
-        self._update_video(raw_time_seconds)
-        self._syncing = False
-
-    def _set_clamped_time_selector_value(self, new_value: float, padding: float):
-        """Set raw time selector value, clamped to current raw view range.
-
-        Used to ensure that user cannot drag the time selector outside
-        the current view range of the raw data browser.
-
-        Parameters
-        ----------
-        new_value : float
-            The value to set the raw time selector to, in seconds.
-        padding : float
-            Padding to apply to the view range when clamping the value.
-            This is useful to ensure that the time selector does not
-            get too close to the edges of the view range.
-        """
-        # Get the current view range of the raw data browser
-        xmin, xmax = self.raw_browser.mne.plt.getViewBox().viewRange()[0]
-        # Clamp the new value to the current view range
-        clamped_value = np.clip(new_value, xmin + padding, xmax - padding)
-        self.raw_time_selector.setValue(clamped_value)
-
-    def _update_default_time_selector_position(self, new_selector_value: float):
-        """Update the default position of the time selector in the raw data browser."""
-        # Update the time selector fraction based on the new raw time selector value
-        xmin, xmax = self.raw_browser.mne.plt.getViewBox().viewRange()[0]
-        window_len = xmax - xmin
-
-        new_selector_fraction = (new_selector_value - xmin) / window_len
-        logger.debug(
-            f"Updating time selector fraction to {new_selector_fraction:.3f} "
-            f"based on raw time selector value {new_selector_value:.3f} seconds."
-        )
-        self.time_selector_fraction = new_selector_fraction
+        self.sync_video_to_raw(initial_raw_time)
 
     @Slot(tuple)
-    def sync_video_to_raw_xrange_change(self, new_raw_xrange: tuple[float, float]):
-        """Update raw time selector and displayed video frame when raw view changes.
-
-        Updates the raw time selector value so that it remains at the same
-        relative position in the raw data browser's view (excluding boundaries)
-        and then updates the video browser to show the video frame corresponding
-        to the new raw time selector value.
-
-        Parameters
-        ----------
-        new_raw_xrange : tuple[float, float]
-            The new view range of the raw data browser, given as (xmin, xmax).
-        """
+    def sync_video_to_raw(self, raw_time_seconds: float):
+        """Update the displayed video frame when raw view changes."""
         if self._syncing:
             # Prevent infinite recursion
             logger.debug("Already syncing, skip updating video view.")
             return
         self._syncing = True
         logger.debug("")  # Clear debug log for clarity
-        logger.debug("Detected change in raw data browser's xRange, syncing video.")
-
-        logger.debug("Updating raw time selector value based on raw view.")
-        # Returns the new time selector position in seconds
-        raw_time_seconds = self._update_raw_time_selector_based_on_raw_view(
-            new_raw_xrange
+        logger.debug(
+            "Detected change in raw data browser's selected time, syncing video."
         )
-
-        logger.debug("Using updated raw time selector value to sync video.")
-        logger.debug(f"Syncing video to raw time: {raw_time_seconds:.3f} seconds")
 
         self._update_video(raw_time_seconds)
         self._syncing = False
@@ -355,10 +264,7 @@ class SyncedRawVideoBrowser:
             raw_time = mapping.result
             logger.debug(f"Corresponding raw time in seconds: {raw_time:.3f}")
             # Set the time selector value based on the video frame
-            self.raw_time_selector.setValue(raw_time)
-            # And update the raw data browser's view so that the selector
-            # remains at the same relative position in the view
-            self._update_raw_view_based_on_raw_time_selector()
+            self.raw_browser_manager.set_selected_time(raw_time)
             self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
         else:
             # Video frame index is out of bounds of the raw data bounds
@@ -369,14 +275,12 @@ class SyncedRawVideoBrowser:
                 logger.debug(
                     "No raw data for this small video frame, moving raw view to start."
                 )
-                self.set_raw_view_start()
-                self.raw_time_selector.setValue(0.0)
+                self.raw_browser_manager.jump_to_start()
             elif mapping.failure_reason == MapFailureReason.INDEX_TOO_LARGE:
                 logger.debug(
                     "No raw data for this large video frame, moving raw view to end."
                 )
-                self.set_raw_view_to_end()
-                self.raw_time_selector.setValue(self.raw_browser.mne.xmax)
+                self.raw_browser_manager.jump_to_end()
             else:
                 raise ValueError(
                     f"Unexpected mapping failure reason: {mapping.failure_reason}"
@@ -384,108 +288,7 @@ class SyncedRawVideoBrowser:
 
         self._syncing = False
 
-    def _update_raw_time_selector_based_on_raw_view(
-        self, new_raw_xrange: tuple[float, float]
-    ) -> float:
-        """Update time point selector's value using raw view and time selector fraction.
-
-        This changes the value of the selector so that it remains at the same
-        relative position in the raw data browser's view.
-
-        Parameters
-        ----------
-        raw_xrange : tuple[float, float]
-            The new view range of the raw data browser, given as (xmin, xmax).
-
-        Returns
-        -------
-        float
-            The new position of the time point selector in seconds
-        """
-        # Get the current view range of the raw data browser
-        raw_xmin = new_raw_xrange[0]
-        raw_xmax = new_raw_xrange[1]
-
-        # Calculate the new position of the time point selector
-        selector_pos = raw_xmin + (raw_xmax - raw_xmin) * self.time_selector_fraction
-        logger.debug(f"Setting raw time point selector to {selector_pos:.3f} seconds.")
-        self.raw_time_selector.setValue(selector_pos)
-
-        return selector_pos
-
-    def _update_raw_view_based_on_raw_time_selector(self):
-        """Set raw view based on the raw time selector.
-
-        The raw time selector will stay at the same relative position in the view,
-        expect when the view is at the boundaries of the raw data.
-        """
-        # Get specs for the raw data browser's view
-        # All are in seconds
-        window_len = self.raw_browser.mne.duration
-        view_xmin = 0
-        view_xmax = self.raw_browser.mne.xmax
-
-        time_selector_pos = self.raw_time_selector.value()
-        if not isinstance(time_selector_pos, float):
-            raise TypeError(
-                f"Expected raw time selector value to be a float, "
-                f"but got {type(time_selector_pos)}."
-            )
-        logger.debug(
-            f"Video marker position for raw view updating: {time_selector_pos:.3f} "
-            "seconds."
-        )
-
-        # Calculate new xmin and xmax for the raw data browser's view
-        xmin = time_selector_pos - window_len * self.time_selector_fraction
-        xmax = time_selector_pos + window_len * (1 - self.time_selector_fraction)
-
-        if xmin < view_xmin:
-            logger.debug(
-                f"Raw view xmin {xmin:.3f} is less than the minimum view time "
-                f"{view_xmin:.3f}. Setting view to range "
-                f"[{view_xmin:.3f}, {view_xmin + window_len}] seconds."
-            )
-            self.raw_browser.mne.plt.setXRange(
-                view_xmin, view_xmin + window_len, padding=0
-            )
-        elif xmax > view_xmax:
-            logger.debug(
-                f"Raw view xmax {xmax:.3f} is greater than the maximum view time "
-                f"{view_xmax:.3f}. Setting view to range "
-                f"[{view_xmax - window_len:.3f}, {view_xmax:.3f}] seconds."
-            )
-            self.raw_browser.mne.plt.setXRange(
-                view_xmax - window_len, view_xmax, padding=0
-            )
-        else:
-            logger.debug(
-                f"Setting raw view to show video marker at {time_selector_pos:.3f} seconds "
-                f"with range [{xmin:.3f}, {xmax:.3f}] seconds."
-            )
-            self.raw_browser.mne.plt.setXRange(xmin, xmax, padding=0)
-
-    def set_raw_view_start(self):
-        """Set the raw data browser's view to the beginning of the data."""
-        xmin = 0.0
-        xmax = xmin + self.raw_browser.mne.duration
-        logger.debug(
-            f"Setting raw view to range [{xmin:.3f}, {xmax:.3f}] seconds "
-            "at the start of the data."
-        )
-        self.raw_browser.mne.plt.setXRange(xmin, xmax, padding=0)
-
-    def set_raw_view_to_end(self):
-        """Set the raw data browser's view to the end of the data."""
-        xmax = self.raw_browser.mne.xmax
-        xmin = xmax - self.raw_browser.mne.duration
-        logger.debug(
-            f"Setting raw view to range [{xmin:.3f}, {xmax:.3f}] seconds "
-            "at the end of the data."
-        )
-        self.raw_browser.mne.plt.setXRange(xmin, xmax, padding=0)
-
     def show(self):
         """Show the synchronized raw and video browsers."""
-        self.raw_browser.show()
+        self.raw_browser_manager.show_browser()
         self.app.exec_()
