@@ -191,9 +191,7 @@ class SyncedRawVideoBrowser:
         # When either raw time selector value or raw data browser's view changes,
         # update the video browser
         self.raw_time_selector.sigPositionChanged.connect(
-            lambda selector: self.sync_video_to_raw_time_selector_change(
-                selector.value()
-            )
+            lambda selector: self.handle_time_selector_change(selector.value())
         )
         self.raw_browser.mne.plt.sigXRangeChanged.connect(
             lambda _, xrange: self.sync_video_to_raw_xrange_change(xrange)
@@ -205,11 +203,9 @@ class SyncedRawVideoBrowser:
         # Also updates the raw time selector
         self.sync_video_to_raw_xrange_change(initial_xrange)
 
-    def sync_video_to_raw_time_selector_change(self, raw_time_seconds: float):
-        """Update video browser when raw time selector changes.
-
-        Keeps the raw view unchanged and updates the video browser to show
-        the video frame corresponding to the new raw time selector value.
+    @Slot(float)
+    def handle_time_selector_change(self, raw_time_seconds: float):
+        """Update video browser and default time selector position.
 
         Parameters
         ----------
@@ -225,10 +221,26 @@ class SyncedRawVideoBrowser:
         self._syncing = True
 
         logger.debug("")  # Clear debug log for clarity
-        logger.debug("Detected change in raw time selector, syncing video browser.")
-        logger.debug(f"Raw time selector value: {raw_time_seconds:.3f} seconds")
+        logger.debug(
+            "Detected change in raw time selector, setting new default position "
+            "and syncing video."
+        )
+        self._update_default_time_selector_position(raw_time_seconds)
         self._update_video(raw_time_seconds)
         self._syncing = False
+
+    def _update_default_time_selector_position(self, new_selector_value: float):
+        """Update the default position of the time selector in the raw data browser."""
+        # Update the time selector fraction based on the new raw time selector value
+        xmin, xmax = self.raw_browser.mne.plt.getViewBox().viewRange()[0]
+        window_len = xmax - xmin
+
+        new_selector_fraction = (new_selector_value - xmin) / window_len
+        logger.debug(
+            f"Updating time selector fraction to {new_selector_fraction:.3f} "
+            f"based on raw time selector value {new_selector_value:.3f} seconds."
+        )
+        self.time_selector_fraction = new_selector_fraction
 
     @Slot(tuple)
     def sync_video_to_raw_xrange_change(self, new_raw_xrange: tuple[float, float]):
@@ -323,7 +335,7 @@ class SyncedRawVideoBrowser:
             self.raw_time_selector.setValue(raw_time)
             # And update the raw data browser's view so that the selector
             # remains at the same relative position in the view
-            self.update_raw_view_based_on_raw_time_selector()
+            self._update_raw_view_based_on_raw_time_selector()
             self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
         else:
             # Video frame index is out of bounds of the raw data bounds
@@ -378,7 +390,7 @@ class SyncedRawVideoBrowser:
 
         return selector_pos
 
-    def update_raw_view_based_on_raw_time_selector(self):
+    def _update_raw_view_based_on_raw_time_selector(self):
         """Set raw view based on the raw time selector.
 
         The raw time selector will stay at the same relative position in the view,
