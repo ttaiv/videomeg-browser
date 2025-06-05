@@ -94,7 +94,7 @@ class RawBrowserManager(QObject):
             "seconds at the start of the data."
         )
         self._set_view_time_range(self.raw_min_time, max_time)
-        self.raw_time_selector.setValue(self.raw_min_time)
+        self._update_time_selector_internal(self.raw_min_time)
 
     def jump_to_end(self):
         """Set browser's view and time selector to the end of the data."""
@@ -104,7 +104,7 @@ class RawBrowserManager(QObject):
             "seconds at the end of the data."
         )
         self._set_view_time_range(min_time, self.raw_max_time)
-        self.raw_time_selector.setValue(self.raw_max_time)
+        self._update_time_selector_internal(self.raw_max_time)
 
     def set_selected_time(self, time_seconds: float):
         """Set the raw time selector to a specific time point in seconds.
