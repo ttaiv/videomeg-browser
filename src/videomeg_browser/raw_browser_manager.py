@@ -45,6 +45,10 @@ class RawBrowserManager(QObject):
         self.plt.sigXRangeChanged.connect(
             lambda _, xrange: self._handle_time_range_change(xrange)
         )
+        # Flag to prevent above wiring from triggering changes when time range is
+        # changed programmatically
+        self.programmatic_time_range_change = False
+
         # When user drags the time selector, update the default position
         # of the time selector and emit a signal carrying the new selected time point.
         self.raw_time_selector.sigPositionChanged.connect(
@@ -119,6 +123,8 @@ class RawBrowserManager(QObject):
         """Show the raw data browser."""
         self.browser.show()
 
+    # Slots and helpers for handling user interactions and signals from outside
+
     @Slot()
     def _handle_time_selector_change(self):
         """Update default position and emit signal when user drags time selector."""
@@ -180,6 +186,11 @@ class RawBrowserManager(QObject):
         new_raw_xrange : tuple[float, float]
             The new view range of the raw data browser, given as (xmin, xmax).
         """
+        if self.programmatic_time_range_change:
+            logger.debug(
+                "Ignoring time range change signal due to programmatic update."
+            )
+            return
         logger.debug(
             f"Detected change in raw view range: {new_xrange[0]:.3f} to "
             f"{new_xrange[1]:.3f} seconds. Updating time selector value."
@@ -216,7 +227,7 @@ class RawBrowserManager(QObject):
         # Calculate the new position of the time point selector
         selector_time = min_time + (max_time - min_time) * self.time_selector_fraction
         logger.debug(f"Setting raw time point selector to {selector_time:.3f} seconds.")
-        self.raw_time_selector.setValue(selector_time)
+        self._update_time_selector_internal(selector_time)
 
         return selector_time
 
@@ -243,6 +254,10 @@ class RawBrowserManager(QObject):
         min_time = time_selector_pos - window_len * self.time_selector_fraction
         max_time = time_selector_pos + window_len * (1 - self.time_selector_fraction)
 
+        # Prevent the update from re-updating time selector position and emitting
+        # a signal.
+        self.programmatic_time_range_change = True
+
         if min_time < self.raw_min_time:
             logger.debug(
                 f"Raw view xmin {min_time:.3f} is less than the minimum view time "
@@ -264,3 +279,5 @@ class RawBrowserManager(QObject):
                 f"seconds with range [{min_time:.3f}, {max_time:.3f}] seconds."
             )
             self._set_view_time_range(min_time, max_time)
+
+        self.programmatic_time_range_change = False
