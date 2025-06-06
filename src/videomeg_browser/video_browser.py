@@ -53,7 +53,7 @@ class VideoBrowser(QWidget):
 
     # Emits a signal when the displayed frame changes.
     # The signal carries the index of the new currently displayed frame.
-    frame_changed = Signal(int)
+    sigFrameChanged = Signal(int)
 
     def __init__(
         self,
@@ -165,7 +165,7 @@ class VideoBrowser(QWidget):
         self._update_play_button_enabled()
 
         # Emit signal that the frame has changed
-        self.frame_changed.emit(self.current_frame_idx)
+        self.sigFrameChanged.emit(self.current_frame_idx)
 
         return True
 

@@ -181,7 +181,7 @@ class SyncedRawVideoBrowser:
         # Set up synchronization
 
         # When video browser frame changes, update the raw data browser's view
-        self.video_browser.frame_changed.connect(self.sync_raw_to_video)
+        self.video_browser.sigFrameChanged.connect(self.sync_raw_to_video)
         # When either raw time selector value or raw data browser's view changes,
         # update the video browser
         self.raw_browser_manager.sigSelectedTimeChanged.connect(self.sync_video_to_raw)
