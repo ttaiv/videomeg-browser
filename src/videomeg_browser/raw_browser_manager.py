@@ -1,11 +1,61 @@
 import logging
 
-import mne
 import numpy as np
 import pyqtgraph as pg
+from mne_qt_browser._pg_figure import MNEQtBrowser
 from qtpy.QtCore import QObject, Signal, Slot
 
 logger = logging.getLogger(__name__)
+
+
+class RawBrowserInterface(QObject):
+    """Interface for the MNE Qt raw browser that the manager depends on.
+
+    Provides methods for getting and setting the time range (x-axis) of the raw data
+    browser and for adding an item to the plot. Emits a signal when visible time
+    range of the browser changes.
+
+    NOTE: The correct way to modify view of the raw browser from outside should
+    be considered.
+    """
+
+    sigTimeRangeChanged = Signal(tuple)
+
+    def __init__(self, raw_browser: MNEQtBrowser, parent=None):
+        super().__init__(parent=parent)
+        self.browser = raw_browser
+        self.plt = self.browser.mne.plt
+
+        # Connect the signal for time range changes to emit a custom signal
+        self.plt.sigXRangeChanged.connect(
+            lambda _, xrange: self.sigTimeRangeChanged.emit(xrange)
+        )
+
+    def get_max_time(self) -> float:
+        """Return the maximum time in the raw data browser."""
+        return self.browser.mne.xmax
+
+    def get_view_time_range(self) -> tuple[float, float]:
+        """Return the bounds of currently visible time axis."""
+        return self.plt.getViewBox().viewRange()[0]
+
+    def set_view_time_range(
+        self, min_time_seconds: float, max_time_seconds: float, padding: float = 0
+    ):
+        """Set the bounds for currently visible time axis."""
+        self.plt.setXRange(min_time_seconds, max_time_seconds, padding=padding)
+
+    def get_visible_duration(self) -> float:
+        """Return the duration of the currently visible time range in seconds."""
+        return self.browser.mne.duration
+
+    def add_item_to_plot(self, item):
+        """Add an item to the plot. Calls the addItem method for browser.mne.plt."""
+        self.plt.addItem(item)
+
+    def show(self):
+        """Show the raw data browser."""
+        self.browser.show()
 
 
 class RawBrowserManager(QObject):
@@ -19,17 +69,13 @@ class RawBrowserManager(QObject):
     # Carries the currently selected time in seconds
     sigSelectedTimeChanged = Signal(float)
 
-    def __init__(self, raw: mne.io.Raw):
-        super().__init__()
-        # Instantiate raw data browser
-        self.browser = raw.plot(block=False)
-        # This has methods for getting and setting the view range
-        # and is also used to add the time selector line.
-        self.plt = self.browser.mne.plt
+    def __init__(self, raw_browser: RawBrowserInterface, parent=None):
+        super().__init__(parent=parent)
+        self.browser = raw_browser
 
         # Bounds of the raw data browser's view in seconds
         self.raw_min_time = 0
-        self.raw_max_time = raw.times[-1]  # or self.browser.mne.xmax
+        self.raw_max_time = self.browser.get_max_time()
 
         # Default relative position of the time selector in the raw data
         # browser's view. This will not be obeyed in the boundaries of raw data.
@@ -38,13 +84,12 @@ class RawBrowserManager(QObject):
         self.raw_time_selector = pg.InfiniteLine(
             pos=0, angle=90, movable=True, pen=pg.mkPen("r", width=3)
         )
-        self.plt.addItem(self.raw_time_selector)
+        self.browser.add_item_to_plot(self.raw_time_selector)
 
         # When user modifies the raw browser view, update position of time selector
         # and emit a signal carrying the new selected time point.
-        self.plt.sigXRangeChanged.connect(
-            lambda _, xrange: self._handle_time_range_change(xrange)
-        )
+        self.browser.sigTimeRangeChanged.connect(self._handle_time_range_change)
+
         # Flag to prevent above wiring from triggering changes when time range is
         # changed programmatically
         self.programmatic_time_range_change = False
@@ -56,23 +101,7 @@ class RawBrowserManager(QObject):
         )
 
         # Initialize the time selector position
-        self._handle_time_range_change(self._get_view_time_range())
-
-    # Internal helper methods
-
-    def _get_view_time_range(self) -> tuple[float, float]:
-        """Return the bounds of currently visible time axis."""
-        return self.plt.getViewBox().viewRange()[0]
-
-    def _set_view_time_range(
-        self, min_time_seconds: float, max_time_seconds: float, padding: float = 0
-    ):
-        """Set the bounds for currently visible time axis."""
-        self.plt.setXRange(min_time_seconds, max_time_seconds, padding=padding)
-
-    def _get_visible_duration(self) -> float:
-        """Return the duration of the currently visible time range in seconds."""
-        return self.browser.mne.duration
+        self._handle_time_range_change(raw_browser.get_view_time_range())
 
     def _update_time_selector_internal(self, time_seconds: float):
         """Update the raw time selector value without triggering a signal.
@@ -84,26 +113,24 @@ class RawBrowserManager(QObject):
         self.raw_time_selector.setValue(time_seconds)
         self.raw_time_selector.blockSignals(False)
 
-    # API for managing the view from outside
-
     def jump_to_start(self):
         """Set browser's view and time selector to the beginning of the data."""
-        max_time = self.raw_min_time + self._get_visible_duration()
+        max_time = self.raw_min_time + self.browser.get_visible_duration()
         logger.debug(
             f"Setting raw view to range [{self.raw_min_time:.3f}, {max_time:.3f}] "
             "seconds at the start of the data."
         )
-        self._set_view_time_range(self.raw_min_time, max_time)
+        self.browser.set_view_time_range(self.raw_min_time, max_time)
         self._update_time_selector_internal(self.raw_min_time)
 
     def jump_to_end(self):
         """Set browser's view and time selector to the end of the data."""
-        min_time = self.raw_max_time - self._get_visible_duration()
+        min_time = self.raw_max_time - self.browser.get_visible_duration()
         logger.debug(
             f"Setting raw view to range [{min_time:.3f}, {self.raw_max_time:.3f}] "
             "seconds at the end of the data."
         )
-        self._set_view_time_range(min_time, self.raw_max_time)
+        self.browser.set_view_time_range(min_time, self.raw_max_time)
         self._update_time_selector_internal(self.raw_max_time)
 
     def set_selected_time(self, time_seconds: float):
@@ -122,8 +149,6 @@ class RawBrowserManager(QObject):
     def show_browser(self):
         """Show the raw data browser."""
         self.browser.show()
-
-    # Slots and helpers for handling user interactions and signals from outside
 
     @Slot()
     def _handle_time_selector_change(self):
@@ -156,7 +181,7 @@ class RawBrowserManager(QObject):
             get too close to the edges of the view range.
         """
         # Get the current view range of the raw data browser
-        min_time, max_time = self._get_view_time_range()
+        min_time, max_time = self.browser.get_view_time_range()
         # Clamp the new value to the current view range
         clamped_value = np.clip(new_value, min_time + padding, max_time - padding)
         self.raw_time_selector.setValue(clamped_value)
@@ -164,7 +189,7 @@ class RawBrowserManager(QObject):
     def _update_default_time_selector_position(self, new_selector_value: float):
         """Update the default position of the time selector in the raw data browser."""
         # Update the time selector fraction based on the new raw time selector value
-        min_time, max_time = self._get_view_time_range()
+        min_time, max_time = self.browser.get_view_time_range()
         window_len = max_time - min_time
 
         new_selector_fraction = (new_selector_value - min_time) / window_len
@@ -237,7 +262,7 @@ class RawBrowserManager(QObject):
         The raw time selector will stay at the same relative position in the view,
         expect when the view is at the boundaries of the raw data.
         """
-        window_len = self._get_visible_duration()
+        window_len = self.browser.get_visible_duration()
 
         time_selector_pos = self.raw_time_selector.value()
         if not isinstance(time_selector_pos, float):
@@ -264,7 +289,9 @@ class RawBrowserManager(QObject):
                 f"{self.raw_min_time:.3f}. Setting view to range "
                 f"[{self.raw_min_time:.3f}, {self.raw_min_time + window_len}] seconds."
             )
-            self._set_view_time_range(self.raw_min_time, self.raw_min_time + window_len)
+            self.browser.set_view_time_range(
+                self.raw_min_time, self.raw_min_time + window_len
+            )
         elif max_time > self.raw_max_time:
             logger.debug(
                 f"Raw view xmax {max_time:.3f} is greater than the maximum view time "
@@ -272,12 +299,14 @@ class RawBrowserManager(QObject):
                 f"[{self.raw_max_time - window_len:.3f}, {self.raw_max_time:.3f}] "
                 "seconds."
             )
-            self._set_view_time_range(self.raw_max_time - window_len, self.raw_max_time)
+            self.browser.set_view_time_range(
+                self.raw_max_time - window_len, self.raw_max_time
+            )
         else:
             logger.debug(
                 f"Setting raw view to show video marker at {time_selector_pos:.3f} "
                 f"seconds with range [{min_time:.3f}, {max_time:.3f}] seconds."
             )
-            self._set_view_time_range(min_time, max_time)
+            self.browser.set_view_time_range(min_time, max_time)
 
         self.programmatic_time_range_change = False

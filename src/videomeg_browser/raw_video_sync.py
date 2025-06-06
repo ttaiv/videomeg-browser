@@ -9,7 +9,7 @@ from qtpy import QtWidgets
 from qtpy.QtCore import Qt, Slot
 
 from .comp_tstamps import comp_tstamps
-from .raw_browser_manager import RawBrowserManager
+from .raw_browser_manager import RawBrowserInterface, RawBrowserManager
 from .video import VideoFileHelsinkiVideoMEG
 from .video_browser import SyncStatus, VideoBrowser
 
@@ -162,20 +162,21 @@ class SyncedRawVideoBrowser:
         self.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
         # Instantiate the MNE Qt Browser
-        self.raw_browser_manager = RawBrowserManager(raw)
+        self.raw_browser = raw.plot(block=False)
+        # Wrap it in a interface class that exposes the necessary methods
+        self.raw_browser_interface = RawBrowserInterface(self.raw_browser)
+        # Pass interface for manager that contains actual logic for managing the browser
+        # in sync with the video browser
+        self.raw_browser_manager = RawBrowserManager(self.raw_browser_interface)
 
         # Set up the video browser
         self.video_browser = VideoBrowser(video_file, show_sync_status=True)
 
         # Dock the video browser to the raw data browser with Qt magic
-        self.dock = QtWidgets.QDockWidget(
-            "Video Browser", self.raw_browser_manager.browser
-        )
+        self.dock = QtWidgets.QDockWidget("Video Browser", self.raw_browser)
         self.dock.setWidget(self.video_browser)
         self.dock.setFloating(True)
-        self.raw_browser_manager.browser.addDockWidget(
-            Qt.RightDockWidgetArea, self.dock
-        )
+        self.raw_browser.addDockWidget(Qt.RightDockWidgetArea, self.dock)
         self.dock.resize(1000, 800)  # Set initial size of the video browser
 
         # Set up synchronization
