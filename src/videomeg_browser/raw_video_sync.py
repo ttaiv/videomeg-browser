@@ -4,7 +4,6 @@ from enum import Enum, auto
 
 import mne
 import numpy as np
-import pyqtgraph as pg
 from qtpy import QtWidgets
 from qtpy.QtCore import Qt, Slot
 

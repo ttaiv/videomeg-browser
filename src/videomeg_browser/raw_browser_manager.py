@@ -1,7 +1,6 @@
 import logging
 
 import numpy as np
-import pyqtgraph as pg
 from mne_qt_browser._pg_figure import MNEQtBrowser
 from qtpy.QtCore import QObject, Signal, Slot
 
@@ -74,10 +73,16 @@ class RawBrowserManager(QObject):
     def __init__(self, raw_browser: RawBrowserInterface, parent=None):
         super().__init__(parent=parent)
         self.browser = raw_browser
+        # Padding to apply to user selected time selector values when clamping
+        # them to the current view range of the raw data browser.
+        self.selector_padding = 0.1
 
         # Bounds of the raw data browser's view in seconds
         self.raw_min_time = 0
         self.raw_max_time = self.browser.get_max_time()
+
+        # Flag to prevent obsolete updates when time range is changed programmatically
+        self.programmatic_time_range_change = False
 
         # Default relative position of the time selector in the raw data
         # browser's view. This will not be obeyed in the boundaries of raw data.
@@ -86,16 +91,18 @@ class RawBrowserManager(QObject):
         self.raw_time_selector = RawTimeSelector(parent=self)
         self.browser.add_item_to_plot(self.raw_time_selector.get_selector())
 
-        # When user modifies the raw browser view, update position of time selector
-        # and emit a signal carrying the new selected time point.
+        # The selected time of the raw browser can change in two ways:
+        # 1. When user modifies the raw browser view (e.g., zooms in/out or scrolls)
+        # 2. When user drags the time selector
+        # Connect the signals for both cases to handle them appropriately.
+
+        # User modifies the raw browser view
+        # --> move time selector to keep it in the same relative position
+        # (excluding boundaries)
         self.browser.sigTimeRangeChanged.connect(self._handle_time_range_change)
 
-        # Flag to prevent above wiring from triggering changes when time range is
-        # changed programmatically
-        self.programmatic_time_range_change = False
-
-        # When user drags the time selector, update the default position
-        # of the time selector and emit a signal carrying the new selected time point.
+        # User drags the time selector
+        # --> update the value of it but keep the view unchanged
         self.raw_time_selector.sigSelectedTimeChanged.connect(
             self._handle_time_selector_change
         )
@@ -142,11 +149,11 @@ class RawBrowserManager(QObject):
 
     @Slot()
     def _handle_time_selector_change(self):
-        """Update default position and emit signal when user drags time selector."""
+        """Update the default position and emit signal when user drags time selector."""
         # Clamp the raw time selector to the current view range
         # (for some reason it is possible to drag it outside the view range)
         clamped_time = self._clamp_time_selector_to_current_view(
-            self.raw_time_selector.get_selected_time(), padding=0.1
+            self.raw_time_selector.get_selected_time(), padding=self.selector_padding
         )
         self.raw_time_selector.set_selected_time_no_signal(clamped_time)
         logger.debug(
@@ -154,6 +161,34 @@ class RawBrowserManager(QObject):
         )
         self._update_default_time_selector_position(clamped_time)
         self.sigSelectedTimeChanged.emit(clamped_time)
+
+    @Slot(tuple)
+    def _handle_time_range_change(self, new_xrange: tuple[float, float]):
+        """Update raw time selector value and emit the new value with a signal.
+
+        Updates the raw time selector value so that it remains at the same
+        relative position in the raw data browser's view (excluding boundaries)
+
+        Parameters
+        ----------
+        new_raw_xrange : tuple[float, float]
+            The new view range of the raw data browser, given as (xmin, xmax).
+        """
+        if self.programmatic_time_range_change:
+            logger.debug(
+                "Ignoring time range change signal due to programmatic update."
+            )
+            return
+        logger.debug(
+            f"Detected change in raw view range: {new_xrange[0]:.3f} to "
+            f"{new_xrange[1]:.3f} seconds. Updating time selector value."
+        )
+        raw_time_seconds = self._update_time_selector_based_on_view(new_xrange)
+        logger.debug(
+            f"New raw time selector value set to {raw_time_seconds:.3f} seconds."
+        )
+        logger.debug("Emitting signal for selected time change in raw data browser.")
+        self.sigSelectedTimeChanged.emit(raw_time_seconds)
 
     def _clamp_time_selector_to_current_view(
         self, new_value: float, padding: float
@@ -185,7 +220,7 @@ class RawBrowserManager(QObject):
         return clamped_value
 
     def _update_default_time_selector_position(self, new_selector_value: float):
-        """Update the default position of the time selector in the raw data browser."""
+        """Update the default position of the time selector based on current view."""
         # Update the time selector fraction based on the new raw time selector value
         min_time, max_time = self.browser.get_view_time_range()
         window_len = max_time - min_time
@@ -196,34 +231,6 @@ class RawBrowserManager(QObject):
             f"based on raw time selector value {new_selector_value:.3f} seconds."
         )
         self.time_selector_fraction = new_selector_fraction
-
-    @Slot(tuple)
-    def _handle_time_range_change(self, new_xrange: tuple[float, float]):
-        """Update raw time selector value and emit the new value with a signal.
-
-        Updates the raw time selector value so that it remains at the same
-        relative position in the raw data browser's view (excluding boundaries)
-
-        Parameters
-        ----------
-        new_raw_xrange : tuple[float, float]
-            The new view range of the raw data browser, given as (xmin, xmax).
-        """
-        if self.programmatic_time_range_change:
-            logger.debug(
-                "Ignoring time range change signal due to programmatic update."
-            )
-            return
-        logger.debug(
-            f"Detected change in raw view range: {new_xrange[0]:.3f} to "
-            f"{new_xrange[1]:.3f} seconds. Updating time selector value."
-        )
-        raw_time_seconds = self._update_time_selector_based_on_view(new_xrange)
-        logger.debug(
-            f"New raw time selector value set to {raw_time_seconds:.3f} seconds."
-        )
-        logger.debug("Emitting signal for selected time change in raw data browser.")
-        self.sigSelectedTimeChanged.emit(raw_time_seconds)
 
     def _update_time_selector_based_on_view(
         self, new_raw_time_range: tuple[float, float]

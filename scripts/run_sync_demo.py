@@ -8,7 +8,8 @@ from videomeg_browser.video import VideoFileHelsinkiVideoMEG
 
 logging.basicConfig(
     level=logging.DEBUG,
-    format="[%(levelname)s] %(name)s:%(lineno)d %(message)s",
+    format="[%(asctime)s] [%(levelname)s] %(name)s:%(lineno)d %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 base_path = "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna"
 # Create a video file object
