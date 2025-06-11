@@ -1,6 +1,7 @@
 import logging
+from abc import ABC
 from dataclasses import dataclass
-from enum import Enum, auto
+from enum import Enum
 
 import mne
 import numpy as np
@@ -19,24 +20,29 @@ class MapFailureReason(Enum):
     """Enum telling why mapping from frame index to raw time or vice versa failed."""
 
     # Index to map is smaller than the first frame or raw time point
-    INDEX_TOO_SMALL = auto()
+    INDEX_TOO_SMALL = "index_too_small"
     # Index to map is larger than the last frame or raw time point
-    INDEX_TOO_LARGE = auto()
+    INDEX_TOO_LARGE = "index_too_large"
 
 
-@dataclass
-class MappingResult:
-    """Result of mapping a video frame index to a raw time point or vice versa."""
+class MappingResult(ABC):
+    """Represents the result of mapping raw time to video frame index or vice versa."""
 
-    result: int | None
-    failure_reason: MapFailureReason | None = None
+    pass
 
-    def __post_init__(self) -> None:
-        """Check that mapping yielded either a result or a failure reason."""
-        if (self.result is not None and self.failure_reason is not None) or (
-            self.result is None and self.failure_reason is None
-        ):
-            raise ValueError("Exactly one of 'result' or 'failure_reason' must be set.")
+
+@dataclass(frozen=True)
+class MappingSuccess(MappingResult):
+    """Represents a successful mapping that yielded a raw time or video frame index."""
+
+    result: int
+
+
+@dataclass(frozen=True)
+class MappingFailure(MappingResult):
+    """Represents a failed mapping with a reason for the failure."""
+
+    failure_reason: MapFailureReason
 
 
 class TimeIndexMapper:
@@ -94,20 +100,16 @@ class TimeIndexMapper:
         # timestamps, so we can compare them directly.
 
         if raw_timestamp_ms < self.vid_timestamps_ms[0]:
-            return MappingResult(
-                result=None, failure_reason=MapFailureReason.INDEX_TOO_SMALL
-            )
+            return MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL)
         if raw_timestamp_ms > self.vid_timestamps_ms[-1]:
-            return MappingResult(
-                result=None, failure_reason=MapFailureReason.INDEX_TOO_LARGE
-            )
+            return MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE)
 
         # Find the first video frame index that is greater than
         # or equal to the raw timestamp
         # TODO: Consider what other methods could be used here
         idx = np.searchsorted(self.vid_timestamps_ms, raw_timestamp_ms)
 
-        return MappingResult(result=int(idx), failure_reason=None)
+        return MappingSuccess(result=int(idx))
 
     def video_frame_index_to_raw_time(self, vid_idx: int) -> MappingResult:
         """Convert a video frame index to a raw data time point (in seconds)."""
@@ -122,13 +124,9 @@ class TimeIndexMapper:
         logger.debug(f"Video unix timestamp at index {vid_idx}: {vid_timestamp_ms} ms")
 
         if vid_timestamp_ms < self.raw_timestamps_ms[0]:
-            return MappingResult(
-                result=None, failure_reason=MapFailureReason.INDEX_TOO_SMALL
-            )
+            return MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL)
         if vid_timestamp_ms > self.raw_timestamps_ms[-1]:
-            return MappingResult(
-                result=None, failure_reason=MapFailureReason.INDEX_TOO_LARGE
-            )
+            return MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE)
 
         # Find the first raw timestamp that is greater than
         # or equal to the video timestamp
@@ -139,7 +137,7 @@ class TimeIndexMapper:
         raw_time_seconds = self.raw.times[raw_idx]
         logger.debug(f"Raw time at index {raw_idx}: {raw_time_seconds} seconds")
 
-        return MappingResult(result=raw_time_seconds, failure_reason=None)
+        return MappingSuccess(result=raw_time_seconds)
 
 
 class SyncedRawVideoBrowser:
@@ -221,31 +219,33 @@ class SyncedRawVideoBrowser:
             The raw time point in seconds to which the video browser should be synced.
         """
         mapping = self.time_mapper.raw_time_to_video_frame_index(raw_time_seconds)
-        if mapping.result is not None:
-            # Raw time point has a corresponding video frame index
-            video_idx = mapping.result
-            logger.debug(f"Setting video browser to show frame with index: {video_idx}")
-            self.video_browser.display_frame_at(video_idx)
-            self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
-        else:
-            # Raw time point is out of bounds of the video bounds
-            # Signal video browser that there is no video data for this raw time point
-            # and show the first or last frame of the video
-            self.video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
-            if mapping.failure_reason == MapFailureReason.INDEX_TOO_SMALL:
+
+        match mapping:
+            case MappingSuccess(result=video_idx):
+                # Raw time point has a corresponding video frame index
+                logger.debug(
+                    f"Setting video browser to show frame with index: {video_idx}"
+                )
+                self.video_browser.display_frame_at(video_idx)
+                self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
+
+            case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
+                # Raw time stamp is smaller than the first video frame timestamp
                 logger.debug(
                     "No video data for this small raw time point, showing first frame."
                 )
+                self.video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
                 self.video_browser.display_frame_at(0)
-            elif mapping.failure_reason == MapFailureReason.INDEX_TOO_LARGE:
+
+            case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
+                # Raw time stamp is larger than the last video frame timestamp
                 logger.debug(
                     "No video data for this large raw time point, showing last frame."
                 )
+                self.video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
                 self.video_browser.display_frame_at(self.video_file.frame_count - 1)
-            else:
-                raise ValueError(
-                    f"Unexpected mapping failure reason: {mapping.failure_reason}"
-                )
+            case _:
+                raise ValueError(f"Unexpected mapping result: {mapping}. ")
 
     @Slot(int)
     def sync_raw_to_video(self, video_frame_idx: int) -> None:
@@ -259,32 +259,30 @@ class SyncedRawVideoBrowser:
         logger.debug("")  # Clear debug log for clarity
         logger.debug(f"Syncing raw browser to video frame index: {video_frame_idx}")
         mapping = self.time_mapper.video_frame_index_to_raw_time(video_frame_idx)
-        if mapping.result is not None:
-            # Video frame index has a corresponding raw time point
-            raw_time = mapping.result
-            logger.debug(f"Corresponding raw time in seconds: {raw_time:.3f}")
-            # Set the time selector value based on the video frame
-            self.raw_browser_manager.set_selected_time(raw_time)
-            self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
-        else:
-            # Video frame index is out of bounds of the raw data bounds
-            # Signal video browser that there is no raw data for this frame
-            # and move the raw view either to the start or end of the raw data
-            self.video_browser.set_sync_status(SyncStatus.NO_RAW_DATA)
-            if mapping.failure_reason == MapFailureReason.INDEX_TOO_SMALL:
+
+        match mapping:
+            case MappingSuccess(result=raw_time):
+                # Video frame index has a corresponding raw time point
+                logger.debug(f"Corresponding raw time in seconds: {raw_time:.3f}")
+                self.raw_browser_manager.set_selected_time(raw_time)
+                self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
+
+            case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
+                # Video frame index is smaller than the first raw time point
                 logger.debug(
                     "No raw data for this small video frame, moving raw view to start."
                 )
+                self.video_browser.set_sync_status(SyncStatus.NO_RAW_DATA)
                 self.raw_browser_manager.jump_to_start()
-            elif mapping.failure_reason == MapFailureReason.INDEX_TOO_LARGE:
+
+            case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
                 logger.debug(
                     "No raw data for this large video frame, moving raw view to end."
                 )
+                self.video_browser.set_sync_status(SyncStatus.NO_RAW_DATA)
                 self.raw_browser_manager.jump_to_end()
-            else:
-                raise ValueError(
-                    f"Unexpected mapping failure reason: {mapping.failure_reason}"
-                )
+            case _:
+                raise ValueError(f"Unexpected mapping result: {mapping}. ")
 
         self._syncing = False
 
