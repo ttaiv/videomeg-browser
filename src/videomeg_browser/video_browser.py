@@ -60,7 +60,7 @@ class VideoBrowser(QWidget):
         video: VideoFile,
         show_sync_status: bool = False,
         parent: QWidget | None = None,
-    ):
+    ) -> None:
         super().__init__(parent=parent)
         self.video = video
         self.show_sync_status = show_sync_status
@@ -193,14 +193,14 @@ class VideoBrowser(QWidget):
         """
         return self.display_frame_at(self.current_frame_idx - 1)
 
-    def _update_frame_label(self):
+    def _update_frame_label(self) -> None:
         """Update the frame label to show the current frame number."""
         # Use one-based index for display
         self.frame_label.setText(
             f"Current Frame: {self.current_frame_idx + 1}/{self.video.frame_count}"
         )
 
-    def _update_slider_internal(self):
+    def _update_slider_internal(self) -> None:
         """Update the slider to reflect the current frame index.
 
         This is a helper method to update the slider value without
@@ -211,7 +211,7 @@ class VideoBrowser(QWidget):
         self.frame_slider.blockSignals(False)
 
     @Slot(SyncStatus)
-    def set_sync_status(self, status: SyncStatus):
+    def set_sync_status(self, status: SyncStatus) -> None:
         """Set the sync status label and color."""
         if not self.show_sync_status or self.sync_status_label is None:
             return
@@ -228,7 +228,7 @@ class VideoBrowser(QWidget):
             raise ValueError(f"Unknown sync status: {status}")
 
     @Slot()
-    def play_video(self):
+    def play_video(self) -> None:
         """Play the video frame by frame with its original fps."""
         if self.is_playing:
             logger.debug(
@@ -243,7 +243,7 @@ class VideoBrowser(QWidget):
         self.play_pause_button.setText("Pause")  # Change play button to pause button
 
     @Slot()
-    def pause_video(self):
+    def pause_video(self) -> None:
         """Pause video playing and stop at current frame."""
         if not self.is_playing:
             logger.debug(
@@ -256,7 +256,7 @@ class VideoBrowser(QWidget):
         self.play_pause_button.setText("Play")
 
     @Slot()
-    def toggle_play_pause(self):
+    def toggle_play_pause(self) -> None:
         """Either play or pause the video based on the current state."""
         if self.is_playing:
             self.pause_video()
@@ -264,14 +264,14 @@ class VideoBrowser(QWidget):
             self.play_video()
 
     @Slot()
-    def _play_next_frame(self):
+    def _play_next_frame(self) -> None:
         """Play next frame when play timer timeouts."""
         success = self.display_next_frame()
         if not success:
             # Pause the video if we are in the end
             self.pause_video()
 
-    def _update_play_button_enabled(self):
+    def _update_play_button_enabled(self) -> None:
         """Enable play button unless at the last frame."""
         if self.current_frame_idx >= self.video.frame_count - 1:
             self.play_pause_button.setEnabled(False)

@@ -31,7 +31,7 @@ class MappingResult:
     result: int | None
     failure_reason: MapFailureReason | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Check that mapping yielded either a result or a failure reason."""
         if (self.result is not None and self.failure_reason is not None) or (
             self.result is None and self.failure_reason is None
@@ -48,7 +48,7 @@ class TimeIndexMapper:
 
     def __init__(
         self, raw: mne.io.Raw, raw_timing_ch: str, video: VideoFileHelsinkiVideoMEG
-    ):
+    ) -> None:
         self.raw = raw
         self.vid_timestamps_ms = video.ts
 
@@ -150,7 +150,7 @@ class SyncedRawVideoBrowser:
         raw: mne.io.Raw,
         video_file: VideoFileHelsinkiVideoMEG,
         time_mapper: TimeIndexMapper,
-    ):
+    ) -> None:
         self.raw = raw
         self.video_file = video_file
         self.time_mapper = time_mapper
@@ -193,7 +193,7 @@ class SyncedRawVideoBrowser:
         self.sync_video_to_raw(initial_raw_time)
 
     @Slot(tuple)
-    def sync_video_to_raw(self, raw_time_seconds: float):
+    def sync_video_to_raw(self, raw_time_seconds: float) -> None:
         """Update the displayed video frame when raw view changes."""
         if self._syncing:
             # Prevent infinite recursion
@@ -208,7 +208,7 @@ class SyncedRawVideoBrowser:
         self._update_video(raw_time_seconds)
         self._syncing = False
 
-    def _update_video(self, raw_time_seconds: float):
+    def _update_video(self, raw_time_seconds: float) -> None:
         """Update video browser view based on selected raw time point.
 
         Either shows the video frame that corresponds to the raw time point,
@@ -248,7 +248,7 @@ class SyncedRawVideoBrowser:
                 )
 
     @Slot(int)
-    def sync_raw_to_video(self, video_frame_idx: int):
+    def sync_raw_to_video(self, video_frame_idx: int) -> None:
         """Update raw data browser's view and time selector when video frame changes."""
         if self._syncing:
             # Prevent infinite recursion
@@ -288,7 +288,7 @@ class SyncedRawVideoBrowser:
 
         self._syncing = False
 
-    def show(self):
+    def show(self) -> None:
         """Show the synchronized raw and video browsers."""
         self.raw_browser_manager.show_browser()
         self.app.exec_()
