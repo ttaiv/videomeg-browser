@@ -78,6 +78,11 @@ class TimeIndexMapper:
                 "the number of time points."
             )
 
+        self._validate_timestamps()
+        self._diagnose_timestamps()
+
+    def _validate_timestamps(self) -> None:
+        """Validate that raw and video timestamps are strictly increasing."""
         if not np.all(np.diff(self.raw_timestamps_ms) >= 0):
             raise ValueError(
                 "Raw timestamps are not strictly increasing. "
@@ -89,8 +94,42 @@ class TimeIndexMapper:
                 "This is required for the mapping to work correctly."
             )
 
-        logger.info(f"Number of raw timestamps: {len(self.raw_timestamps_ms)}")
-        logger.info(f"Number of video timestamps: {len(self.vid_timestamps_ms)}")
+    def _diagnose_timestamps(self) -> None:
+        """Log some statistics about the raw and video timestamps."""
+        logger.info(
+            f"Raw timestamps: {self.raw_timestamps_ms[0]} ms to "
+            f"{self.raw_timestamps_ms[-1]} ms, "
+            f"total {len(self.raw_timestamps_ms)} timestamps."
+        )
+        logger.info(
+            f"Video timestamps: {self.vid_timestamps_ms[0]} ms to "
+            f"{self.vid_timestamps_ms[-1]} ms, "
+            f"total {len(self.vid_timestamps_ms)} timestamps."
+        )
+        # Count timestamps that are out of bounds
+        video_too_small_count = np.sum(
+            self.vid_timestamps_ms < self.raw_timestamps_ms[0]
+        )
+        video_too_large_count = np.sum(
+            self.vid_timestamps_ms > self.raw_timestamps_ms[-1]
+        )
+        logger.info(
+            f"Video timestamps smaller than first raw timestamp: {video_too_small_count}"
+        )
+        logger.info(
+            f"Video timestamps larger than last raw timestamp: {video_too_large_count}"
+        )
+        raw_too_small_count = np.sum(self.raw_timestamps_ms < self.vid_timestamps_ms[0])
+        raw_too_large_count = np.sum(
+            self.raw_timestamps_ms > self.vid_timestamps_ms[-1]
+        )
+        logger.info(
+            f"Raw timestamps smaller than first video timestamp: {raw_too_small_count}"
+        )
+        logger.info(
+            f"Raw timestamps larger than last video timestamp: {raw_too_large_count}"
+        )
+
 
     def raw_time_to_video_frame_index(self, raw_time_seconds: float) -> MappingResult:
         """Convert a time point from raw data (in seconds) to video frame index."""
