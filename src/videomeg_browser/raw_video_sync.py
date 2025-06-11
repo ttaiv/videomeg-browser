@@ -78,6 +78,17 @@ class TimeIndexMapper:
                 "the number of time points."
             )
 
+        if not np.all(np.diff(self.raw_timestamps_ms) >= 0):
+            raise ValueError(
+                "Raw timestamps are not strictly increasing. "
+                "This is required for the mapping to work correctly."
+            )
+        if not np.all(np.diff(self.vid_timestamps_ms) >= 0):
+            raise ValueError(
+                "Video timestamps are not strictly increasing. "
+                "This is required for the mapping to work correctly."
+            )
+
         logger.info(f"Number of raw timestamps: {len(self.raw_timestamps_ms)}")
         logger.info(f"Number of video timestamps: {len(self.vid_timestamps_ms)}")
 
