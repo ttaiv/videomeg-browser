@@ -84,8 +84,14 @@ class TimeIndexMapper:
         self._validate_timestamps()
         self._diagnose_timestamps()
 
-        self.raw_idx_to_video_frame: list[MappingResult] = (
-            self._map_raw_times_to_video_frame_indices()
+        self.raw_idx_to_video_frame_idx: list[MappingResult] = self._build_mapping(
+            source_timestamps=self.raw_timestamps_ms,
+            target_timestamps=self.vid_timestamps_ms,
+        )
+
+        self._log_mapping_results(
+            mapping_results=self.raw_idx_to_video_frame_idx,
+            header="Mapping results from raw indices to video frame indices:",
         )
 
     def _validate_timestamps(self) -> None:
@@ -185,70 +191,74 @@ class TimeIndexMapper:
         )
         return closest_indices
 
-    def _map_raw_times_to_video_frame_indices(self) -> list[MappingResult]:
-        """Build a mapping from raw indices to video frame indices.
+    def _build_mapping(
+        self,
+        source_timestamps: NDArray[np.floating],
+        target_timestamps: NDArray[np.floating],
+    ) -> list[MappingResult]:
+        """Build a mapping from raw indices to video frame indices or vice versa.
 
-        Assumes that raw and video timestamp class attributes are already set up.
+        Parameters
+        ----------
+        source_timestamps : NDArray[np.floating]
+            I-D sorted array of source timestamps for which to compute the mapping
+        target_timestamps : NDArray[np.floating]
+            I-D sorted array of target timestamps to which the source timestamps
+            should be mapped
 
         Returns
         -------
         list[MappingResult]
-            A list of mapping results so that the index of each result corresponds to
-            one raw data index
+            List of mapping results, where each result corresponds to a source
+            timestamp. If a source timestamp is out of bounds of the target timestamps,
+            it will be marked as a failure with a reason for the failure.
         """
         # Initialize a list of mapping results with failures
         mapping: list[MappingResult] = [
             MappingFailure(failure_reason=MapFailureReason.NOT_MAPPED)
-        ] * len(self.raw.times)
+        ] * len(source_timestamps)
 
-        # Take the timestamps of all the raw data points.
-        raw_timestamps_ms = self.raw_timestamps_ms
-
-        # Find indices of raw timestamps that are out of bounds of video timestamps.
-        too_small_mask = raw_timestamps_ms < self.vid_timestamps_ms[0]
-        too_small_raw_indices = too_small_mask.nonzero()[0]
-        too_large_mask = raw_timestamps_ms > self.vid_timestamps_ms[-1]
-        too_large_raw_indices = too_large_mask.nonzero()[0]
+        # Find indices of source timestamps that are out of bounds
+        # of the target timestamps.
+        too_small_mask = source_timestamps < target_timestamps[0]
+        too_small_source_indices = too_small_mask.nonzero()[0]
+        too_large_mask = source_timestamps > target_timestamps[-1]
+        too_large_source_indices = too_large_mask.nonzero()[0]
 
         # Add these to the mapping as failures
-        for raw_idx in too_small_raw_indices:
-            mapping[raw_idx] = MappingFailure(
+        for source_idx in too_small_source_indices:
+            mapping[source_idx] = MappingFailure(
                 failure_reason=MapFailureReason.INDEX_TOO_SMALL
             )
-        for raw_idx in too_large_raw_indices:
-            mapping[raw_idx] = MappingFailure(
+        for source_idx in too_large_source_indices:
+            mapping[source_idx] = MappingFailure(
                 failure_reason=MapFailureReason.INDEX_TOO_LARGE
             )
 
-        # Map the rest of raw times to video frame indices.
-        valid_mask = ~(too_small_mask | too_large_mask)
-        valid_raw_indices = valid_mask.nonzero()[0]
-        valid_raw_timestamps_ms = raw_timestamps_ms[valid_mask]
+        # Map the rest of source timestamps to the closest target timestamps.
 
-        closest_video_frame_indices = self._find_indices_with_closest_values(
-            source_times=valid_raw_timestamps_ms, target_times=self.vid_timestamps_ms
+        valid_mask = ~(too_small_mask | too_large_mask)
+        valid_source_timestamps_ms = source_timestamps[valid_mask]
+        valid_source_indices = valid_mask.nonzero()[0]
+
+        closest_target_indices = self._find_indices_with_closest_values(
+            source_times=valid_source_timestamps_ms, target_times=target_timestamps
         )
 
-        for raw_idx, video_frame_idx in zip(
-            valid_raw_indices, closest_video_frame_indices
-        ):
-            mapping[raw_idx] = MappingSuccess(result=video_frame_idx)
+        for source_idx, result_idx in zip(valid_source_indices, closest_target_indices):
+            mapping[source_idx] = MappingSuccess(result=result_idx)
 
         # Make sure that all indices were filled.
         for mapping_result in mapping:
             match mapping_result:
                 case MappingFailure(failure_reason=MapFailureReason.NOT_MAPPED):
                     raise ValueError(
-                        "Not all raw indices were mapped to video frame indices. "
+                        "Not all source indices were mapped to target indices. "
                         "This should not happen."
                     )
                 case _:
                     pass
 
-        self._log_mapping_results(
-            mapping_results=mapping,
-            header="Mapping results from raw indices to video frame indices:",
-        )
         return mapping
 
     def _log_mapping_results(
@@ -289,7 +299,7 @@ class TimeIndexMapper:
         """Convert a time point from raw data (in seconds) to video frame index."""
         # Find the raw index that corresponds to the given time point
         raw_idx = self.raw.time_as_index(raw_time_seconds, use_rounding=True)[0]
-        return self.raw_idx_to_video_frame[raw_idx]
+        return self.raw_idx_to_video_frame_idx[raw_idx]
 
     def video_frame_index_to_raw_time(self, vid_idx: int) -> MappingResult:
         """Convert a video frame index to a raw data time point (in seconds)."""
