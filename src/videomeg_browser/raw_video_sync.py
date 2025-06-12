@@ -149,7 +149,8 @@ class TimeIndexMapper:
             self.video_timestamps_ms > self.raw_timestamps_ms[-1]
         )
         logger.info(
-            f"Video timestamps smaller than first raw timestamp: {video_too_small_count}"
+            "Video timestamps smaller than first raw timestamp: "
+            f"{video_too_small_count}"
         )
         logger.info(
             f"Video timestamps larger than last raw timestamp: {video_too_large_count}"
