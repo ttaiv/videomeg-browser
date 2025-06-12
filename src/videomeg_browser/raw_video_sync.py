@@ -38,7 +38,7 @@ class MappingResult(ABC):
 class MappingSuccess(MappingResult):
     """Represents a successful mapping that yielded a raw time or video frame index."""
 
-    result: int
+    result: int | float
 
 
 @dataclass(frozen=True)
@@ -89,9 +89,19 @@ class TimeIndexMapper:
             target_timestamps=self.vid_timestamps_ms,
         )
 
+        self.video_frame_idx_to_raw_time: list[MappingResult] = self._build_mapping(
+            source_timestamps=self.vid_timestamps_ms,
+            target_timestamps=self.raw_timestamps_ms,
+            convert_raw_results_to_seconds=True,
+        )
+
         self._log_mapping_results(
             mapping_results=self.raw_idx_to_video_frame_idx,
             header="Mapping results from raw indices to video frame indices:",
+        )
+        self._log_mapping_results(
+            mapping_results=self.video_frame_idx_to_raw_time,
+            header="Mapping results from video frame indices to raw times:",
         )
 
     def _validate_timestamps(self) -> None:
@@ -195,6 +205,7 @@ class TimeIndexMapper:
         self,
         source_timestamps: NDArray[np.floating],
         target_timestamps: NDArray[np.floating],
+        convert_raw_results_to_seconds: bool = False,
     ) -> list[MappingResult]:
         """Build a mapping from raw indices to video frame indices or vice versa.
 
@@ -205,6 +216,9 @@ class TimeIndexMapper:
         target_timestamps : NDArray[np.floating]
             I-D sorted array of target timestamps to which the source timestamps
             should be mapped
+        convert_raw_results_to_seconds : bool, optional
+            If true, assume that the mapping is from video frame indices to raw indices,
+            and convert the resulting raw indices to seconds.
 
         Returns
         -------
@@ -244,9 +258,16 @@ class TimeIndexMapper:
         closest_target_indices = self._find_indices_with_closest_values(
             source_times=valid_source_timestamps_ms, target_times=target_timestamps
         )
+        if convert_raw_results_to_seconds:
+            # Convert the raw indices to actual time points in seconds
+            closest_raw_times = self.raw.times[closest_target_indices]
+            mapping_results = closest_raw_times
+        else:
+            # The results are the plain indices of the target timestamps
+            mapping_results = closest_target_indices
 
-        for source_idx, result_idx in zip(valid_source_indices, closest_target_indices):
-            mapping[source_idx] = MappingSuccess(result=result_idx)
+        for source_idx, result in zip(valid_source_indices, mapping_results):
+            mapping[source_idx] = MappingSuccess(result=result)
 
         # Make sure that all indices were filled.
         for mapping_result in mapping:
@@ -297,37 +318,20 @@ class TimeIndexMapper:
 
     def raw_time_to_video_frame_index(self, raw_time_seconds: float) -> MappingResult:
         """Convert a time point from raw data (in seconds) to video frame index."""
-        # Find the raw index that corresponds to the given time point
+        # Find the raw index that corresponds to the given time point.
+        # We cannot use the give time directly, as it may not match exactly with raw
+        # times.
         raw_idx = self.raw.time_as_index(raw_time_seconds, use_rounding=True)[0]
         return self.raw_idx_to_video_frame_idx[raw_idx]
 
-    def video_frame_index_to_raw_time(self, vid_idx: int) -> MappingResult:
+    def video_frame_index_to_raw_time(self, video_frame_idx: int) -> MappingResult:
         """Convert a video frame index to a raw data time point (in seconds)."""
-        if vid_idx < 0 or vid_idx >= len(self.vid_timestamps_ms):
+        if video_frame_idx < 0 or video_frame_idx >= len(self.vid_timestamps_ms):
             raise ValueError(
-                f"Video frame index {vid_idx} is out of bounds. "
+                f"Video frame index {video_frame_idx} is out of bounds. "
                 f"Valid range is 0 to {len(self.vid_timestamps_ms) - 1}."
             )
-
-        # Get unix timestamp of the video frame
-        vid_timestamp_ms = self.vid_timestamps_ms[vid_idx]
-        logger.debug(f"Video unix timestamp at index {vid_idx}: {vid_timestamp_ms} ms")
-
-        if vid_timestamp_ms < self.raw_timestamps_ms[0]:
-            return MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL)
-        if vid_timestamp_ms > self.raw_timestamps_ms[-1]:
-            return MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE)
-
-        # Find the first raw timestamp that is greater than
-        # or equal to the video timestamp
-        # TODO: Consider what other methods could be used here
-        raw_idx = np.searchsorted(self.raw_timestamps_ms, vid_timestamp_ms)
-        logger.debug(f"Raw index for video unix timestamp {vid_idx}: {raw_idx}")
-
-        raw_time_seconds = self.raw.times[raw_idx]
-        logger.debug(f"Raw time at index {raw_idx}: {raw_time_seconds} seconds")
-
-        return MappingSuccess(result=raw_time_seconds)
+        return self.video_frame_idx_to_raw_time[video_frame_idx]
 
 
 class SyncedRawVideoBrowser:
