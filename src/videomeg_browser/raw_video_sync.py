@@ -59,7 +59,7 @@ class TimeIndexMapper:
         self, raw: mne.io.Raw, raw_timing_ch: str, video: VideoFileHelsinkiVideoMEG
     ) -> None:
         self.raw = raw
-        self.vid_timestamps_ms = video.ts
+        self.video_timestamps_ms = video.ts
 
         logger.info("Initializing mapping from raw data time points to video frames.")
         logger.info(
@@ -84,13 +84,25 @@ class TimeIndexMapper:
         self._validate_timestamps()
         self._diagnose_timestamps()
 
+        # Precompute mappings from raw indices to video frame indices
+        # and from video frame indices to raw times.
+
+        # NOTE: Video frame indices can be mapped straight to their corresponding
+        # raw times as they are a dicrete set of values. But raw times are continuous,
+        # so instead of precomputing mapping raw times --> video frame indices, we
+        # precompute mapping raw indices --> video frame indices. And when asked to
+        # convert a raw time to a video frame index, we do
+        # raw time --> raw index --> video frame index.
+
+        logger.info("Building mapping from raw indices to video frame indices.")
         self.raw_idx_to_video_frame_idx: list[MappingResult] = self._build_mapping(
             source_timestamps=self.raw_timestamps_ms,
-            target_timestamps=self.vid_timestamps_ms,
+            target_timestamps=self.video_timestamps_ms,
         )
 
+        logger.info("Building mapping from video frame indices to raw times.")
         self.video_frame_idx_to_raw_time: list[MappingResult] = self._build_mapping(
-            source_timestamps=self.vid_timestamps_ms,
+            source_timestamps=self.video_timestamps_ms,
             target_timestamps=self.raw_timestamps_ms,
             convert_raw_results_to_seconds=True,
         )
@@ -111,7 +123,7 @@ class TimeIndexMapper:
                 "Raw timestamps are not strictly increasing. "
                 "This is required for the mapping to work correctly."
             )
-        if not np.all(np.diff(self.vid_timestamps_ms) >= 0):
+        if not np.all(np.diff(self.video_timestamps_ms) >= 0):
             raise ValueError(
                 "Video timestamps are not strictly increasing. "
                 "This is required for the mapping to work correctly."
@@ -125,16 +137,16 @@ class TimeIndexMapper:
             f"total {len(self.raw_timestamps_ms)} timestamps."
         )
         logger.info(
-            f"Video timestamps: {self.vid_timestamps_ms[0]} ms to "
-            f"{self.vid_timestamps_ms[-1]} ms, "
-            f"total {len(self.vid_timestamps_ms)} timestamps."
+            f"Video timestamps: {self.video_timestamps_ms[0]} ms to "
+            f"{self.video_timestamps_ms[-1]} ms, "
+            f"total {len(self.video_timestamps_ms)} timestamps."
         )
         # Count timestamps that are out of bounds
         video_too_small_count = np.sum(
-            self.vid_timestamps_ms < self.raw_timestamps_ms[0]
+            self.video_timestamps_ms < self.raw_timestamps_ms[0]
         )
         video_too_large_count = np.sum(
-            self.vid_timestamps_ms > self.raw_timestamps_ms[-1]
+            self.video_timestamps_ms > self.raw_timestamps_ms[-1]
         )
         logger.info(
             f"Video timestamps smaller than first raw timestamp: {video_too_small_count}"
@@ -142,9 +154,11 @@ class TimeIndexMapper:
         logger.info(
             f"Video timestamps larger than last raw timestamp: {video_too_large_count}"
         )
-        raw_too_small_count = np.sum(self.raw_timestamps_ms < self.vid_timestamps_ms[0])
+        raw_too_small_count = np.sum(
+            self.raw_timestamps_ms < self.video_timestamps_ms[0]
+        )
         raw_too_large_count = np.sum(
-            self.raw_timestamps_ms > self.vid_timestamps_ms[-1]
+            self.raw_timestamps_ms > self.video_timestamps_ms[-1]
         )
         logger.info(
             f"Raw timestamps smaller than first video timestamp: {raw_too_small_count}"
@@ -326,10 +340,10 @@ class TimeIndexMapper:
 
     def video_frame_index_to_raw_time(self, video_frame_idx: int) -> MappingResult:
         """Convert a video frame index to a raw data time point (in seconds)."""
-        if video_frame_idx < 0 or video_frame_idx >= len(self.vid_timestamps_ms):
+        if video_frame_idx < 0 or video_frame_idx >= len(self.video_timestamps_ms):
             raise ValueError(
                 f"Video frame index {video_frame_idx} is out of bounds. "
-                f"Valid range is 0 to {len(self.vid_timestamps_ms) - 1}."
+                f"Valid range is 0 to {len(self.video_timestamps_ms) - 1}."
             )
         return self.video_frame_idx_to_raw_time[video_frame_idx]
 
