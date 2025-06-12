@@ -186,7 +186,7 @@ class TimeIndexMapper:
         return closest_indices
 
     def _map_raw_times_to_video_frame_indices(self) -> list[MappingResult]:
-        """Build a mapping from raw times to video frame indices.
+        """Build a mapping from raw indices to video frame indices.
 
         Assumes that raw and video timestamp class attributes are already set up.
 
@@ -197,7 +197,7 @@ class TimeIndexMapper:
             one raw data index
         """
         # Initialize a list of mapping results with failures
-        video_frame_indices: list[MappingResult] = [
+        mapping: list[MappingResult] = [
             MappingFailure(failure_reason=MapFailureReason.NOT_MAPPED)
         ] * len(self.raw.times)
 
@@ -212,11 +212,11 @@ class TimeIndexMapper:
 
         # Add these to the mapping as failures
         for raw_idx in too_small_raw_indices:
-            video_frame_indices[raw_idx] = MappingFailure(
+            mapping[raw_idx] = MappingFailure(
                 failure_reason=MapFailureReason.INDEX_TOO_SMALL
             )
         for raw_idx in too_large_raw_indices:
-            video_frame_indices[raw_idx] = MappingFailure(
+            mapping[raw_idx] = MappingFailure(
                 failure_reason=MapFailureReason.INDEX_TOO_LARGE
             )
 
@@ -232,10 +232,10 @@ class TimeIndexMapper:
         for raw_idx, video_frame_idx in zip(
             valid_raw_indices, closest_video_frame_indices
         ):
-            video_frame_indices[raw_idx] = MappingSuccess(result=video_frame_idx)
+            mapping[raw_idx] = MappingSuccess(result=video_frame_idx)
 
         # Make sure that all indices were filled.
-        for mapping_result in video_frame_indices:
+        for mapping_result in mapping:
             match mapping_result:
                 case MappingFailure(failure_reason=MapFailureReason.NOT_MAPPED):
                     raise ValueError(
@@ -244,7 +244,46 @@ class TimeIndexMapper:
                     )
                 case _:
                     pass
-        return video_frame_indices
+
+        self._log_mapping_results(
+            mapping_results=mapping,
+            header="Mapping results from raw indices to video frame indices:",
+        )
+        return mapping
+
+    def _log_mapping_results(
+        self, mapping_results: list[MappingResult], header: str
+    ) -> None:
+        """Log the number of each mapping result for debugging purposes."""
+        result_counts = self._count_mapping_results(mapping_results)
+        logger.debug(f"{header}")
+        for result, count in result_counts.items():
+            logger.debug(f"{result}: {count}")
+
+    def _count_mapping_results(
+        self, mapping_results: list[MappingResult]
+    ) -> dict[str, int]:
+        """Count the number of each mapping results for debugging purposes."""
+        result_counts = {
+            "MappingSuccess": 0,
+            "MappingFailure(INDEX_TOO_SMALL)": 0,
+            "MappingFailure(INDEX_TOO_LARGE)": 0,
+            "MappingFailure(NOT_MAPPED)": 0,
+        }
+        for mapping_result in mapping_results:
+            match mapping_result:
+                case MappingSuccess():
+                    result_counts["MappingSuccess"] += 1
+                case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
+                    result_counts["MappingFailure(INDEX_TOO_SMALL)"] += 1
+                case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
+                    result_counts["MappingFailure(INDEX_TOO_LARGE)"] += 1
+                case MappingFailure(failure_reason=MapFailureReason.NOT_MAPPED):
+                    result_counts["MappingFailure(NOT_MAPPED)"] += 1
+                case _:
+                    raise ValueError(f"Unexpected mapping result: {mapping_result}.")
+
+        return result_counts
 
     def raw_time_to_video_frame_index(self, raw_time_seconds: float) -> MappingResult:
         """Convert a time point from raw data (in seconds) to video frame index."""
