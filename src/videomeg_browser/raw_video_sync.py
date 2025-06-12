@@ -5,6 +5,7 @@ from enum import Enum
 
 import mne
 import numpy as np
+from numpy.typing import NDArray
 from qtpy import QtWidgets
 from qtpy.QtCore import Qt, Slot
 
@@ -81,6 +82,10 @@ class TimeIndexMapper:
         self._validate_timestamps()
         self._diagnose_timestamps()
 
+        self.raw_time_to_video_frame: dict[float, MappingResult] = (
+            self._map_raw_times_to_video_frame_indices()
+        )
+
     def _validate_timestamps(self) -> None:
         """Validate that raw and video timestamps are strictly increasing."""
         if not np.all(np.diff(self.raw_timestamps_ms) >= 0):
@@ -130,36 +135,104 @@ class TimeIndexMapper:
             f"Raw timestamps larger than last video timestamp: {raw_too_large_count}"
         )
 
+    def _find_indices_with_closest_values(
+        self, source_times: NDArray[np.floating], target_times: NDArray[np.floating]
+    ) -> NDArray[np.intp]:
+        """Find indices of the closest target times for each source time.
+
+        Raises ValueError if any source time is out of bounds of the target times.
+
+        Parameters
+        ----------
+        source_times : NDArray[np.floating]
+            I-D sorted array of source times
+        target_times : NDArray[np.floating]
+            I-D sorted array of target times
+
+        Returns
+        -------
+        NDArray[np.intp]
+            I-D array consisting of the indices of the closest target times
+            for each source time.
+        """
+        # Find the indices where each source time would fit in the target array.
+        insert_indices = np.searchsorted(target_times, source_times)
+
+        if any(insert_indices == 0):
+            raise ValueError(
+                "Some source times are smaller than the first target time. "
+                "This is not allowed."
+            )
+        if any(insert_indices >= len(target_times)):
+            raise ValueError(
+                "Some source times are larger than the last target time. "
+                "This is not allowed."
+            )
+
+        # Get the target times around the insert position
+        left_target = target_times[insert_indices - 1]
+        right_target = target_times[insert_indices]
+
+        # Calculate distances to the left and right target times
+        left_distances = np.abs(source_times - left_target)
+        right_distances = np.abs(source_times - right_target)
+
+        # Choose the closest target time
+        closest_indices = np.where(
+            left_distances < right_distances, insert_indices - 1, insert_indices
+        )
+        return closest_indices
+
+    def _map_raw_times_to_video_frame_indices(self) -> dict[float, MappingResult]:
+        """Build a mapping from raw times to video frame indices.
+
+        Assumes that raw and video timestamp class attributes are already set up.
+
+        Returns
+        -------
+        dict[float, MappingResult]
+            A dictionary mapping raw time points (in seconds) to video frame indices.
+        """
+        mapping: dict[float, MappingResult] = {}
+        # Take the timestamps of all the raw data points.
+        raw_timestamps_ms = self.raw_timestamps_ms
+
+        # Find indices of raw timestamps that are out of bounds of video timestamps.
+        too_small_mask = raw_timestamps_ms < self.vid_timestamps_ms[0]
+        too_large_mask = raw_timestamps_ms > self.vid_timestamps_ms[-1]
+
+        # Take the actual raw times that correspond to these indices.
+        # These are in seconds.
+        too_small_raw_times = self.raw.times[too_small_mask]
+        too_large_raw_times = self.raw.times[too_large_mask]
+
+        # Add these to the mapping as failures
+        for raw_time in too_small_raw_times:
+            mapping[raw_time] = MappingFailure(
+                failure_reason=MapFailureReason.INDEX_TOO_SMALL
+            )
+        for raw_time in too_large_raw_times:
+            mapping[raw_time] = MappingFailure(
+                failure_reason=MapFailureReason.INDEX_TOO_LARGE
+            )
+
+        # Map the rest of raw times to video frame indices.
+        valid_mask = ~(too_small_mask | too_large_mask)
+        valid_raw_timestamps_ms = raw_timestamps_ms[valid_mask]
+        valid_raw_times = self.raw.times[valid_mask]
+
+        video_frame_indices = self._find_indices_with_closest_values(
+            source_times=valid_raw_timestamps_ms, target_times=self.vid_timestamps_ms
+        )
+
+        for raw_time, video_frame_idx in zip(valid_raw_times, video_frame_indices):
+            mapping[raw_time] = MappingSuccess(result=int(video_frame_idx))
+
+        return mapping
 
     def raw_time_to_video_frame_index(self, raw_time_seconds: float) -> MappingResult:
         """Convert a time point from raw data (in seconds) to video frame index."""
-        raw_idx = self.raw.time_as_index(raw_time_seconds, use_rounding=False)
-        if len(raw_idx) > 1:
-            raise ValueError(
-                "Multiple indices found for raw timestamp "
-                f"{raw_time_seconds}: {raw_idx}. This should not happen."
-            )
-        raw_idx = raw_idx[0]
-        logger.debug(f"Raw index for time {raw_time_seconds}: {raw_idx}")
-
-        # Convert raw index to unix timestamp in milliseconds
-        raw_timestamp_ms = self.raw_timestamps_ms[raw_idx]
-        logger.debug(f"Raw unix timestamp at index {raw_idx}: {raw_timestamp_ms} ms")
-
-        # Now we have temporal location of the raw data point in same units as video
-        # timestamps, so we can compare them directly.
-
-        if raw_timestamp_ms < self.vid_timestamps_ms[0]:
-            return MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL)
-        if raw_timestamp_ms > self.vid_timestamps_ms[-1]:
-            return MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE)
-
-        # Find the first video frame index that is greater than
-        # or equal to the raw timestamp
-        # TODO: Consider what other methods could be used here
-        idx = np.searchsorted(self.vid_timestamps_ms, raw_timestamp_ms)
-
-        return MappingSuccess(result=int(idx))
+        return self.raw_time_to_video_frame[raw_time_seconds]
 
     def video_frame_index_to_raw_time(self, vid_idx: int) -> MappingResult:
         """Convert a video frame index to a raw data time point (in seconds)."""
