@@ -243,8 +243,9 @@ class TimeIndexMapper:
         """
         # Initialize a list of mapping results with failures
         mapping: list[MappingResult] = [
-            MappingFailure(failure_reason=MapFailureReason.NOT_MAPPED)
-        ] * len(source_timestamps)
+            MappingFailure(MapFailureReason.NOT_MAPPED)
+            for _ in range(len(source_timestamps))
+        ]
 
         # Find indices of source timestamps that are out of bounds
         # of the target timestamps.
