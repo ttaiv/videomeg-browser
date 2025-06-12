@@ -333,18 +333,13 @@ class TimeIndexMapper:
     def raw_time_to_video_frame_index(self, raw_time_seconds: float) -> MappingResult:
         """Convert a time point from raw data (in seconds) to video frame index."""
         # Find the raw index that corresponds to the given time point.
-        # We cannot use the give time directly, as it may not match exactly with raw
+        # We cannot use the given time directly, as it may not match exactly with raw
         # times.
         raw_idx = self.raw.time_as_index(raw_time_seconds, use_rounding=True)[0]
         return self.raw_idx_to_video_frame_idx[raw_idx]
 
     def video_frame_index_to_raw_time(self, video_frame_idx: int) -> MappingResult:
         """Convert a video frame index to a raw data time point (in seconds)."""
-        if video_frame_idx < 0 or video_frame_idx >= len(self.video_timestamps_ms):
-            raise ValueError(
-                f"Video frame index {video_frame_idx} is out of bounds. "
-                f"Valid range is 0 to {len(self.video_timestamps_ms) - 1}."
-            )
         return self.video_frame_idx_to_raw_time[video_frame_idx]
 
 
