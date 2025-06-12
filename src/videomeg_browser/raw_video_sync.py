@@ -24,6 +24,8 @@ class MapFailureReason(Enum):
     INDEX_TOO_SMALL = "index_too_small"
     # Index to map is larger than the last frame or raw time point
     INDEX_TOO_LARGE = "index_too_large"
+    # A value that can be used as a placeholder before mapping is done
+    NOT_MAPPED = "not_mapped"
 
 
 class MappingResult(ABC):
@@ -82,7 +84,7 @@ class TimeIndexMapper:
         self._validate_timestamps()
         self._diagnose_timestamps()
 
-        self.raw_time_to_video_frame: dict[float, MappingResult] = (
+        self.raw_idx_to_video_frame: list[MappingResult] = (
             self._map_raw_times_to_video_frame_indices()
         )
 
@@ -183,56 +185,72 @@ class TimeIndexMapper:
         )
         return closest_indices
 
-    def _map_raw_times_to_video_frame_indices(self) -> dict[float, MappingResult]:
+    def _map_raw_times_to_video_frame_indices(self) -> list[MappingResult]:
         """Build a mapping from raw times to video frame indices.
 
         Assumes that raw and video timestamp class attributes are already set up.
 
         Returns
         -------
-        dict[float, MappingResult]
-            A dictionary mapping raw time points (in seconds) to video frame indices.
+        list[MappingResult]
+            A list of mapping results so that the index of each result corresponds to
+            one raw data index
         """
-        mapping: dict[float, MappingResult] = {}
+        # Initialize a list of mapping results with failures
+        video_frame_indices: list[MappingResult] = [
+            MappingFailure(failure_reason=MapFailureReason.NOT_MAPPED)
+        ] * len(self.raw.times)
+
         # Take the timestamps of all the raw data points.
         raw_timestamps_ms = self.raw_timestamps_ms
 
         # Find indices of raw timestamps that are out of bounds of video timestamps.
         too_small_mask = raw_timestamps_ms < self.vid_timestamps_ms[0]
+        too_small_raw_indices = too_small_mask.nonzero()[0]
         too_large_mask = raw_timestamps_ms > self.vid_timestamps_ms[-1]
-
-        # Take the actual raw times that correspond to these indices.
-        # These are in seconds.
-        too_small_raw_times = self.raw.times[too_small_mask]
-        too_large_raw_times = self.raw.times[too_large_mask]
+        too_large_raw_indices = too_large_mask.nonzero()[0]
 
         # Add these to the mapping as failures
-        for raw_time in too_small_raw_times:
-            mapping[raw_time] = MappingFailure(
+        for raw_idx in too_small_raw_indices:
+            video_frame_indices[raw_idx] = MappingFailure(
                 failure_reason=MapFailureReason.INDEX_TOO_SMALL
             )
-        for raw_time in too_large_raw_times:
-            mapping[raw_time] = MappingFailure(
+        for raw_idx in too_large_raw_indices:
+            video_frame_indices[raw_idx] = MappingFailure(
                 failure_reason=MapFailureReason.INDEX_TOO_LARGE
             )
 
         # Map the rest of raw times to video frame indices.
         valid_mask = ~(too_small_mask | too_large_mask)
+        valid_raw_indices = valid_mask.nonzero()[0]
         valid_raw_timestamps_ms = raw_timestamps_ms[valid_mask]
-        valid_raw_times = self.raw.times[valid_mask]
 
-        video_frame_indices = self._find_indices_with_closest_values(
+        closest_video_frame_indices = self._find_indices_with_closest_values(
             source_times=valid_raw_timestamps_ms, target_times=self.vid_timestamps_ms
         )
 
-        for raw_time, video_frame_idx in zip(valid_raw_times, video_frame_indices):
-            mapping[raw_time] = MappingSuccess(result=int(video_frame_idx))
+        for raw_idx, video_frame_idx in zip(
+            valid_raw_indices, closest_video_frame_indices
+        ):
+            video_frame_indices[raw_idx] = MappingSuccess(result=video_frame_idx)
 
-        return mapping
+        # Make sure that all indices were filled.
+        for mapping_result in video_frame_indices:
+            match mapping_result:
+                case MappingFailure(failure_reason=MapFailureReason.NOT_MAPPED):
+                    raise ValueError(
+                        "Not all raw indices were mapped to video frame indices. "
+                        "This should not happen."
+                    )
+                case _:
+                    pass
+        return video_frame_indices
 
     def raw_time_to_video_frame_index(self, raw_time_seconds: float) -> MappingResult:
         """Convert a time point from raw data (in seconds) to video frame index."""
-        return self.raw_time_to_video_frame[raw_time_seconds]
+        # Find the raw index that corresponds to the given time point
+        raw_idx = self.raw.time_as_index(raw_time_seconds, use_rounding=True)[0]
+        return self.raw_idx_to_video_frame[raw_idx]
 
     def video_frame_index_to_raw_time(self, vid_idx: int) -> MappingResult:
         """Convert a video frame index to a raw data time point (in seconds)."""
