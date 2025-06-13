@@ -1,5 +1,6 @@
 import logging
 from abc import ABC
+from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 
@@ -289,9 +290,8 @@ class TimeIndexMapper:
         for mapping_result in mapping:
             match mapping_result:
                 case MappingFailure(failure_reason=MapFailureReason.NOT_MAPPED):
-                    raise ValueError(
-                        "Not all source indices were mapped to target indices. "
-                        "This should not happen."
+                    raise AssertionError(
+                        "Not all source indices were mapped to target indices."
                     )
                 case _:
                     pass
@@ -309,28 +309,21 @@ class TimeIndexMapper:
 
     def _count_mapping_results(
         self, mapping_results: list[MappingResult]
-    ) -> dict[str, int]:
+    ) -> Counter[str]:
         """Count the number of each mapping results for debugging purposes."""
-        result_counts = {
-            "MappingSuccess": 0,
-            "MappingFailure(INDEX_TOO_SMALL)": 0,
-            "MappingFailure(INDEX_TOO_LARGE)": 0,
-            "MappingFailure(NOT_MAPPED)": 0,
-        }
+        counts = Counter()
+
         for mapping_result in mapping_results:
             match mapping_result:
                 case MappingSuccess():
-                    result_counts["MappingSuccess"] += 1
-                case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
-                    result_counts["MappingFailure(INDEX_TOO_SMALL)"] += 1
-                case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
-                    result_counts["MappingFailure(INDEX_TOO_LARGE)"] += 1
-                case MappingFailure(failure_reason=MapFailureReason.NOT_MAPPED):
-                    result_counts["MappingFailure(NOT_MAPPED)"] += 1
+                    key = "MappingSuccess"
+                case MappingFailure(failure_reason=reason):
+                    key = f"MappingFailure({reason.name})"
                 case _:
-                    raise ValueError(f"Unexpected mapping result: {mapping_result}.")
+                    raise ValueError(f"Unexpected mapping result: {mapping_result}")
+            counts[key] += 1
 
-        return result_counts
+        return counts
 
     def raw_time_to_video_frame_index(self, raw_time_seconds: float) -> MappingResult:
         """Convert a time point from raw data (in seconds) to video frame index."""
