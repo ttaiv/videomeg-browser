@@ -67,10 +67,10 @@ class TimeIndexMapper:
         raw_times: NDArray[np.floating],
         raw_time_to_index: Callable[[float], int],
     ) -> None:
-        self.raw_timestamps_ms = raw_timestamps
-        self.video_timestamps_ms = video_timestamps
-        self.raw_times = raw_times
-        self.raw_time_to_index = raw_time_to_index
+        self._raw_timestamps_ms = raw_timestamps
+        self._video_timestamps_ms = video_timestamps
+        self._raw_times = raw_times
+        self._raw_time_to_index = raw_time_to_index
 
         self._validate_timestamps()
         self._diagnose_timestamps()
@@ -86,35 +86,35 @@ class TimeIndexMapper:
         # raw time --> raw index --> video frame index.
 
         logger.info("Building mapping from raw indices to video frame indices.")
-        self.raw_idx_to_video_frame_idx: list[MappingResult] = self._build_mapping(
-            source_timestamps=self.raw_timestamps_ms,
-            target_timestamps=self.video_timestamps_ms,
+        self._raw_idx_to_video_frame_idx: list[MappingResult] = self._build_mapping(
+            source_timestamps=self._raw_timestamps_ms,
+            target_timestamps=self._video_timestamps_ms,
         )
 
         logger.info("Building mapping from video frame indices to raw times.")
-        self.video_frame_idx_to_raw_time: list[MappingResult] = self._build_mapping(
-            source_timestamps=self.video_timestamps_ms,
-            target_timestamps=self.raw_timestamps_ms,
+        self._video_frame_idx_to_raw_time: list[MappingResult] = self._build_mapping(
+            source_timestamps=self._video_timestamps_ms,
+            target_timestamps=self._raw_timestamps_ms,
             convert_raw_results_to_seconds=True,
         )
 
         self._log_mapping_results(
-            mapping_results=self.raw_idx_to_video_frame_idx,
+            mapping_results=self._raw_idx_to_video_frame_idx,
             header="Mapping results from raw indices to video frame indices:",
         )
         self._log_mapping_results(
-            mapping_results=self.video_frame_idx_to_raw_time,
+            mapping_results=self._video_frame_idx_to_raw_time,
             header="Mapping results from video frame indices to raw times:",
         )
 
     def _validate_timestamps(self) -> None:
         """Validate that raw and video timestamps are strictly increasing."""
-        if not np.all(np.diff(self.raw_timestamps_ms) >= 0):
+        if not np.all(np.diff(self._raw_timestamps_ms) >= 0):
             raise ValueError(
                 "Raw timestamps are not strictly increasing. "
                 "This is required for the mapping to work correctly."
             )
-        if not np.all(np.diff(self.video_timestamps_ms) >= 0):
+        if not np.all(np.diff(self._video_timestamps_ms) >= 0):
             raise ValueError(
                 "Video timestamps are not strictly increasing. "
                 "This is required for the mapping to work correctly."
@@ -123,21 +123,21 @@ class TimeIndexMapper:
     def _diagnose_timestamps(self) -> None:
         """Log some statistics about the raw and video timestamps."""
         logger.info(
-            f"Raw timestamps: {self.raw_timestamps_ms[0]} ms to "
-            f"{self.raw_timestamps_ms[-1]} ms, "
-            f"total {len(self.raw_timestamps_ms)} timestamps."
+            f"Raw timestamps: {self._raw_timestamps_ms[0]} ms to "
+            f"{self._raw_timestamps_ms[-1]} ms, "
+            f"total {len(self._raw_timestamps_ms)} timestamps."
         )
         logger.info(
-            f"Video timestamps: {self.video_timestamps_ms[0]} ms to "
-            f"{self.video_timestamps_ms[-1]} ms, "
-            f"total {len(self.video_timestamps_ms)} timestamps."
+            f"Video timestamps: {self._video_timestamps_ms[0]} ms to "
+            f"{self._video_timestamps_ms[-1]} ms, "
+            f"total {len(self._video_timestamps_ms)} timestamps."
         )
         # Count timestamps that are out of bounds
         video_too_small_count = np.sum(
-            self.video_timestamps_ms < self.raw_timestamps_ms[0]
+            self._video_timestamps_ms < self._raw_timestamps_ms[0]
         )
         video_too_large_count = np.sum(
-            self.video_timestamps_ms > self.raw_timestamps_ms[-1]
+            self._video_timestamps_ms > self._raw_timestamps_ms[-1]
         )
         logger.info(
             "Video timestamps smaller than first raw timestamp: "
@@ -147,10 +147,10 @@ class TimeIndexMapper:
             f"Video timestamps larger than last raw timestamp: {video_too_large_count}"
         )
         raw_too_small_count = np.sum(
-            self.raw_timestamps_ms < self.video_timestamps_ms[0]
+            self._raw_timestamps_ms < self._video_timestamps_ms[0]
         )
         raw_too_large_count = np.sum(
-            self.raw_timestamps_ms > self.video_timestamps_ms[-1]
+            self._raw_timestamps_ms > self._video_timestamps_ms[-1]
         )
         logger.info(
             f"Raw timestamps smaller than first video timestamp: {raw_too_small_count}"
@@ -256,7 +256,7 @@ class TimeIndexMapper:
         )
         if convert_raw_results_to_seconds:
             # Convert the raw indices to actual time points in seconds
-            closest_raw_times = self.raw_times[closest_target_indices]
+            closest_raw_times = self._raw_times[closest_target_indices]
             mapping_results = closest_raw_times
         else:
             # The results are the plain indices of the target timestamps
@@ -309,9 +309,9 @@ class TimeIndexMapper:
         # Find the raw index that corresponds to the given time point.
         # We cannot use the given time directly, as it may not match exactly with raw
         # times.
-        raw_idx = self.raw_time_to_index(raw_time_seconds)
-        return self.raw_idx_to_video_frame_idx[raw_idx]
+        raw_idx = self._raw_time_to_index(raw_time_seconds)
+        return self._raw_idx_to_video_frame_idx[raw_idx]
 
     def video_frame_index_to_raw_time(self, video_frame_idx: int) -> MappingResult:
         """Convert a video frame index to a raw data time point (in seconds)."""
-        return self.video_frame_idx_to_raw_time[video_frame_idx]
+        return self._video_frame_idx_to_raw_time[video_frame_idx]
