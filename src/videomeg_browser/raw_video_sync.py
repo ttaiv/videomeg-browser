@@ -1,6 +1,7 @@
 import logging
 from abc import ABC
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 
@@ -10,7 +11,6 @@ from numpy.typing import NDArray
 from qtpy import QtWidgets
 from qtpy.QtCore import Qt, Slot
 
-from .comp_tstamps import comp_tstamps
 from .raw_browser_manager import RawBrowserInterface, RawBrowserManager
 from .video import VideoFileHelsinkiVideoMEG
 from .video_browser import SyncStatus, VideoBrowser
@@ -52,35 +52,32 @@ class MappingFailure(MappingResult):
 class TimeIndexMapper:
     """Maps time points from raw data to video frames and vice versa.
 
-    Currently, this is tailored for the Helsinki Video MEG data format,
-    but this could be extended to other formats as well.
+    Parameters
+    ----------
+    raw_timestamps : NDArray[np.floating]
+        1-D sorted array of raw timestamps used for synchronization.
+    video_timestamps : NDArray[np.floating]
+        1-D sorted array of video timestamps used for synchronization.
+    raw_times : NDArray[np.floating]
+        1-D array of raw data times in seconds, used for converting raw indices
+        to actual time points.
+    raw_time_to_index : Callable[[float], int]
+        A function that converts a raw time point in seconds to the corresponding
+        index in the raw data. Required for converting arbitrary raw time
+        to a discrete index in the raw data.
     """
 
     def __init__(
-        self, raw: mne.io.Raw, raw_timing_ch: str, video: VideoFileHelsinkiVideoMEG
+        self,
+        raw_timestamps: NDArray[np.floating],
+        video_timestamps: NDArray[np.floating],
+        raw_times: NDArray[np.floating],
+        raw_time_to_index: Callable[[float], int],
     ) -> None:
-        self.raw = raw
-        self.video_timestamps_ms = video.ts
-
-        logger.info("Initializing mapping from raw data time points to video frames.")
-        logger.info(
-            f"Using timing channel '{raw_timing_ch}' for timestamp computation."
-        )
-
-        timing_data = raw.get_data(picks=raw_timing_ch, return_times=False)
-        # Remove the channel dimension
-        # Ignoring warning about timing_data possibly being tuple,
-        # as we do not ask times from raw.get_data
-        timing_data = timing_data.squeeze()  # type: ignore
-        logger.debug(f"Timing channel data shape: {timing_data.shape}, ")
-
-        self.raw_timestamps_ms = comp_tstamps(timing_data, raw.info["sfreq"])
-
-        if len(self.raw_timestamps_ms) != len(raw.times):
-            raise ValueError(
-                "The number of timestamps in the raw data does not match "
-                "the number of time points."
-            )
+        self.raw_timestamps_ms = raw_timestamps
+        self.video_timestamps_ms = video_timestamps
+        self.raw_times = raw_times
+        self.raw_time_to_index = raw_time_to_index
 
         self._validate_timestamps()
         self._diagnose_timestamps()
@@ -277,7 +274,7 @@ class TimeIndexMapper:
         )
         if convert_raw_results_to_seconds:
             # Convert the raw indices to actual time points in seconds
-            closest_raw_times = self.raw.times[closest_target_indices]
+            closest_raw_times = self.raw_times[closest_target_indices]
             mapping_results = closest_raw_times
         else:
             # The results are the plain indices of the target timestamps
@@ -330,7 +327,7 @@ class TimeIndexMapper:
         # Find the raw index that corresponds to the given time point.
         # We cannot use the given time directly, as it may not match exactly with raw
         # times.
-        raw_idx = self.raw.time_as_index(raw_time_seconds, use_rounding=True)[0]
+        raw_idx = self.raw_time_to_index(raw_time_seconds)
         return self.raw_idx_to_video_frame_idx[raw_idx]
 
     def video_frame_index_to_raw_time(self, video_frame_idx: int) -> MappingResult:
