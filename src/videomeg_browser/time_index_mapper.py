@@ -164,8 +164,6 @@ class TimeIndexMapper:
     ) -> NDArray[np.intp]:
         """Find indices of the closest target times for each source time.
 
-        Raises ValueError if any source time is out of bounds of the target times.
-
         Parameters
         ----------
         source_times : NDArray[np.floating]
@@ -181,17 +179,8 @@ class TimeIndexMapper:
         """
         # Find the indices where each source time would fit in the target array.
         insert_indices = np.searchsorted(target_times, source_times)
-
-        if any(insert_indices == 0):
-            raise ValueError(
-                "Some source times are smaller than the first target time. "
-                "This is not allowed."
-            )
-        if any(insert_indices >= len(target_times)):
-            raise ValueError(
-                "Some source times are larger than the last target time. "
-                "This is not allowed."
-            )
+        # Ensure that the indices are within bounds
+        insert_indices = np.clip(insert_indices, 1, len(target_times) - 1)
 
         # Get the target times around the insert position
         left_target = target_times[insert_indices - 1]
