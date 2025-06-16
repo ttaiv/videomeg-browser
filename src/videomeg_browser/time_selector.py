@@ -47,13 +47,6 @@ class RawTimeSelector(QObject):
             raise TypeError(f"Expected selected time to be float, got {type(time)}")
         return time
 
-    def set_selected_time(self, time_seconds: float) -> None:
-        """Set the position of the selector in seconds.
-
-        This will emit 'sigSelectedTimeChanged' signal to notify about the change.
-        """
-        self._selector.setValue(time_seconds)
-
     def set_selected_time_no_signal(self, time_seconds: float) -> None:
         """Set the position of the selector in seconds WITHOUT emitting a signal."""
         self.suppress_change_signal = True
