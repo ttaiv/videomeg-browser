@@ -144,21 +144,15 @@ class VideoBrowser(QWidget):
         bool
             True if the frame was displayed, False if the index is out of bounds.
         """
-        if frame_idx < 0 or frame_idx >= self.video.frame_count:
-            logger.debug(
-                f"Skipping updating to frame {frame_idx}, index is out of bounds "
-                f"(0 to {self.video.frame_count - 1})."
+        frame = self.video.get_frame_at(frame_idx)
+        if frame is None:
+            logger.info(
+                f"Could not retrieve frame at index {frame_idx}. "
+                "Skipping updating the frame."
             )
             return False
 
         self.current_frame_idx = frame_idx
-        frame = self.video.get_frame_at(frame_idx)
-        if frame is None:
-            raise ValueError(
-                f"Could not retrieve frame at index {frame_idx} event even though the "
-                f"index is within bounds (0 to {self.video.frame_count - 1})."
-            )
-
         self.im_view.setImage(frame)
         self._update_frame_label()
         self._update_slider_internal()
@@ -231,7 +225,7 @@ class VideoBrowser(QWidget):
     def play_video(self) -> None:
         """Play the video frame by frame with its original fps."""
         if self.is_playing:
-            logger.debug(
+            logger.warning(
                 "Received signal to play video even though video should be "
                 "already playing. Skipping action."
             )
@@ -246,7 +240,7 @@ class VideoBrowser(QWidget):
     def pause_video(self) -> None:
         """Pause video playing and stop at current frame."""
         if not self.is_playing:
-            logger.debug(
+            logger.warning(
                 "Received signal to pause video even though video should not "
                 "be playing. Skipping action."
             )
