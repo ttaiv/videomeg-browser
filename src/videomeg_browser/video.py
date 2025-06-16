@@ -1,3 +1,5 @@
+"""Contains VideoFile interface and its implementations for reading video files."""
+
 import logging
 import struct
 from abc import ABC, abstractmethod
@@ -14,7 +16,11 @@ class VideoFile(ABC):
 
     @abstractmethod
     def get_frame_at(self, frame_idx: int) -> MatLike | None:
-        """Read a specific frame from the video file."""
+        """Read a specific frame from the video file.
+
+        The color format of the returned frame is RGB and the frame is in row-major
+        order.
+        """
         pass
 
     @abstractmethod

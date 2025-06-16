@@ -1,3 +1,5 @@
+"""Contains the main class for synchronizing MNE raw data browser and video browser."""
+
 import logging
 
 import mne

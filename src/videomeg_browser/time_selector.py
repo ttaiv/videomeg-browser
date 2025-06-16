@@ -1,3 +1,5 @@
+"""Contains a class for a movable line that allows selecting time points in raw data."""
+
 import logging
 
 import pyqtgraph as pg

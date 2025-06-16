@@ -1,3 +1,5 @@
+"""Contains VideoBrowser Qt widget for displaying video."""
+
 try:
     from qtpy.QtCore import Qt
 except Exception as exc:
