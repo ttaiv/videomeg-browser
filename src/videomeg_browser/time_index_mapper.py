@@ -4,6 +4,7 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
+from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -49,8 +50,10 @@ class TimeIndexMapper:
     ----------
     raw_timestamps : NDArray[np.floating]
         1-D sorted array of raw timestamps used for synchronization.
+        In Helsinki VideoMEG project these are unix times in milliseconds.
     video_timestamps : NDArray[np.floating]
         1-D sorted array of video timestamps used for synchronization.
+        In Helsinki VideoMEG project these are unix times in milliseconds.
     raw_times : NDArray[np.floating]
         1-D array of raw data times in seconds, used for converting raw indices
         to actual time points.
@@ -66,11 +69,13 @@ class TimeIndexMapper:
         video_timestamps: NDArray[np.floating],
         raw_times: NDArray[np.floating],
         raw_time_to_index: Callable[[float], int],
+        timestamp_unit: Literal["milliseconds", "seconds"] = "milliseconds",
     ) -> None:
-        self._raw_timestamps_ms = raw_timestamps
-        self._video_timestamps_ms = video_timestamps
+        self._raw_timestamps = raw_timestamps
+        self._video_timestamps = video_timestamps
         self._raw_times = raw_times
         self._raw_time_to_index = raw_time_to_index
+        self._timestamp_unit = timestamp_unit
 
         self._validate_timestamps()
         self._diagnose_timestamps()
@@ -87,14 +92,14 @@ class TimeIndexMapper:
 
         logger.info("Building mapping from raw indices to video frame indices.")
         self._raw_idx_to_video_frame_idx: list[MappingResult] = self._build_mapping(
-            source_timestamps=self._raw_timestamps_ms,
-            target_timestamps=self._video_timestamps_ms,
+            source_timestamps=self._raw_timestamps,
+            target_timestamps=self._video_timestamps,
         )
 
         logger.info("Building mapping from video frame indices to raw times.")
         self._video_frame_idx_to_raw_time: list[MappingResult] = self._build_mapping(
-            source_timestamps=self._video_timestamps_ms,
-            target_timestamps=self._raw_timestamps_ms,
+            source_timestamps=self._video_timestamps,
+            target_timestamps=self._raw_timestamps,
             convert_raw_results_to_seconds=True,
         )
 
@@ -109,12 +114,12 @@ class TimeIndexMapper:
 
     def _validate_timestamps(self) -> None:
         """Validate that raw and video timestamps are strictly increasing."""
-        if not np.all(np.diff(self._raw_timestamps_ms) >= 0):
+        if not np.all(np.diff(self._raw_timestamps) >= 0):
             raise ValueError(
                 "Raw timestamps are not strictly increasing. "
                 "This is required for the mapping to work correctly."
             )
-        if not np.all(np.diff(self._video_timestamps_ms) >= 0):
+        if not np.all(np.diff(self._video_timestamps) >= 0):
             raise ValueError(
                 "Video timestamps are not strictly increasing. "
                 "This is required for the mapping to work correctly."
@@ -122,42 +127,78 @@ class TimeIndexMapper:
 
     def _diagnose_timestamps(self) -> None:
         """Log some statistics about the raw and video timestamps."""
+        raw_timestamps = self._get_timestamps_in_seconds(self._raw_timestamps)
+        video_timestamps = self._get_timestamps_in_seconds(self._video_timestamps)
+
         logger.info(
-            f"Raw timestamps: {self._raw_timestamps_ms[0]} ms to "
-            f"{self._raw_timestamps_ms[-1]} ms, "
-            f"total {len(self._raw_timestamps_ms)} timestamps."
+            f"Raw timestamps: {raw_timestamps[0]:.1f} s to "
+            f"{raw_timestamps[-1]:.1f} s, "
+            f"total {len(raw_timestamps)} timestamps."
         )
         logger.info(
-            f"Video timestamps: {self._video_timestamps_ms[0]} ms to "
-            f"{self._video_timestamps_ms[-1]} ms, "
-            f"total {len(self._video_timestamps_ms)} timestamps."
+            f"Video timestamps: {video_timestamps[0]:.1f} s to "
+            f"{video_timestamps[-1]:.1f} s, "
+            f"total {len(video_timestamps)} timestamps."
         )
         # Count timestamps that are out of bounds
-        video_too_small_count = np.sum(
-            self._video_timestamps_ms < self._raw_timestamps_ms[0]
-        )
+        video_too_small_count = np.sum(self._video_timestamps < self._raw_timestamps[0])
         video_too_large_count = np.sum(
-            self._video_timestamps_ms > self._raw_timestamps_ms[-1]
+            self._video_timestamps > self._raw_timestamps[-1]
         )
         logger.info(
-            "Video timestamps smaller than first raw timestamp: "
-            f"{video_too_small_count}"
+            "Video timestamps smaller/larger than first raw timestamp: "
+            f"{video_too_small_count}/{video_too_large_count}"
         )
+        raw_too_small_count = np.sum(self._raw_timestamps < self._video_timestamps[0])
+        raw_too_large_count = np.sum(self._raw_timestamps > self._video_timestamps[-1])
         logger.info(
-            f"Video timestamps larger than last raw timestamp: {video_too_large_count}"
+            "Raw timestamps smaller/larger than first video timestamp: "
+            f"{raw_too_small_count}/{raw_too_large_count}"
         )
-        raw_too_small_count = np.sum(
-            self._raw_timestamps_ms < self._video_timestamps_ms[0]
-        )
-        raw_too_large_count = np.sum(
-            self._raw_timestamps_ms > self._video_timestamps_ms[-1]
-        )
+        first_timestamp_diff = raw_timestamps[0] - video_timestamps[0]
         logger.info(
-            f"Raw timestamps smaller than first video timestamp: {raw_too_small_count}"
+            "Difference between first raw and video timestamps: "
+            f"{first_timestamp_diff:.3f} s"
         )
+        if first_timestamp_diff > 1:
+            logger.warning(
+                "The raw data timestamps start over a second later than the video "
+                "timestamps."
+            )
+        elif first_timestamp_diff < -1:
+            logger.warning(
+                "Video timestamps start over a second later than the raw data "
+                "timestamps."
+            )
+        last_timestamp_diff = raw_timestamps[-1] - video_timestamps[-1]
         logger.info(
-            f"Raw timestamps larger than last video timestamp: {raw_too_large_count}"
+            "Difference between last raw and video timestamps: "
+            f"{last_timestamp_diff:.3f} s"
         )
+        if last_timestamp_diff > 1:
+            logger.warning(
+                "The video timestamps end over a second earlier than the raw data "
+                "timestamps."
+            )
+        elif last_timestamp_diff < -1:
+            logger.warning(
+                "Raw data timestamps end over a second earlier than the video "
+                "timestamps."
+            )
+
+    def _get_timestamps_in_seconds(
+        self, timestamps: NDArray[np.floating]
+    ) -> NDArray[np.floating]:
+        """Convert timestamps to seconds if they are in milliseconds."""
+        if self._timestamp_unit == "milliseconds":
+            return timestamps / 1000.0
+        elif self._timestamp_unit == "seconds":
+            return timestamps
+        else:
+            raise ValueError(
+                f"Unknown timestamp unit: {self._timestamp_unit}. "
+                "Expected 'milliseconds' or 'seconds'."
+            )
 
     def _find_indices_with_closest_values(
         self, source_times: NDArray[np.floating], target_times: NDArray[np.floating]
