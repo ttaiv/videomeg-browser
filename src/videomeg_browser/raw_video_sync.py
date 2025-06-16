@@ -13,7 +13,7 @@ from .time_index_mapper import (
     MappingSuccess,
     TimeIndexMapper,
 )
-from .video import VideoFileHelsinkiVideoMEG
+from .video import VideoFile
 from .video_browser import SyncStatus, VideoBrowser
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ class SyncedRawVideoBrowser:
     def __init__(
         self,
         raw: mne.io.Raw,
-        video_file: VideoFileHelsinkiVideoMEG,
+        video_file: VideoFile,
         time_mapper: TimeIndexMapper,
     ) -> None:
         self.raw = raw
