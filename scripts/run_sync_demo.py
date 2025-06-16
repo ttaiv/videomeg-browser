@@ -6,7 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from videomeg_browser.comp_tstamps import comp_tstamps
-from videomeg_browser.raw_video_sync import SyncedRawVideoBrowser
+from videomeg_browser.synced_raw_video_browser import SyncedRawVideoBrowser
 from videomeg_browser.time_index_mapper import TimeIndexMapper
 from videomeg_browser.video import VideoFileHelsinkiVideoMEG
 
