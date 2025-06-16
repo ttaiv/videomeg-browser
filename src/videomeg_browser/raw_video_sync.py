@@ -137,6 +137,22 @@ class SyncedRawVideoBrowser:
 
         logger.debug("")  # Clear debug log for clarity
         logger.debug(f"Syncing raw browser to video frame index: {video_frame_idx}")
+
+        self._update_raw(video_frame_idx)
+        self._syncing = False
+
+    def _update_raw(self, video_frame_idx: int) -> None:
+        """Update raw browser view based on selected video frame index.
+
+        If the video frame index is out of bounds of the raw data, moves the raw view
+        to the start or end of the raw data.
+
+        Parameters
+        ----------
+        video_frame_idx : int
+            The video frame index to which the raw browser should be synced.
+
+        """
         mapping = self.time_mapper.video_frame_index_to_raw_time(video_frame_idx)
 
         match mapping:
@@ -162,8 +178,6 @@ class SyncedRawVideoBrowser:
                 self.raw_browser_manager.jump_to_end()
             case _:
                 raise ValueError(f"Unexpected mapping result: {mapping}. ")
-
-        self._syncing = False
 
     def show(self) -> None:
         """Show the synchronized raw and video browsers."""
