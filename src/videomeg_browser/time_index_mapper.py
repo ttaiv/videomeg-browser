@@ -1,3 +1,5 @@
+"""Contains a class for mapping between time points of raw data and video frames."""
+
 import logging
 from abc import ABC
 from collections import Counter

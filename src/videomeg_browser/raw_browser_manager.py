@@ -1,3 +1,5 @@
+"""Contains a class for managing the MNE Qt raw data browser in sync with video data."""
+
 import logging
 
 import numpy as np
@@ -65,17 +67,36 @@ class RawBrowserManager(QObject):
     Provides methods for manipulating the view and adds a 'time selector'
     (vertical line) that marks the time point used for syncing with video.
     Emits signal when the selected time is changed.
+
+    Parameters
+    ----------
+    raw_browser : RawBrowserInterface
+        The raw browser to manage wrapped in RawBrowserInterface.
+    selector_padding : float, optional
+        Padding (in seconds) to apply when clamping the time selector to the
+        current view range of the raw data browser, by default 0.1
+    default_selector_position : float, optional
+        The default relative position of the time selector in the raw data
+        browser's view, given as a fraction between 0 and 1, by default 0.5
+    parent : QObject, optional
+        The parent QObject for this manager, by default None
     """
 
     # Carries the currently selected time in seconds
     sigSelectedTimeChanged = Signal(float)
 
-    def __init__(self, raw_browser: RawBrowserInterface, parent=None) -> None:
+    def __init__(
+        self,
+        raw_browser: RawBrowserInterface,
+        selector_padding=0.1,
+        default_selector_position=0.5,
+        parent: QObject | None = None,
+    ) -> None:
         super().__init__(parent=parent)
         self.browser = raw_browser
-        # Padding to apply to user selected time selector values when clamping
-        # them to the current view range of the raw data browser.
-        self.selector_padding = 0.1
+        self.selector_padding = selector_padding
+        # User can modify this by dragging the time selector.
+        self.time_selector_fraction = default_selector_position
 
         # Bounds of the raw data browser's view in seconds
         self.raw_min_time = 0
@@ -84,10 +105,6 @@ class RawBrowserManager(QObject):
         # Flag to prevent obsolete updates when time range is changed programmatically
         self.programmatic_time_range_change = False
 
-        # Default relative position of the time selector in the raw data
-        # browser's view. This will not be obeyed in the boundaries of raw data.
-        # User can modify this by dragging the time selector.
-        self.time_selector_fraction = 0.5
         self.raw_time_selector = RawTimeSelector(parent=self)
         self.browser.add_item_to_plot(self.raw_time_selector.get_selector())
 
