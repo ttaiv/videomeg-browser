@@ -202,6 +202,18 @@ class TimeIndexMapper:
                 "Expected 'milliseconds' or 'seconds'."
             )
 
+    def _get_timestamp_unit_symbol(self) -> str:
+        """Get the symbol for the timestamp unit."""
+        if self._timestamp_unit == "milliseconds":
+            return "ms"
+        elif self._timestamp_unit == "seconds":
+            return "s"
+        else:
+            raise ValueError(
+                f"Unknown timestamp unit: {self._timestamp_unit}. "
+                "Expected 'milliseconds' or 'seconds'."
+            )
+
     def _find_indices_with_closest_values(
         self, source_times: NDArray[np.floating], target_times: NDArray[np.floating]
     ) -> NDArray[np.intp]:
@@ -237,7 +249,29 @@ class TimeIndexMapper:
         closest_indices = np.where(
             left_distances < right_distances, insert_indices - 1, insert_indices
         )
+
+        # Calculate the error between source times and their closest target times
+        errors = np.abs(source_times - target_times[closest_indices])
+        self._log_mapping_errors(errors)
+
         return closest_indices
+
+    def _log_mapping_errors(self, errors: NDArray[np.floating]) -> None:
+        """Log statistics about the distances between source and target timestamps."""
+        unit_symbol = self._get_timestamp_unit_symbol()
+        logger.info(
+            "Statistics for mapping error (distances between source timestamps "
+            "and their closest target timestamps):"
+        )
+        logger.info(
+            f"min={np.min(errors):.3f} {unit_symbol}, "
+            f"max={np.max(errors):.3f} {unit_symbol}, mean={np.mean(errors):.3f} "
+            f"{unit_symbol}, std={np.std(errors):.3f} {unit_symbol}"
+        )
+        if np.any(errors < 0):
+            logger.warning("Some distances between timestamps are negative.")
+        if np.any(np.isnan(errors)):
+            logger.warning("Some distances between timestamps are NaN.")
 
     def _build_mapping(
         self,
