@@ -59,3 +59,4 @@ if __name__ == "__main__":
 
     browser = SyncedRawVideoBrowser(raw, video_file, time_mapper)
     browser.show()
+    video_file.close()
