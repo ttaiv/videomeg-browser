@@ -4,9 +4,9 @@ import logging
 import struct
 from abc import ABC, abstractmethod
 
-import cv2
+import imageio.v3 as iio
 import numpy as np
-from cv2.typing import MatLike
+import numpy.typing as npt
 
 logger = logging.getLogger(__name__)
 
@@ -15,11 +15,19 @@ class VideoFile(ABC):
     """Container that holds a video file and provides method to read frames from it."""
 
     @abstractmethod
-    def get_frame_at(self, frame_idx: int) -> MatLike | None:
+    def get_frame_at(self, frame_idx: int) -> npt.NDArray[np.uint8] | None:
         """Read a specific frame from the video file.
 
-        The color format of the returned frame is RGB and the frame is in row-major
-        order.
+        Parameters
+        ----------
+        frame_idx : int
+            Index of the frame to read.
+
+        Returns
+        -------
+        npt.NDArray[np.uint8] | None
+            The frame as a NumPy array of shape (height, width, 3) or None if the frame
+            cannot be read. The color format is RGB and the frame is in row-major order.
         """
         pass
 
@@ -73,6 +81,12 @@ class VideoFile(ABC):
         pass
 
 
+# Implementation of VideoFile using OpenCV (cv2).
+# Commented out to avoid dependency on OpenCV.
+
+'''
+import cv2
+from cv2.typing import MatLike
 class VideoFileCV2(VideoFile):
     """Container that holds a video file and provides methods to read frames from it."""
 
@@ -166,7 +180,7 @@ class VideoFileCV2(VideoFile):
 
         # Calculate the timestamp in milliseconds
         return (frame_idx / self.fps) * 1000.0
-
+'''
 
 # --- Code below is adapted from PyVideoMEG project ---
 
@@ -314,7 +328,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         """Exit the runtime context and close the video file."""
         self.close()
 
-    def get_frame_at(self, frame_idx: int) -> MatLike | None:
+    def get_frame_at(self, frame_idx: int) -> npt.NDArray[np.uint8] | None:
         """Read a specific frame from the video file."""
         if self._file.closed:
             raise ValueError("Trying to read from a closed video file.")
@@ -325,11 +339,8 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         offset, sz = self._frame_ptrs[frame_idx]
         self._file.seek(offset)
         frame_bytes = self._file.read(sz)
-        frame_arr = np.frombuffer(frame_bytes, dtype=np.uint8)
-        frame = cv2.imdecode(frame_arr, cv2.IMREAD_COLOR)
 
-        # Convert the frame from BGR to RGB format
-        return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        return iio.imread(frame_bytes)
 
     def frame_idx_to_ms(self, frame_idx: int) -> float:
         """Convert frame index to milliseconds since the start of the video."""
