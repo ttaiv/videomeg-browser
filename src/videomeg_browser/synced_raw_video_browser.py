@@ -4,7 +4,7 @@ import logging
 
 import mne
 from qtpy import QtWidgets
-from qtpy.QtCore import QObject, Qt, Slot
+from qtpy.QtCore import QElapsedTimer, QObject, Qt, QTimer, Signal, Slot
 
 from .raw_browser_manager import RawBrowserInterface, RawBrowserManager
 from .time_index_mapper import (
@@ -20,7 +20,24 @@ logger = logging.getLogger(__name__)
 
 
 class SyncedRawVideoBrowser(QObject):
-    """Instantiates MNE raw data browser and video browser, and synchronizes them."""
+    """Instantiates MNE raw data browser and video browser, and synchronizes them.
+
+    Parameters
+    ----------
+    raw : mne.io.Raw
+        The MNE raw data object to be displayed in the raw data browser.
+    video_file : VideoFile
+        The video file object to be displayed in the video browser.
+    time_mapper : TimeIndexMapper
+        Mapper that provides the mapping between raw data time points and video
+        frame indices.
+    show : bool, optional
+        Whether to show the raw data browser immediately upon instantiation,
+        by default True.
+    raw_update_max_fps : int, optional
+        The maximum frames per second for updating the raw data browser view,
+        by default 10. This has effect on the performance of the browser.
+    """
 
     def __init__(
         self,
@@ -28,6 +45,7 @@ class SyncedRawVideoBrowser(QObject):
         video_file: VideoFile,
         time_mapper: TimeIndexMapper,
         show: bool = True,
+        raw_update_max_fps: int = 10,
     ) -> None:
         super().__init__()
         self.raw = raw
@@ -35,6 +53,13 @@ class SyncedRawVideoBrowser(QObject):
         self.time_mapper = time_mapper
         # Flag to prevent infinite recursion during synchronization
         self._syncing = False
+
+        # Maximum frames per second for updating the raw data browser
+        self.raw_update_max_fps = raw_update_max_fps
+        self.min_raw_update_interval_ms = int(1000 / self.raw_update_max_fps)
+        self.raw_update_throttler = BufferedThrottler(
+            self.min_raw_update_interval_ms, parent=self
+        )
 
         # Instantiate the MNE Qt Browser
         self.raw_browser = raw.plot(block=False, show=show)
@@ -58,8 +83,12 @@ class SyncedRawVideoBrowser(QObject):
 
         # Set up synchronization
 
-        # When video browser frame changes, update the raw data browser's view
-        self.video_browser.sigFrameChanged.connect(self.sync_raw_to_video)
+        # When video browser frame changes, update the raw data browser's view.
+        # Connect the signal through a throttler to limit the update rate
+        # of the raw data browser to `raw_update_max_fps`.
+        self.video_browser.sigFrameChanged.connect(self.raw_update_throttler.trigger)
+        self.raw_update_throttler.triggered.connect(self.sync_raw_to_video)
+
         # When either raw time selector value or raw data browser's view changes,
         # update the video browser
         self.raw_browser_manager.sigSelectedTimeChanged.connect(self.sync_video_to_raw)
@@ -184,3 +213,62 @@ class SyncedRawVideoBrowser(QObject):
         """Show the synchronized raw and video browsers."""
         self.raw_browser_manager.show_browser()
         self.dock.show()
+
+
+class BufferedThrottler(QObject):
+    """Emits the most recent payload no more than once every `interval_ms`.
+
+    If enough time has passed since last emit, emits the received payload immediately.
+    Otherwise schedules the received payload to be emitted after the required time has
+    passed.
+
+    Parameters
+    ----------
+    interval_ms : int
+        The minimum interval in milliseconds between emits.
+    parent : QObject, optional
+        The parent QObject for this throttler, by default None.
+    """
+
+    triggered = Signal(int)
+
+    def __init__(self, interval_ms: int, parent=None) -> None:
+        super().__init__(parent)
+
+        self._emit_interval_ms = interval_ms
+        self._latest_payload = None  # holds the next value to emit
+
+        # Start a timer to count milliseconds since last emit.
+        self._elapsed_timer = QElapsedTimer()
+        self._elapsed_timer.start()
+
+        # Initialize another timer to schedule emits to happen later.
+        self._delayed_emit_timer = QTimer(parent=self)
+        self._delayed_emit_timer.setSingleShot(True)
+        self._delayed_emit_timer.timeout.connect(self._emit_now)
+
+    @Slot(int)
+    def trigger(self, payload: int) -> None:
+        """Trigger the throttler with a new payload."""
+        self._latest_payload = payload
+
+        elapsed_time_ms = self._elapsed_timer.elapsed()
+        remaining_time_ms = self._emit_interval_ms - elapsed_time_ms
+
+        if remaining_time_ms <= 0:
+            # Enough time has passed since last emit.
+            self._emit_now()
+        else:
+            # Triggered too soon. Start delayed emit timer if its not already running.
+            if not self._delayed_emit_timer.isActive():
+                self._delayed_emit_timer.start(remaining_time_ms)
+
+    @Slot()
+    def _emit_now(self):
+        # Start counting time since last emit again from zero.
+        self._elapsed_timer.restart()
+        # Make sure that no delayed emits will happen before new trigger.
+        self._delayed_emit_timer.stop()
+        # Fire!
+        logger.debug(f"Emitting latest payload: {self._latest_payload}")
+        self.triggered.emit(self._latest_payload)
