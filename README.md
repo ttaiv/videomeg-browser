@@ -1,5 +1,8 @@
 # Video browser extension for MNE Python's qt raw data browser
 
+**Work in progress.** This project is based on [Helsinki VideoMEG project](https://github.com/Helsinki-VideoMEG-Project)
+and currently works with video files recorded using software from that project.
+
 ## Installation for development
 
 This project does not have any dependencies outside of MNE Python. However, to
