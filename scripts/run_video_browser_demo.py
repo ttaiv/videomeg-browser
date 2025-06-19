@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from videomeg_browser.video import VideoFileCV2, VideoFileHelsinkiVideoMEG
+from videomeg_browser.video import VideoFileHelsinkiVideoMEG
 from videomeg_browser.video_browser import VideoBrowser
 
 try:
@@ -22,15 +22,11 @@ logging.basicConfig(
 )
 app = QApplication([])
 
-video_videomeg = VideoFileHelsinkiVideoMEG(
+video = VideoFileHelsinkiVideoMEG(
     "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/Video_MEG/animal_meg_subject_2_240614.video.dat"
 )
-# To demonstrate compatibility with other video formats
-video_exported = VideoFileCV2(
-    "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/export_video/animal_meg_subject_2_240614.avi"
-)
 
-window = VideoBrowser(video_videomeg)
+window = VideoBrowser(video)
 window.resize(1000, 800)
 window.show()
 sys.exit(app.exec_())
