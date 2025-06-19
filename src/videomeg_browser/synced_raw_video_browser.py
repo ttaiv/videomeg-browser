@@ -27,18 +27,17 @@ class SyncedRawVideoBrowser(QObject):
         raw: mne.io.Raw,
         video_file: VideoFile,
         time_mapper: TimeIndexMapper,
+        show: bool = True,
     ) -> None:
+        super().__init__()
         self.raw = raw
         self.video_file = video_file
         self.time_mapper = time_mapper
         # Flag to prevent infinite recursion during synchronization
         self._syncing = False
 
-        # Set up Qt application
-        self.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-
         # Instantiate the MNE Qt Browser
-        self.raw_browser = raw.plot(block=False)
+        self.raw_browser = raw.plot(block=False, show=show)
         # Wrap it in a interface class that exposes the necessary methods
         self.raw_browser_interface = RawBrowserInterface(self.raw_browser)
         # Pass interface for manager that contains actual logic for managing the browser
@@ -54,6 +53,8 @@ class SyncedRawVideoBrowser(QObject):
         self.dock.setFloating(True)
         self.raw_browser.addDockWidget(Qt.RightDockWidgetArea, self.dock)
         self.dock.resize(1000, 800)  # Set initial size of the video browser
+        if not show:
+            self.dock.hide()
 
         # Set up synchronization
 
@@ -182,4 +183,4 @@ class SyncedRawVideoBrowser(QObject):
     def show(self) -> None:
         """Show the synchronized raw and video browsers."""
         self.raw_browser_manager.show_browser()
-        self.app.exec_()
+        self.dock.show()

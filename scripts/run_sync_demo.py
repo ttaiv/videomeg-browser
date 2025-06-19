@@ -4,6 +4,7 @@ import os.path as op
 import mne
 import numpy as np
 from numpy.typing import NDArray
+from qtpy.QtWidgets import QApplication
 
 from videomeg_browser.comp_tstamps import comp_tstamps
 from videomeg_browser.synced_raw_video_browser import SyncedRawVideoBrowser
@@ -57,6 +58,9 @@ if __name__ == "__main__":
         raw_time_to_index=raw_time_to_index,
     )
 
-    browser = SyncedRawVideoBrowser(raw, video_file, time_mapper)
-    browser.show()
+    app = QApplication([])
+
+    browser = SyncedRawVideoBrowser(raw, video_file, time_mapper, show=True)
+
+    app.exec_()  # Start the Qt event loop
     video_file.close()
