@@ -4,7 +4,7 @@ import logging
 
 import mne
 from qtpy import QtWidgets
-from qtpy.QtCore import Qt, Slot
+from qtpy.QtCore import QObject, Qt, Slot
 
 from .raw_browser_manager import RawBrowserInterface, RawBrowserManager
 from .time_index_mapper import (
@@ -19,7 +19,7 @@ from .video_browser import SyncStatus, VideoBrowser
 logger = logging.getLogger(__name__)
 
 
-class SyncedRawVideoBrowser:
+class SyncedRawVideoBrowser(QObject):
     """Instantiates MNE raw data browser and video browser, and synchronizes them."""
 
     def __init__(
@@ -69,7 +69,7 @@ class SyncedRawVideoBrowser:
         # Also updates the raw time selector
         self.sync_video_to_raw(initial_raw_time)
 
-    @Slot(tuple)
+    @Slot(float)
     def sync_video_to_raw(self, raw_time_seconds: float) -> None:
         """Update the displayed video frame when raw view changes."""
         if self._syncing:
