@@ -1,7 +1,7 @@
 [project]
 name = "videomeg-browser"
 version = "0.1.0"
-description = "Browse video data recorded with video-MEG system"
+description = "Browse video in sync with MEG/EEG data"
 readme = "README.md"
 authors = [
     { name = "Teemu Taivainen", email = "teemu.taivainen@hotmail.fi" }
