@@ -6,7 +6,7 @@ and currently works with video files recorded using software from that project.
 ## Installation for development
 
 This project does not have any dependencies outside of MNE Python. However, to
-avoid interferene with your stable MNE Python installation, it is recommended to
+avoid interference with your stable MNE Python installation, it is recommended to
 install in a separate environment. Here's how to achieve this with `conda`:
 
 1. Create a new conda environment (named `mne-videomeg`) with MNE Python installed:
