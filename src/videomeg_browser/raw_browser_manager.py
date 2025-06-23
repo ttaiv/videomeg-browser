@@ -24,7 +24,9 @@ class RawBrowserInterface(QObject):
 
     sigTimeRangeChanged = Signal(tuple)
 
-    def __init__(self, raw_browser: MNEQtBrowser, parent=None) -> None:
+    def __init__(
+        self, raw_browser: MNEQtBrowser, parent: QObject | None = None
+    ) -> None:
         super().__init__(parent=parent)
         self.browser = raw_browser
         self.plt = self.browser.mne.plt

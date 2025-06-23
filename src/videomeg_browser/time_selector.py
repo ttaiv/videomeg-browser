@@ -20,7 +20,7 @@ class RawTimeSelector(QObject):
 
     def __init__(
         self,
-        parent=None,
+        parent: QObject | None = None,
     ) -> None:
         super().__init__(parent=parent)
 

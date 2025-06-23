@@ -48,8 +48,9 @@ class SyncedRawVideoBrowser(QObject):
         time_mapper: TimeIndexMapper,
         show: bool = True,
         raw_update_max_fps: int = 10,
+        parent: QObject | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(parent=parent)
         self.video_file = video_file
         self.time_mapper = time_mapper
         # Flag to prevent infinite recursion during synchronization
@@ -57,15 +58,16 @@ class SyncedRawVideoBrowser(QObject):
 
         self.raw_update_max_fps = raw_update_max_fps
         self.min_raw_update_interval_ms = int(1000 / self.raw_update_max_fps)
+        # Create a throttler that limits the update rate of the raw browser
         self.raw_update_throttler = BufferedThrottler(
             self.min_raw_update_interval_ms, parent=self
         )
 
         # Wrap the raw browser to a class that exposes the necessary methods.
-        raw_browser_interface = RawBrowserInterface(raw_browser)
+        raw_browser_interface = RawBrowserInterface(raw_browser, parent=self)
         # Pass interface for manager that contains actual logic for managing the browser
         # in sync with the video browser.
-        self.raw_browser_manager = RawBrowserManager(raw_browser_interface)
+        self.raw_browser_manager = RawBrowserManager(raw_browser_interface, parent=self)
         # Make sure that raw browse visibility matches the `show` parameter.
         if show:
             self.raw_browser_manager.show_browser()
@@ -73,7 +75,9 @@ class SyncedRawVideoBrowser(QObject):
             self.raw_browser_manager.hide_browser()
 
         # Set up the video browser.
-        self.video_browser = VideoBrowser(video_file, show_sync_status=True)
+        self.video_browser = VideoBrowser(
+            video_file, show_sync_status=True, parent=None
+        )
 
         # Dock the video browser to the raw data browser with Qt magic
         self.dock = QtWidgets.QDockWidget("Video Browser", raw_browser)
@@ -235,8 +239,8 @@ class BufferedThrottler(QObject):
 
     triggered = Signal(int)
 
-    def __init__(self, interval_ms: int, parent=None) -> None:
-        super().__init__(parent)
+    def __init__(self, interval_ms: int, parent: QObject | None = None) -> None:
+        super().__init__(parent=parent)
 
         self._emit_interval_ms = interval_ms
         self._latest_payload = None  # holds the next value to emit
