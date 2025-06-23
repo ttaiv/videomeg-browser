@@ -60,7 +60,10 @@ if __name__ == "__main__":
 
     app = QApplication([])
 
-    browser = SyncedRawVideoBrowser(raw, video_file, time_mapper, show=True)
+    # Instantiate raw browser
+    raw_browser = raw.plot(block=False, show=False)
+
+    browser = SyncedRawVideoBrowser(raw_browser, video_file, time_mapper)
 
     app.exec_()  # Start the Qt event loop
     video_file.close()

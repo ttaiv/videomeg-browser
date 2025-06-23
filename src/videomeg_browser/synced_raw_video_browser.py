@@ -2,7 +2,7 @@
 
 import logging
 
-import mne
+from mne_qt_browser.figure import MNEQtBrowser
 from qtpy import QtWidgets
 from qtpy.QtCore import QElapsedTimer, QObject, Qt, QTimer, Signal, Slot
 
@@ -24,8 +24,10 @@ class SyncedRawVideoBrowser(QObject):
 
     Parameters
     ----------
-    raw : mne.io.Raw
-        The MNE raw data object to be displayed in the raw data browser.
+    raw_browser : mne_qt_browser.figure.MNEQtBrowser
+        The MNE raw data browser object to be synchronized with the video browser.
+        This can be created with 'plot' method of MNE raw data object when using qt
+        backend.
     video_file : VideoFile
         The video file object to be displayed in the video browser.
     time_mapper : TimeIndexMapper
@@ -41,42 +43,43 @@ class SyncedRawVideoBrowser(QObject):
 
     def __init__(
         self,
-        raw: mne.io.Raw,
+        raw_browser: MNEQtBrowser,
         video_file: VideoFile,
         time_mapper: TimeIndexMapper,
         show: bool = True,
         raw_update_max_fps: int = 10,
     ) -> None:
         super().__init__()
-        self.raw = raw
         self.video_file = video_file
         self.time_mapper = time_mapper
         # Flag to prevent infinite recursion during synchronization
         self._syncing = False
 
-        # Maximum frames per second for updating the raw data browser
         self.raw_update_max_fps = raw_update_max_fps
         self.min_raw_update_interval_ms = int(1000 / self.raw_update_max_fps)
         self.raw_update_throttler = BufferedThrottler(
             self.min_raw_update_interval_ms, parent=self
         )
 
-        # Instantiate the MNE Qt Browser
-        self.raw_browser = raw.plot(block=False, show=show)
-        # Wrap it in a interface class that exposes the necessary methods
-        self.raw_browser_interface = RawBrowserInterface(self.raw_browser)
+        # Wrap the raw browser to a class that exposes the necessary methods.
+        raw_browser_interface = RawBrowserInterface(raw_browser)
         # Pass interface for manager that contains actual logic for managing the browser
-        # in sync with the video browser
-        self.raw_browser_manager = RawBrowserManager(self.raw_browser_interface)
+        # in sync with the video browser.
+        self.raw_browser_manager = RawBrowserManager(raw_browser_interface)
+        # Make sure that raw browse visibility matches the `show` parameter.
+        if show:
+            self.raw_browser_manager.show_browser()
+        else:
+            self.raw_browser_manager.hide_browser()
 
-        # Set up the video browser
+        # Set up the video browser.
         self.video_browser = VideoBrowser(video_file, show_sync_status=True)
 
         # Dock the video browser to the raw data browser with Qt magic
-        self.dock = QtWidgets.QDockWidget("Video Browser", self.raw_browser)
+        self.dock = QtWidgets.QDockWidget("Video Browser", raw_browser)
         self.dock.setWidget(self.video_browser)
         self.dock.setFloating(True)
-        self.raw_browser.addDockWidget(Qt.RightDockWidgetArea, self.dock)
+        raw_browser.addDockWidget(Qt.RightDockWidgetArea, self.dock)
         self.dock.resize(1000, 800)  # Set initial size of the video browser
         if not show:
             self.dock.hide()
