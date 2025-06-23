@@ -60,6 +60,10 @@ class RawBrowserInterface(QObject):
         """Show the raw data browser."""
         self.browser.show()
 
+    def hide(self) -> None:
+        """Hide the raw data browser."""
+        self.browser.hide()
+
 
 class RawBrowserManager(QObject):
     """Manager for raw browser instance tailored for time syncing with video.
@@ -163,6 +167,10 @@ class RawBrowserManager(QObject):
     def show_browser(self) -> None:
         """Show the raw data browser."""
         self.browser.show()
+
+    def hide_browser(self) -> None:
+        """Hide the raw data browser."""
+        self.browser.hide()
 
     @Slot()
     def _handle_time_selector_change(self) -> None:
