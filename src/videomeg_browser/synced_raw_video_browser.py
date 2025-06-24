@@ -4,7 +4,7 @@ import logging
 
 from mne_qt_browser.figure import MNEQtBrowser
 from qtpy import QtWidgets
-from qtpy.QtCore import QElapsedTimer, QObject, Qt, QTimer, Signal, Slot
+from qtpy.QtCore import QElapsedTimer, QObject, Qt, QTimer, Signal, Slot  # type: ignore
 
 from .raw_browser_manager import RawBrowserInterface, RawBrowserManager
 from .time_index_mapper import (

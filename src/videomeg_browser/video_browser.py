@@ -1,21 +1,10 @@
 """Contains VideoBrowser Qt widget for displaying video."""
 
-try:
-    from qtpy.QtCore import Qt
-except Exception as exc:
-    if exc.__class__.__name__ == "QtBindingsNotFoundError":
-        raise ImportError(
-            "No Qt binding found, please install PyQt6, PyQt5, PySide6, or PySide2"
-        ) from None
-    else:
-        raise
-
-
 import logging
 from enum import Enum, auto
 
 import pyqtgraph as pg
-from qtpy.QtCore import QTimer, Signal, Slot
+from qtpy.QtCore import Qt, QTimer, Signal, Slot  # type: ignore
 from qtpy.QtWidgets import (
     QLabel,
     QPushButton,

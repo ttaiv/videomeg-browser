@@ -3,7 +3,7 @@
 import logging
 
 import pyqtgraph as pg
-from qtpy.QtCore import QObject, Signal, Slot
+from qtpy.QtCore import QObject, Signal, Slot  # type: ignore
 
 logger = logging.getLogger(__name__)
 

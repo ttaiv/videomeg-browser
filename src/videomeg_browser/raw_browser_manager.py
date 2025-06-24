@@ -4,7 +4,7 @@ import logging
 
 import numpy as np
 from mne_qt_browser._pg_figure import MNEQtBrowser
-from qtpy.QtCore import QObject, Signal, Slot
+from qtpy.QtCore import QObject, Signal, Slot  # type: ignore
 
 from .time_selector import RawTimeSelector
 
