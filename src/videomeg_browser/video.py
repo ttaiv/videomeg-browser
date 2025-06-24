@@ -80,6 +80,12 @@ class VideoFile(ABC):
         """Return the height of the video frames."""
         pass
 
+    @property
+    @abstractmethod
+    def fname(self) -> str:
+        """Return the full path to the video file."""
+        pass
+
 
 # Implementation of VideoFile using OpenCV (cv2).
 # Commented out to avoid dependency on OpenCV.
@@ -329,6 +335,10 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
     @property
     def frame_height(self) -> int:
         return self._frame_height
+
+    @property
+    def fname(self) -> str:
+        return self._file_name
 
     def _estimate_fps(self, estimate_with: str = "mean") -> float:
         """Estimate frames per second (FPS) based on timestamps."""
