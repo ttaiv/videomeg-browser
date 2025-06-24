@@ -6,6 +6,7 @@ from enum import Enum, auto
 import pyqtgraph as pg
 from qtpy.QtCore import Qt, QTimer, Signal, Slot  # type: ignore
 from qtpy.QtWidgets import (
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QSlider,
@@ -74,21 +75,15 @@ class VideoBrowser(QWidget):
 
         # Create widgets for displaying video frames and navigation controls
 
-        # Create an widget for displaying video frames
+        # Widget for displaying video frames
         self.im_view = pg.ImageView()
         layout.addWidget(self.im_view)
 
-        # Create a button for navigating to the next frame
-        self.button = QPushButton("Next Frame")
-        self.button.clicked.connect(self.display_next_frame)
-        layout.addWidget(self.button)
+        # Label to display the current frame index
+        self.frame_label = QLabel()
+        layout.addWidget(self.frame_label)
 
-        # Create a button for navigating to the previous frame
-        self.prev_button = QPushButton("Previous Frame")
-        self.prev_button.clicked.connect(self.display_previous_frame)
-        layout.addWidget(self.prev_button)
-
-        # Create a slider for navigating to a specific frame
+        # Slider for navigating to a specific frame
         self.frame_slider = QSlider(Qt.Horizontal)
         self.frame_slider.setMinimum(0)
         self.frame_slider.setMaximum(self.video.frame_count - 1)
@@ -96,14 +91,22 @@ class VideoBrowser(QWidget):
         self.frame_slider.valueChanged.connect(self.display_frame_at)
         layout.addWidget(self.frame_slider)
 
-        # Create a label to display the current frame index
-        self.frame_label = QLabel()
-        layout.addWidget(self.frame_label)
+        # Navigation bar with buttons: previous frame, play/pause, next frame
+        navigation_layout = QHBoxLayout()
 
-        # Add play button to start/stop video playback
+        self.prev_button = QPushButton("Previous Frame")
+        self.prev_button.clicked.connect(self.display_previous_frame)
+        navigation_layout.addWidget(self.prev_button)
+
         self.play_pause_button = QPushButton("Play")
         self.play_pause_button.clicked.connect(self.toggle_play_pause)
-        layout.addWidget(self.play_pause_button)
+        navigation_layout.addWidget(self.play_pause_button)
+
+        self.button = QPushButton("Next Frame")
+        self.button.clicked.connect(self.display_next_frame)
+        navigation_layout.addWidget(self.button)
+
+        layout.addLayout(navigation_layout)
 
         if show_sync_status:
             self.sync_status_label = QLabel()
