@@ -35,3 +35,9 @@ ignore-decorators = [
   "property",
   "setter",
 ]
+
+[tool.pyright.defineConstant]
+PYQT5 = true
+PYSIDE2 = false
+PYQT6 = false
+PYSIDE6 = false
