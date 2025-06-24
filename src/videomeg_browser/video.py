@@ -15,6 +15,21 @@ class VideoFile(ABC):
     """Container that holds a video file and provides method to read frames from it."""
 
     @abstractmethod
+    def __del__(self) -> None:
+        """Ensure the video file is released when the object is deleted."""
+        pass
+
+    @abstractmethod
+    def __enter__(self) -> "VideoFile":
+        """Enter the runtime context for the video file."""
+        pass
+
+    @abstractmethod
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Exit the runtime context and release the video file."""
+        pass
+
+    @abstractmethod
     def get_frame_at(self, frame_idx: int) -> npt.NDArray[np.uint8] | None:
         """Read a specific frame from the video file.
 
@@ -32,23 +47,13 @@ class VideoFile(ABC):
         pass
 
     @abstractmethod
+    def frame_idx_to_ms(self, frame_idx: int) -> float:
+        """Convert frame index to milliseconds since the start of the video."""
+        pass
+
+    @abstractmethod
     def close(self) -> None:
         """Release the video file."""
-        pass
-
-    @abstractmethod
-    def __del__(self) -> None:
-        """Ensure the video file is released when the object is deleted."""
-        pass
-
-    @abstractmethod
-    def __enter__(self) -> "VideoFile":
-        """Enter the runtime context for the video file."""
-        pass
-
-    @abstractmethod
-    def __exit__(self, exc_type, exc_value, traceback):
-        """Exit the runtime context and release the video file."""
         pass
 
     @property
@@ -73,11 +78,6 @@ class VideoFile(ABC):
     @abstractmethod
     def frame_height(self) -> int:
         """Return the height of the video frames."""
-        pass
-
-    @abstractmethod
-    def frame_idx_to_ms(self, frame_idx: int) -> float:
-        """Convert frame index to milliseconds since the start of the video."""
         pass
 
 
@@ -230,6 +230,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
     """
 
     def __init__(self, file_name):
+        self._file_name = file_name
         self._file = open(file_name, "rb")
         assert (
             self._file.read(len("ELEKTA_VIDEO_FILE")) == b"ELEKTA_VIDEO_FILE"
@@ -272,50 +273,6 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         self._frame_height = first_frame.shape[0]
         self._fps = self._estimate_fps(estimate_with="mean")
 
-    def _estimate_fps(self, estimate_with: str = "mean") -> float:
-        """Estimate frames per second (FPS) based on timestamps."""
-        if self._nframes < 2:
-            return 0
-
-        ts_in_seconds = self.ts / 1000
-        time_diff = np.diff(ts_in_seconds)
-
-        if estimate_with == "mean":
-            avg_time_diff = np.mean(time_diff)
-        elif estimate_with == "median":
-            avg_time_diff = np.median(time_diff)
-        else:
-            raise ValueError(f"Unknown estimation method: {estimate_with}")
-
-        if avg_time_diff <= 0:
-            raise ValueError(
-                f"Average time difference is non-positive: {avg_time_diff}. "
-                "Cannot estimate FPS."
-            )
-
-        return float(1 / avg_time_diff)
-
-    @property
-    def frame_count(self) -> int:
-        return self._nframes
-
-    @property
-    def fps(self) -> float:
-        return self._fps
-
-    @property
-    def frame_width(self) -> int:
-        return self._frame_width
-
-    @property
-    def frame_height(self) -> int:
-        return self._frame_height
-
-    def close(self) -> None:
-        """Close the video file."""
-        if not self._file.closed:
-            self._file.close()
-
     def __del__(self) -> None:
         """Ensure the video file is closed when the object is deleted."""
         self.close()
@@ -327,6 +284,11 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         """Exit the runtime context and close the video file."""
         self.close()
+
+    def close(self) -> None:
+        """Close the video file."""
+        if not self._file.closed:
+            self._file.close()
 
     def get_frame_at(self, frame_idx: int) -> npt.NDArray[np.uint8] | None:
         """Read a specific frame from the video file."""
@@ -351,3 +313,42 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         start_ts = self.ts[0]
 
         return unix_ts - start_ts
+
+    @property
+    def frame_count(self) -> int:
+        return self._nframes
+
+    @property
+    def fps(self) -> float:
+        return self._fps
+
+    @property
+    def frame_width(self) -> int:
+        return self._frame_width
+
+    @property
+    def frame_height(self) -> int:
+        return self._frame_height
+
+    def _estimate_fps(self, estimate_with: str = "mean") -> float:
+        """Estimate frames per second (FPS) based on timestamps."""
+        if self._nframes < 2:
+            return 0
+
+        ts_in_seconds = self.ts / 1000
+        time_diff = np.diff(ts_in_seconds)
+
+        if estimate_with == "mean":
+            avg_time_diff = np.mean(time_diff)
+        elif estimate_with == "median":
+            avg_time_diff = np.median(time_diff)
+        else:
+            raise ValueError(f"Unknown estimation method: {estimate_with}")
+
+        if avg_time_diff <= 0:
+            raise ValueError(
+                f"Average time difference is non-positive: {avg_time_diff}. "
+                "Cannot estimate FPS."
+            )
+
+        return float(1 / avg_time_diff)
