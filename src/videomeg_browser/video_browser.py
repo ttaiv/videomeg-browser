@@ -76,7 +76,7 @@ class VideoBrowser(QWidget):
         # Create widgets for displaying video frames and navigation controls
 
         # Widget for displaying video frames
-        self.image_view = pg.ImageView()
+        self.image_view = pg.ImageView(parent=self)
         layout.addWidget(self.image_view)
 
         # Label to display the current frame index
