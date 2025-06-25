@@ -29,7 +29,7 @@ class VideoFile(ABC):
         pass
 
     @abstractmethod
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
         """Exit the runtime context and release the video file."""
         pass
 
