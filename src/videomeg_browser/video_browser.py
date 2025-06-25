@@ -76,8 +76,8 @@ class VideoBrowser(QWidget):
         # Create widgets for displaying video frames and navigation controls
 
         # Widget for displaying video frames
-        self.im_view = pg.ImageView()
-        layout.addWidget(self.im_view)
+        self.image_view = pg.ImageView()
+        layout.addWidget(self.image_view)
 
         # Label to display the current frame index
         self.frame_label = QLabel()
@@ -119,7 +119,7 @@ class VideoBrowser(QWidget):
         first_frame = self.video.get_frame_at(0)
         if first_frame is None:
             raise ValueError("Could not read the first frame of the video.")
-        self.im_view.setImage(first_frame)
+        self.image_view.setImage(first_frame)
 
         self.frame_label.setText(f"Current Frame: 1/{self.video.frame_count}")
         self._update_play_button_enabled()
@@ -147,7 +147,7 @@ class VideoBrowser(QWidget):
             return False
 
         self.current_frame_idx = frame_idx
-        self.im_view.setImage(frame)
+        self.image_view.setImage(frame)
         self._update_frame_label()
         self._update_slider_internal()
         self._update_play_button_enabled()
