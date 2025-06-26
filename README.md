@@ -32,7 +32,8 @@ install in a separate environment. Here's how to achieve this with `conda`:
 Now you should be able to test the video browser by running example scripts in `scripts/` directory. For example:
 
 ```bash
-python scripts/run_sync_demo.py
+python scripts/run_sync_demo_with_sample_data.py
 ```
 
-Note that you need to adjust the paths in the example scripts to point to your video files and raw data files.
+Script `run_sync_demo_with_sample_data.py` uses a sample dataset from MNE Python and a fake video file. Other examples require you
+to have your own raw data and video files in a correct format.
