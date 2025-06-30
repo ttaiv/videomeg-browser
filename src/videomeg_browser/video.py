@@ -51,11 +51,6 @@ class VideoFile(ABC):
         pass
 
     @abstractmethod
-    def frame_idx_to_ms(self, frame_idx: int) -> float:
-        """Convert frame index to milliseconds since the start of the video."""
-        pass
-
-    @abstractmethod
     def close(self) -> None:
         """Release the video file."""
         pass
@@ -179,17 +174,6 @@ class VideoFileCV2(VideoFile):
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         """Exit the runtime context and release the video file."""
         self.close()
-
-    def frame_idx_to_ms(self, frame_idx: int) -> float:
-        """Convert frame index to milliseconds passed since the start of the video.
-
-        This is estimated using the frames per second (FPS) of the video.
-        """
-        if frame_idx < 0 or frame_idx >= self.frame_count:
-            raise ValueError(f"Frame index out of bounds: {frame_idx}")
-
-        # Calculate the timestamp in milliseconds
-        return (frame_idx / self.fps) * 1000.0
 '''
 
 # --- Code below is adapted from PyVideoMEG project ---
@@ -325,16 +309,6 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         frame_bytes = self._file.read(sz)
 
         return iio.imread(frame_bytes)
-
-    def frame_idx_to_ms(self, frame_idx: int) -> float:
-        """Convert frame index to milliseconds since the start of the video."""
-        if frame_idx < 0 or frame_idx >= self._nframes:
-            raise ValueError(f"Frame index out of bounds: {frame_idx}")
-
-        unix_ts = self.ts[frame_idx]
-        start_ts = self.ts[0]
-
-        return unix_ts - start_ts
 
     @property
     def frame_count(self) -> int:

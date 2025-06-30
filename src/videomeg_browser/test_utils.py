@@ -49,10 +49,6 @@ class FakeVideoFile(VideoFile):
             return None
         return self._frames[frame_idx]
 
-    def frame_idx_to_ms(self, frame_idx: int) -> float:
-        """Convert a frame index to milliseconds."""
-        return (frame_idx / self._fps) * 1000
-
     def close(self) -> None:
         """Close the video file."""
         self._closed = True
