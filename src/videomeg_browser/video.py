@@ -25,7 +25,7 @@ class VideoFile(ABC):
 
     @abstractmethod
     def __enter__(self) -> "VideoFile":
-        """Enter the runtime context for the video file."""
+        """Enter the runtime context with opened video file."""
         pass
 
     @abstractmethod
@@ -75,13 +75,13 @@ class VideoFile(ABC):
     @property
     @abstractmethod
     def frame_width(self) -> int:
-        """Return the width of the video frames."""
+        """Return the width of the video frames in pixels."""
         pass
 
     @property
     @abstractmethod
     def frame_height(self) -> int:
-        """Return the height of the video frames."""
+        """Return the height of the video frames in pixels."""
         pass
 
     @property
@@ -288,7 +288,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         self.close()
 
     def __enter__(self) -> "VideoFileHelsinkiVideoMEG":
-        """Enter the runtime context for the video file."""
+        """Enter the runtime context with opened video file."""
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
@@ -301,7 +301,19 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
             self._file.close()
 
     def get_frame_at(self, frame_idx: int) -> npt.NDArray[np.uint8] | None:
-        """Read a specific frame from the video file."""
+        """Read a specific frame from the video file.
+
+        Parameters
+        ----------
+        frame_idx : int
+            Index of the frame to read.
+
+        Returns
+        -------
+        npt.NDArray[np.uint8] | None
+            The frame as a NumPy array of shape (height, width, 3) or None if the frame
+            cannot be read. The color format is RGB and the frame is in row-major order.
+        """
         if self._file.closed:
             raise ValueError("Trying to read from a closed video file.")
         if frame_idx < 0 or frame_idx >= self._nframes:
