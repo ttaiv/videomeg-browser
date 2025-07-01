@@ -217,15 +217,20 @@ def _read_attrib(data_file, ver):
 
 
 class VideoFileHelsinkiVideoMEG(VideoFile):
-    """
-    To read a video file initialize VideoData object with file name. You can
-    then get the frame times from the object's ts variable. To get individual
-    frames use get_frame function.
+    """Video file reader for video files in Helsinki VideoMEG project format.
+
+    Frame timestamps in milliseconds are stored in the `timestamps_ms` attribute,
+    individual frames can be accessed using the `get_frame_at` method.
+
+    Parameters
+    ----------
+    fname : str
+        Full path to the video file to be read.
     """
 
-    def __init__(self, file_name):
-        self._file_name = file_name
-        self._file = open(file_name, "rb")
+    def __init__(self, fname) -> None:
+        self._file_name = fname
+        self._file = open(fname, "rb")
         assert (
             self._file.read(len("ELEKTA_VIDEO_FILE")) == b"ELEKTA_VIDEO_FILE"
         )  # make sure the magic string is OK
@@ -241,24 +246,28 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         else:
             raise UnknownVersionError()
 
-        # get the file size
+        # Get the file size.
         begin_data = self._file.tell()
         self._file.seek(0, 2)
         end_data = self._file.tell()
         self._file.seek(begin_data, 0)
 
-        self.ts = np.array([])
-        self._frame_ptrs = []
+        # For each frame, store timestamp and pointer to the frame data on disk.
+        timestamps_list = []
+        self._frame_ptrs = []  # List of tuples (offset, size) for each frame
 
         while self._file.tell() < end_data:  # we did not reach end of file
             ts, block_id, sz, total_sz = _read_attrib(self._file, self.ver)
             assert ts != -1
-            self.ts = np.append(self.ts, ts)
+            timestamps_list.append(ts)
             self._frame_ptrs.append((self._file.tell(), sz))
             assert self._file.tell() + sz <= end_data
             self._file.seek(sz, 1)
 
-        self._nframes = self.ts.size
+        # Convert timestamps to numpy array
+        self.timestamps_ms = np.array(timestamps_list, dtype=np.float64)
+        self._nframes = len(timestamps_list)
+
         # Use first frame to determine width and height
         first_frame = self.get_frame_at(0)
         if first_frame is None:
@@ -316,6 +325,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
 
     @property
     def fps(self) -> float:
+        """Return the ESTIMATED frames per second of the video file."""
         return self._fps
 
     @property
@@ -335,7 +345,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         if self._nframes < 2:
             return 0
 
-        ts_in_seconds = self.ts / 1000
+        ts_in_seconds = self.timestamps_ms / 1000
         time_diff = np.diff(ts_in_seconds)
 
         if estimate_with == "mean":

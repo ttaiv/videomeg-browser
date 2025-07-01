@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
     # Extract raw and video timestamps
     raw_timestamps_ms = get_raw_timestamps(raw, RAW_TIMING_CHANNEL)
-    video_timestamps_ms = video_file.ts
+    video_timestamps_ms = video_file.timestamps_ms
 
     # Define function for converting raw time to index
     def raw_time_to_index(time: float) -> int:
