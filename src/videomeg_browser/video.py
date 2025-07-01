@@ -292,6 +292,8 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         """Close the video file."""
         if not self._file.closed:
             self._file.close()
+        else:
+            logger.warning("Trying to close an already closed video file, ignoring.")
 
     def get_frame_at(self, frame_idx: int) -> npt.NDArray[np.uint8] | None:
         """Read a specific frame from the video file.
