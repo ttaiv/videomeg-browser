@@ -290,10 +290,15 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
 
     def close(self) -> None:
         """Close the video file."""
-        if not self._file.closed:
-            self._file.close()
-        else:
+        if not hasattr(self, "_file"):
+            # The file opening probably failed during initialization of the object.
+            logger.debug(
+                "Trying to close a video file that was never opened, ignoring."
+            )
+        elif self._file.closed:
             logger.warning("Trying to close an already closed video file, ignoring.")
+        else:
+            self._file.close()
 
     def get_frame_at(self, frame_idx: int) -> npt.NDArray[np.uint8] | None:
         """Read a specific frame from the video file.
