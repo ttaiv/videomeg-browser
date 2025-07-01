@@ -54,20 +54,20 @@ class VideoBrowser(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
-        self.video = video
-        self.show_sync_status = show_sync_status
+        self._video = video
+        self._show_sync_status = show_sync_status
 
-        self.current_frame_idx = 0
-        self.is_playing = False  # Whether the frame updates are currently automatic
+        self._current_frame_idx = 0
+        self._is_playing = False  # Whether the frame updates are currently automatic
 
         # Set up timer that allow automatic frame updates (playing the video)
-        self.play_timer = QTimer(parent=self)
+        self._play_timer = QTimer(parent=self)
         # Milliseconds between frame updates so that video is played with original fps
-        self.play_timer_interval_ms = int(1000 / video.fps)
-        self.play_timer.setInterval(self.play_timer_interval_ms)
-        self.play_timer.timeout.connect(self._play_next_frame)
+        self._play_timer_interval_ms = int(1000 / video.fps)
+        self._play_timer.setInterval(self._play_timer_interval_ms)
+        self._play_timer.timeout.connect(self._play_next_frame)
 
-        self.setWindowTitle(self.video.fname)
+        self.setWindowTitle(self._video.fname)
         self.resize(1000, 800)  # Set initial size of the window
 
         # Create layout that will hold widgets that make up the browser
@@ -76,52 +76,52 @@ class VideoBrowser(QWidget):
         # Create widgets for displaying video frames and navigation controls
 
         # Widget for displaying video frames
-        self.image_view = pg.ImageView(parent=self)
-        layout.addWidget(self.image_view)
+        self._image_view = pg.ImageView(parent=self)
+        layout.addWidget(self._image_view)
 
         # Label to display the current frame index
-        self.frame_label = QLabel()
-        layout.addWidget(self.frame_label)
+        self._frame_label = QLabel()
+        layout.addWidget(self._frame_label)
 
         # Slider for navigating to a specific frame
-        self.frame_slider = QSlider(Qt.Horizontal)
-        self.frame_slider.setMinimum(0)
-        self.frame_slider.setMaximum(self.video.frame_count - 1)
-        self.frame_slider.setValue(0)
-        self.frame_slider.valueChanged.connect(self.display_frame_at)
-        layout.addWidget(self.frame_slider)
+        self._frame_slider = QSlider(Qt.Horizontal)
+        self._frame_slider.setMinimum(0)
+        self._frame_slider.setMaximum(self._video.frame_count - 1)
+        self._frame_slider.setValue(0)
+        self._frame_slider.valueChanged.connect(self.display_frame_at)
+        layout.addWidget(self._frame_slider)
 
         # Navigation bar with buttons: previous frame, play/pause, next frame
         navigation_layout = QHBoxLayout()
 
-        self.prev_button = QPushButton("Previous Frame")
-        self.prev_button.clicked.connect(self.display_previous_frame)
-        navigation_layout.addWidget(self.prev_button)
+        self._prev_button = QPushButton("Previous Frame")
+        self._prev_button.clicked.connect(self.display_previous_frame)
+        navigation_layout.addWidget(self._prev_button)
 
-        self.play_pause_button = QPushButton("Play")
-        self.play_pause_button.clicked.connect(self.toggle_play_pause)
-        navigation_layout.addWidget(self.play_pause_button)
+        self._play_pause_button = QPushButton("Play")
+        self._play_pause_button.clicked.connect(self.toggle_play_pause)
+        navigation_layout.addWidget(self._play_pause_button)
 
-        self.button = QPushButton("Next Frame")
-        self.button.clicked.connect(self.display_next_frame)
-        navigation_layout.addWidget(self.button)
+        self._button = QPushButton("Next Frame")
+        self._button.clicked.connect(self.display_next_frame)
+        navigation_layout.addWidget(self._button)
 
         layout.addLayout(navigation_layout)
 
         if show_sync_status:
-            self.sync_status_label = QLabel()
-            layout.addWidget(self.sync_status_label)
+            self._sync_status_label = QLabel()
+            layout.addWidget(self._sync_status_label)
         else:
-            self.sync_status_label = None
+            self._sync_status_label = None
 
         # Set up initial state
 
-        first_frame = self.video.get_frame_at(0)
+        first_frame = self._video.get_frame_at(0)
         if first_frame is None:
             raise ValueError("Could not read the first frame of the video.")
-        self.image_view.setImage(first_frame)
+        self._image_view.setImage(first_frame)
 
-        self.frame_label.setText(f"Current Frame: 1/{self.video.frame_count}")
+        self._frame_label.setText(f"Current Frame: 1/{self._video.frame_count}")
         self._update_play_button_enabled()
 
     @Slot(int)
@@ -138,7 +138,7 @@ class VideoBrowser(QWidget):
         bool
             True if the frame was displayed, False if the index is out of bounds.
         """
-        frame = self.video.get_frame_at(frame_idx)
+        frame = self._video.get_frame_at(frame_idx)
         if frame is None:
             logger.info(
                 f"Could not retrieve frame at index {frame_idx}. "
@@ -146,14 +146,14 @@ class VideoBrowser(QWidget):
             )
             return False
 
-        self.current_frame_idx = frame_idx
-        self.image_view.setImage(frame)
+        self._current_frame_idx = frame_idx
+        self._image_view.setImage(frame)
         self._update_frame_label()
         self._update_slider_internal()
         self._update_play_button_enabled()
 
         # Emit signal that the frame has changed
-        self.sigFrameChanged.emit(self.current_frame_idx)
+        self.sigFrameChanged.emit(self._current_frame_idx)
 
         return True
 
@@ -167,7 +167,7 @@ class VideoBrowser(QWidget):
             True if the next frame was displayed, False if next frame could not be
             retrieved (end of video?)
         """
-        return self.display_frame_at(self.current_frame_idx + 1)
+        return self.display_frame_at(self._current_frame_idx + 1)
 
     @Slot()
     def display_previous_frame(self) -> bool:
@@ -179,74 +179,57 @@ class VideoBrowser(QWidget):
             True if the previous frame was displayed, False if previous frame could not
             be retrieved (beginning of video?)
         """
-        return self.display_frame_at(self.current_frame_idx - 1)
-
-    def _update_frame_label(self) -> None:
-        """Update the frame label to show the current frame number."""
-        # Use one-based index for display
-        self.frame_label.setText(
-            f"Current Frame: {self.current_frame_idx + 1}/{self.video.frame_count}"
-        )
-
-    def _update_slider_internal(self) -> None:
-        """Update the slider to reflect the current frame index.
-
-        This is a helper method to update the slider value without
-        triggering the valueChanged signal of the slider.
-        """
-        self.frame_slider.blockSignals(True)
-        self.frame_slider.setValue(self.current_frame_idx)
-        self.frame_slider.blockSignals(False)
+        return self.display_frame_at(self._current_frame_idx - 1)
 
     @Slot(SyncStatus)
     def set_sync_status(self, status: SyncStatus) -> None:
         """Set the sync status label and color."""
-        if not self.show_sync_status or self.sync_status_label is None:
+        if not self._show_sync_status or self._sync_status_label is None:
             return
         if status == SyncStatus.SYNCHRONIZED:
-            self.sync_status_label.setText("Synchronized")
-            self.sync_status_label.setStyleSheet("color: green; font-weight: bold;")
+            self._sync_status_label.setText("Synchronized")
+            self._sync_status_label.setStyleSheet("color: green; font-weight: bold;")
         elif status == SyncStatus.NO_RAW_DATA:
-            self.sync_status_label.setText("No raw data for this frame")
-            self.sync_status_label.setStyleSheet("color: red; font-weight: bold;")
+            self._sync_status_label.setText("No raw data for this frame")
+            self._sync_status_label.setStyleSheet("color: red; font-weight: bold;")
         elif status == SyncStatus.NO_VIDEO_DATA:
-            self.sync_status_label.setText("No video for this raw data")
-            self.sync_status_label.setStyleSheet("color: red; font-weight: bold;")
+            self._sync_status_label.setText("No video for this raw data")
+            self._sync_status_label.setStyleSheet("color: red; font-weight: bold;")
         else:
             raise ValueError(f"Unknown sync status: {status}")
 
     @Slot()
     def play_video(self) -> None:
         """Play the video frame by frame with its original fps."""
-        if self.is_playing:
+        if self._is_playing:
             logger.warning(
                 "Received signal to play video even though video should be "
                 "already playing. Skipping action."
             )
             return
         logger.debug("Playing video.")
-        self.is_playing = True
+        self._is_playing = True
         # Start the timer that controls automatic frame updates
-        self.play_timer.start()
-        self.play_pause_button.setText("Pause")  # Change play button to pause button
+        self._play_timer.start()
+        self._play_pause_button.setText("Pause")  # Change play button to pause button
 
     @Slot()
     def pause_video(self) -> None:
         """Pause video playing and stop at current frame."""
-        if not self.is_playing:
+        if not self._is_playing:
             logger.warning(
                 "Received signal to pause video even though video should not "
                 "be playing. Skipping action."
             )
         logger.debug("Pausing video.")
-        self.is_playing = False
-        self.play_timer.stop()
-        self.play_pause_button.setText("Play")
+        self._is_playing = False
+        self._play_timer.stop()
+        self._play_pause_button.setText("Play")
 
     @Slot()
     def toggle_play_pause(self) -> None:
         """Either play or pause the video based on the current state."""
-        if self.is_playing:
+        if self._is_playing:
             self.pause_video()
         else:
             self.play_video()
@@ -261,7 +244,24 @@ class VideoBrowser(QWidget):
 
     def _update_play_button_enabled(self) -> None:
         """Enable play button unless at the last frame."""
-        if self.current_frame_idx >= self.video.frame_count - 1:
-            self.play_pause_button.setEnabled(False)
+        if self._current_frame_idx >= self._video.frame_count - 1:
+            self._play_pause_button.setEnabled(False)
         else:
-            self.play_pause_button.setEnabled(True)
+            self._play_pause_button.setEnabled(True)
+
+    def _update_frame_label(self) -> None:
+        """Update the frame label to show the current frame number."""
+        # Use one-based index for display
+        self._frame_label.setText(
+            f"Current Frame: {self._current_frame_idx + 1}/{self._video.frame_count}"
+        )
+
+    def _update_slider_internal(self) -> None:
+        """Update the slider to reflect the current frame index.
+
+        This is a helper method to update the slider value without
+        triggering the valueChanged signal of the slider.
+        """
+        self._frame_slider.blockSignals(True)
+        self._frame_slider.setValue(self._current_frame_idx)
+        self._frame_slider.blockSignals(False)
