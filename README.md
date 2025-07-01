@@ -37,3 +37,19 @@ python scripts/run_sync_demo_with_sample_data.py
 
 Script `run_sync_demo_with_sample_data.py` uses a sample dataset from MNE Python and a fake video file. Other examples require you
 to have your own raw data and video files in a correct format.
+
+## Running tests
+
+Tests are located in directory `tests/` and they run using package `pytest`. You can install it to your environment by running:
+
+```bash
+pip install -e .[dev]
+```
+
+Then you can run all the tests with:
+
+```bash
+pytest
+```
+
+You can also selectively run tests in a specific file/class/method. See [pytest documentation](https://docs.pytest.org/en/stable/how-to/usage.html) for details.
