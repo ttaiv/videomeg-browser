@@ -45,7 +45,7 @@ class MappingFailure(MappingResult):
     failure_reason: MapFailureReason
 
 
-class TimeIndexMapper:
+class RawVideoAligner:
     """Maps time points from raw data to video frames and vice versa.
 
     Parameters

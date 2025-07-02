@@ -7,11 +7,11 @@ from qtpy import QtWidgets
 from qtpy.QtCore import QElapsedTimer, QObject, Qt, QTimer, Signal, Slot  # type: ignore
 
 from .raw_browser_manager import RawBrowserInterface, RawBrowserManager
-from .time_index_mapper import (
+from .raw_video_aligner import (
     MapFailureReason,
     MappingFailure,
     MappingSuccess,
-    TimeIndexMapper,
+    RawVideoAligner,
 )
 from .video import VideoFile
 from .video_browser import SyncStatus, VideoBrowser
@@ -30,9 +30,9 @@ class SyncedRawVideoBrowser(QObject):
         backend.
     video_file : VideoFile
         The video file object to be displayed in the video browser.
-    time_mapper : TimeIndexMapper
-        Mapper that provides the mapping between raw data time points and video
-        frame indices.
+    aligner : RawVideoAligner
+        An instance of `RawVideoAligner` that provides the mapping between raw data
+        time points and video frames.
     show : bool, optional
         Whether to show the raw data browser immediately upon instantiation,
         by default True.
@@ -45,14 +45,14 @@ class SyncedRawVideoBrowser(QObject):
         self,
         raw_browser: MNEQtBrowser,
         video_file: VideoFile,
-        time_mapper: TimeIndexMapper,
+        aligner: RawVideoAligner,
         show: bool = True,
         raw_update_max_fps: int = 10,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent=parent)
         self.video_file = video_file
-        self.time_mapper = time_mapper
+        self.aligner = aligner
         # Flag to prevent infinite recursion during synchronization
         self._syncing = False
 
@@ -134,7 +134,7 @@ class SyncedRawVideoBrowser(QObject):
         raw_time_seconds : float
             The raw time point in seconds to which the video browser should be synced.
         """
-        mapping = self.time_mapper.raw_time_to_video_frame_index(raw_time_seconds)
+        mapping = self.aligner.raw_time_to_video_frame_index(raw_time_seconds)
 
         match mapping:
             case MappingSuccess(result=video_idx):
@@ -190,7 +190,7 @@ class SyncedRawVideoBrowser(QObject):
             The video frame index to which the raw browser should be synced.
 
         """
-        mapping = self.time_mapper.video_frame_index_to_raw_time(video_frame_idx)
+        mapping = self.aligner.video_frame_index_to_raw_time(video_frame_idx)
 
         match mapping:
             case MappingSuccess(result=raw_time):

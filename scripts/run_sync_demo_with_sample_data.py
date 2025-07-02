@@ -11,9 +11,9 @@ import scipy
 from mne.datasets import sample
 from qtpy.QtWidgets import QApplication
 
+from videomeg_browser.raw_video_aligner import RawVideoAligner
 from videomeg_browser.synced_raw_video_browser import SyncedRawVideoBrowser
 from videomeg_browser.test_utils import create_fake_video_with_markers
-from videomeg_browser.time_index_mapper import TimeIndexMapper
 
 
 def _create_binary_stimulus_vector(
@@ -104,7 +104,7 @@ def main() -> None:
         """Convert a time in seconds to the corresponding index in the raw data."""
         return raw.time_as_index(time, use_rounding=True)[0]
 
-    time_mapper = TimeIndexMapper(
+    aligner = RawVideoAligner(
         raw_timestamps_ms,
         video_timestamps_ms,
         raw_times=raw.times,
@@ -117,7 +117,7 @@ def main() -> None:
 
     raw_browser = raw.plot(block=False, show=False)
 
-    browser = SyncedRawVideoBrowser(raw_browser, video, time_mapper)
+    browser = SyncedRawVideoBrowser(raw_browser, video, aligner)
 
     app.exec_()  # Start the Qt event loop
 
