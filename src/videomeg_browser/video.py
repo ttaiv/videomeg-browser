@@ -296,7 +296,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
                 "Trying to close a video file that was never opened, ignoring."
             )
         elif self._file.closed:
-            logger.warning("Trying to close an already closed video file, ignoring.")
+            logger.debug("Trying to close an already closed video file, ignoring.")
         else:
             self._file.close()
 
