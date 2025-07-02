@@ -76,11 +76,15 @@ class TimeIndexMapper:
         raw_time_to_index: Callable[[float], int],
         timestamp_unit: Literal["milliseconds", "seconds"] = "milliseconds",
     ) -> None:
-        self._raw_timestamps = raw_timestamps
-        self._video_timestamps = video_timestamps
         self._raw_times = raw_times
         self._raw_time_to_index = raw_time_to_index
         self._timestamp_unit = timestamp_unit
+        # Internally store timestamps in milliseconds.
+        # Set _timestamp unit before calling _get_timestamps_in_milliseconds!
+        self._raw_timestamps_ms = self._get_timestamps_in_milliseconds(raw_timestamps)
+        self._video_timestamps_ms = self._get_timestamps_in_milliseconds(
+            video_timestamps
+        )
 
         self._validate_timestamps()
         self._diagnose_timestamps()
@@ -97,14 +101,14 @@ class TimeIndexMapper:
 
         logger.info("Building mapping from raw indices to video frame indices.")
         self._raw_idx_to_video_frame_idx: list[MappingResult] = self._build_mapping(
-            source_timestamps=self._raw_timestamps,
-            target_timestamps=self._video_timestamps,
+            source_timestamps_ms=self._raw_timestamps_ms,
+            target_timestamps_ms=self._video_timestamps_ms,
         )
 
         logger.info("Building mapping from video frame indices to raw times.")
         self._video_frame_idx_to_raw_time: list[MappingResult] = self._build_mapping(
-            source_timestamps=self._video_timestamps,
-            target_timestamps=self._raw_timestamps,
+            source_timestamps_ms=self._video_timestamps_ms,
+            target_timestamps_ms=self._raw_timestamps_ms,
             convert_raw_results_to_seconds=True,
         )
 
@@ -131,12 +135,12 @@ class TimeIndexMapper:
 
     def _validate_timestamps(self) -> None:
         """Validate that raw and video timestamps are strictly increasing."""
-        if not np.all(np.diff(self._raw_timestamps) >= 0):
+        if not np.all(np.diff(self._raw_timestamps_ms) >= 0):
             raise ValueError(
                 "Raw timestamps are not strictly increasing. "
                 "This is required for the mapping to work correctly."
             )
-        if not np.all(np.diff(self._video_timestamps) >= 0):
+        if not np.all(np.diff(self._video_timestamps_ms) >= 0):
             raise ValueError(
                 "Video timestamps are not strictly increasing. "
                 "This is required for the mapping to work correctly."
@@ -144,73 +148,100 @@ class TimeIndexMapper:
 
     def _diagnose_timestamps(self) -> None:
         """Log some statistics about the raw and video timestamps."""
-        raw_timestamps = self._get_timestamps_in_seconds(self._raw_timestamps)
-        video_timestamps = self._get_timestamps_in_seconds(self._video_timestamps)
+        # Convert to seconds for easier readability
+        raw_timestamps_seconds = self._raw_timestamps_ms / 1000.0
+        video_timestamps_seconds = self._video_timestamps_ms / 1000.0
+        logger.info(
+            f"Raw timestamps: {raw_timestamps_seconds[0]:.1f} s to "
+            f"{raw_timestamps_seconds[-1]:.1f} s, "
+            f"total {len(raw_timestamps_seconds)} timestamps."
+        )
+        logger.info(
+            f"Video timestamps: {video_timestamps_seconds[0]:.1f} s to "
+            f"{video_timestamps_seconds[-1]:.1f} s, "
+            f"total {len(video_timestamps_seconds)} timestamps."
+        )
 
+        # Check the interval between timesamps
+        raw_intervals_ms = np.diff(self._raw_timestamps_ms)
         logger.info(
-            f"Raw timestamps: {raw_timestamps[0]:.1f} s to "
-            f"{raw_timestamps[-1]:.1f} s, "
-            f"total {len(raw_timestamps)} timestamps."
+            f"Raw timestamps intervals: min={np.min(raw_intervals_ms):.3f} ms, "
+            f"max={np.max(raw_intervals_ms):.3f} ms, "
+            f"mean={np.mean(raw_intervals_ms):.3f} ms, "
+            f"std={np.std(raw_intervals_ms):.3f} ms"
         )
+        video_intervals_ms = np.diff(self._video_timestamps_ms)
         logger.info(
-            f"Video timestamps: {video_timestamps[0]:.1f} s to "
-            f"{video_timestamps[-1]:.1f} s, "
-            f"total {len(video_timestamps)} timestamps."
+            f"Video timestamps intervals: min={np.min(video_intervals_ms):.3f} ms, "
+            f"max={np.max(video_intervals_ms):.3f} ms, "
+            f"mean={np.mean(video_intervals_ms):.3f} ms, "
+            f"std={np.std(video_intervals_ms):.3f} ms"
         )
+
         # Count timestamps that are out of bounds
-        video_too_small_count = np.sum(self._video_timestamps < self._raw_timestamps[0])
+        video_too_small_count = np.sum(
+            self._video_timestamps_ms < self._raw_timestamps_ms[0]
+        )
         video_too_large_count = np.sum(
-            self._video_timestamps > self._raw_timestamps[-1]
+            self._video_timestamps_ms > self._raw_timestamps_ms[-1]
         )
         logger.info(
-            "Video timestamps smaller/larger than first raw timestamp: "
+            "Video timestamps smaller/larger than first/last raw timestamp: "
             f"{video_too_small_count}/{video_too_large_count}"
         )
-        raw_too_small_count = np.sum(self._raw_timestamps < self._video_timestamps[0])
-        raw_too_large_count = np.sum(self._raw_timestamps > self._video_timestamps[-1])
+        raw_too_small_count = np.sum(
+            self._raw_timestamps_ms < self._video_timestamps_ms[0]
+        )
+        raw_too_large_count = np.sum(
+            self._raw_timestamps_ms > self._video_timestamps_ms[-1]
+        )
         logger.info(
-            "Raw timestamps smaller/larger than first video timestamp: "
+            "Raw timestamps smaller/larger than first/last video timestamp: "
             f"{raw_too_small_count}/{raw_too_large_count}"
         )
-        first_timestamp_diff = raw_timestamps[0] - video_timestamps[0]
+        first_timestamp_diff_ms = (
+            self._raw_timestamps_ms[0] - self._video_timestamps_ms[0]
+        )
         logger.info(
             "Difference between first raw and video timestamps: "
-            f"{first_timestamp_diff:.3f} s"
+            f"{first_timestamp_diff_ms:.3f} ms"
         )
-        if first_timestamp_diff > 1:
+        if first_timestamp_diff_ms > 1000:
             logger.warning(
                 "The raw data timestamps start over a second later than the video "
                 "timestamps."
             )
-        elif first_timestamp_diff < -1:
+        elif first_timestamp_diff_ms < -1000:
             logger.warning(
                 "Video timestamps start over a second later than the raw data "
                 "timestamps."
             )
-        last_timestamp_diff = raw_timestamps[-1] - video_timestamps[-1]
+        last_timestamp_diff_ms = (
+            self._raw_timestamps_ms[-1] - self._video_timestamps_ms[-1]
+        )
         logger.info(
             "Difference between last raw and video timestamps: "
-            f"{last_timestamp_diff:.3f} s"
+            f"{last_timestamp_diff_ms:.3f} ms"
         )
-        if last_timestamp_diff > 1:
+        if last_timestamp_diff_ms > 1000:
             logger.warning(
                 "The video timestamps end over a second earlier than the raw data "
                 "timestamps."
             )
-        elif last_timestamp_diff < -1:
+        elif last_timestamp_diff_ms < -1000:
             logger.warning(
                 "Raw data timestamps end over a second earlier than the video "
                 "timestamps."
             )
 
-    def _get_timestamps_in_seconds(
+    def _get_timestamps_in_milliseconds(
         self, timestamps: NDArray[np.floating]
     ) -> NDArray[np.floating]:
-        """Convert timestamps to seconds if they are in milliseconds."""
+        """Convert timestamps to milliseconds if they are in seconds."""
         if self._timestamp_unit == "milliseconds":
-            return timestamps / 1000.0
-        elif self._timestamp_unit == "seconds":
             return timestamps
+        elif self._timestamp_unit == "seconds":
+            return timestamps * 1000.0
         else:
             raise ValueError(
                 f"Unknown timestamp unit: {self._timestamp_unit}. "
@@ -265,44 +296,40 @@ class TimeIndexMapper:
             left_distances < right_distances, insert_indices - 1, insert_indices
         )
 
-        # Calculate the error between source times and their closest target times
-        errors = np.abs(source_times - target_times[closest_indices])
-        self._log_mapping_errors(errors)
-
         return closest_indices
 
-    def _log_mapping_errors(self, errors: NDArray[np.floating]) -> None:
+    def _log_mapping_errors(self, errors_ms: NDArray[np.floating]) -> None:
         """Log statistics about the distances between source and target timestamps."""
-        unit_symbol = self._get_timestamp_unit_symbol()
         logger.info(
             "Statistics for mapping error (distances between source timestamps "
             "and their closest target timestamps):"
         )
         logger.info(
-            f"min={np.min(errors):.3f} {unit_symbol}, "
-            f"max={np.max(errors):.3f} {unit_symbol}, mean={np.mean(errors):.3f} "
-            f"{unit_symbol}, std={np.std(errors):.3f} {unit_symbol}"
+            f"min={np.min(errors_ms):.3f} ms, "
+            f"max={np.max(errors_ms):.3f} ms, mean={np.mean(errors_ms):.3f} "
+            f"ms, std={np.std(errors_ms):.3f} ms"
         )
-        if np.any(errors < 0):
+        if np.any(errors_ms < 0):
             logger.warning("Some distances between timestamps are negative.")
-        if np.any(np.isnan(errors)):
+        if np.any(np.isnan(errors_ms)):
             logger.warning("Some distances between timestamps are NaN.")
 
     def _build_mapping(
         self,
-        source_timestamps: NDArray[np.floating],
-        target_timestamps: NDArray[np.floating],
+        source_timestamps_ms: NDArray[np.floating],
+        target_timestamps_ms: NDArray[np.floating],
         convert_raw_results_to_seconds: bool = False,
     ) -> list[MappingResult]:
         """Build a mapping from raw indices to video frame indices or vice versa.
 
         Parameters
         ----------
-        source_timestamps : NDArray[np.floating]
-            I-D sorted array of source timestamps for which to compute the mapping
+        source_timestamps_ms : NDArray[np.floating]
+            I-D sorted array of source timestamps in milliseconds for which to
+            compute the mapping.
         target_timestamps : NDArray[np.floating]
-            I-D sorted array of target timestamps to which the source timestamps
-            should be mapped
+            I-D sorted array of target timestamps in milliseconds to which
+            the source timestamps should be mapped.
         convert_raw_results_to_seconds : bool, optional
             If true, assume that the mapping is from video frame indices to raw indices,
             and convert the resulting raw indices to seconds.
@@ -312,19 +339,20 @@ class TimeIndexMapper:
         list[MappingResult]
             List of mapping results, where each result corresponds to a source
             timestamp. If a source timestamp is out of bounds of the target timestamps,
-            it will be marked as a failure with a reason for the failure.
+            it will be marked as a failure with a reason for the failure (index too
+            small or index too large).
         """
         # Initialize a list of mapping results with failures
         mapping: list[MappingResult] = [
             MappingFailure(MapFailureReason.NOT_MAPPED)
-            for _ in range(len(source_timestamps))
+            for _ in range(len(source_timestamps_ms))
         ]
 
         # Find indices of source timestamps that are out of bounds
         # of the target timestamps.
-        too_small_mask = source_timestamps < target_timestamps[0]
+        too_small_mask = source_timestamps_ms < target_timestamps_ms[0]
         too_small_source_indices = too_small_mask.nonzero()[0]
-        too_large_mask = source_timestamps > target_timestamps[-1]
+        too_large_mask = source_timestamps_ms > target_timestamps_ms[-1]
         too_large_source_indices = too_large_mask.nonzero()[0]
 
         # Add these to the mapping as failures
@@ -340,12 +368,18 @@ class TimeIndexMapper:
         # Map the rest of source timestamps to the closest target timestamps.
 
         valid_mask = ~(too_small_mask | too_large_mask)
-        valid_source_timestamps_ms = source_timestamps[valid_mask]
+        valid_source_timestamps_ms = source_timestamps_ms[valid_mask]
         valid_source_indices = valid_mask.nonzero()[0]
 
         closest_target_indices = self._find_indices_with_closest_values(
-            source_times=valid_source_timestamps_ms, target_times=target_timestamps
+            source_times=valid_source_timestamps_ms, target_times=target_timestamps_ms
         )
+        # Log mapping errors.
+        errors_ms = np.abs(
+            valid_source_timestamps_ms - target_timestamps_ms[closest_target_indices]
+        )
+        self._log_mapping_errors(errors_ms)
+
         if convert_raw_results_to_seconds:
             # Convert the raw indices to actual time points in seconds
             closest_raw_times = self._raw_times[closest_target_indices]
