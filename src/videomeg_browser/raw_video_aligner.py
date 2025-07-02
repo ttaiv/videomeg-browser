@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 class MapFailureReason(Enum):
     """Enum telling why mapping from frame index to raw time or vice versa failed."""
 
-    # Index to map is smaller than the first frame or raw time point
+    # Index to map is too small compared to the first frame or raw time point
     INDEX_TOO_SMALL = "index_too_small"
-    # Index to map is larger than the last frame or raw time point
+    # Index to map is too large compared to the last frame or raw time point
     INDEX_TOO_LARGE = "index_too_large"
     # A value that can be used as a placeholder before mapping is done
     NOT_MAPPED = "not_mapped"
@@ -351,12 +351,18 @@ class RawVideoAligner:
             MappingFailure(MapFailureReason.NOT_MAPPED)
             for _ in range(len(source_timestamps_ms))
         ]
+        # Find indices of source timestamps that are out of bounds of the target
+        # timestamps. Use half of the average interval between target timestamps
+        # as a threshold to determine if a source timestamp is too small or too large.
+        average_target_interval_ms = np.diff(target_timestamps_ms).mean()
 
-        # Find indices of source timestamps that are out of bounds
-        # of the target timestamps.
-        too_small_mask = source_timestamps_ms < target_timestamps_ms[0]
+        too_small_mask = source_timestamps_ms < (
+            target_timestamps_ms[0] - average_target_interval_ms / 2
+        )
         too_small_source_indices = too_small_mask.nonzero()[0]
-        too_large_mask = source_timestamps_ms > target_timestamps_ms[-1]
+        too_large_mask = source_timestamps_ms > (
+            target_timestamps_ms[-1] + average_target_interval_ms / 2
+        )
         too_large_source_indices = too_large_mask.nonzero()[0]
 
         # Add these to the mapping as failures
