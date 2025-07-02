@@ -21,8 +21,6 @@ class MapFailureReason(Enum):
     INDEX_TOO_SMALL = "index_too_small"
     # Index to map is too large compared to the last frame or raw time point
     INDEX_TOO_LARGE = "index_too_large"
-    # A value that can be used as a placeholder before mapping is done
-    NOT_MAPPED = "not_mapped"
 
 
 class MappingResult(ABC):
@@ -100,18 +98,21 @@ class RawVideoAligner:
         # raw time --> raw index --> video frame index.
 
         logger.info("Building mapping from raw indices to video frame indices.")
-        self._raw_idx_to_video_frame_idx: list[MappingResult] = self._build_mapping(
-            source_timestamps_ms=self._raw_timestamps_ms,
-            target_timestamps_ms=self._video_timestamps_ms,
+        self._raw_idx_to_video_frame_idx: dict[int, MappingResult] = (
+            self._build_mapping(
+                source_timestamps_ms=self._raw_timestamps_ms,
+                target_timestamps_ms=self._video_timestamps_ms,
+            )
         )
 
         logger.info("Building mapping from video frame indices to raw times.")
-        self._video_frame_idx_to_raw_time: list[MappingResult] = self._build_mapping(
-            source_timestamps_ms=self._video_timestamps_ms,
-            target_timestamps_ms=self._raw_timestamps_ms,
-            convert_raw_results_to_seconds=True,
+        self._video_frame_idx_to_raw_time: dict[int, MappingResult] = (
+            self._build_mapping(
+                source_timestamps_ms=self._video_timestamps_ms,
+                target_timestamps_ms=self._raw_timestamps_ms,
+                convert_raw_results_to_seconds=True,
+            )
         )
-
         self._log_mapping_results(
             mapping_results=self._raw_idx_to_video_frame_idx,
             header="Mapping results from raw indices to video frame indices:",
@@ -323,7 +324,7 @@ class RawVideoAligner:
         source_timestamps_ms: NDArray[np.floating],
         target_timestamps_ms: NDArray[np.floating],
         convert_raw_results_to_seconds: bool = False,
-    ) -> list[MappingResult]:
+    ) -> dict[int, MappingResult]:
         """Build a mapping from raw indices to video frame indices or vice versa.
 
         Parameters
@@ -340,17 +341,14 @@ class RawVideoAligner:
 
         Returns
         -------
-        list[MappingResult]
-            List of mapping results, where each result corresponds to a source
-            timestamp. If a source timestamp is out of bounds of the target timestamps,
-            it will be marked as a failure with a reason for the failure (index too
-            small or index too large).
+        dict[int, MappingResult]
+            A dictionary mapping source indices to mapping results.
+            If a source timestamp is out of bounds of the target timestamps,
+            it will be marked as a failure with a reason for the failure
+            (index too small or index too large).
         """
         # Initialize a list of mapping results with failures
-        mapping: list[MappingResult] = [
-            MappingFailure(MapFailureReason.NOT_MAPPED)
-            for _ in range(len(source_timestamps_ms))
-        ]
+        mapping: dict[int, MappingResult] = {}
         # Find indices of source timestamps that are out of bounds of the target
         # timestamps. Use half of the average interval between target timestamps
         # as a threshold to determine if a source timestamp is too small or too large.
@@ -401,20 +399,14 @@ class RawVideoAligner:
         for source_idx, result in zip(valid_source_indices, mapping_results):
             mapping[source_idx] = MappingSuccess(result=result)
 
-        # Make sure that all indices were filled.
-        for mapping_result in mapping:
-            match mapping_result:
-                case MappingFailure(failure_reason=MapFailureReason.NOT_MAPPED):
-                    raise AssertionError(
-                        "Not all source indices were mapped to target indices."
-                    )
-                case _:
-                    pass
+        # Make sure that all the source indices were mapped.
+        if len(mapping) != len(source_timestamps_ms):
+            raise AssertionError("Built mapping does not cover all source indices.")
 
         return mapping
 
     def _log_mapping_results(
-        self, mapping_results: list[MappingResult], header: str
+        self, mapping_results: dict[int, MappingResult], header: str
     ) -> None:
         """Log the number of each mapping result for debugging purposes."""
         result_counts = self._count_mapping_results(mapping_results)
@@ -423,12 +415,12 @@ class RawVideoAligner:
             logger.debug(f"    {result}: {count}")
 
     def _count_mapping_results(
-        self, mapping_results: list[MappingResult]
+        self, mapping_results: dict[int, MappingResult]
     ) -> Counter[str]:
         """Count the number of each mapping results for debugging purposes."""
         counts = Counter()
 
-        for mapping_result in mapping_results:
+        for mapping_result in mapping_results.values():
             match mapping_result:
                 case MappingSuccess():
                     key = "MappingSuccess"
