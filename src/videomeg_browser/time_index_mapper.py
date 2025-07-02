@@ -301,13 +301,13 @@ class TimeIndexMapper:
     def _log_mapping_errors(self, errors_ms: NDArray[np.floating]) -> None:
         """Log statistics about the distances between source and target timestamps."""
         logger.info(
-            "Statistics for mapping error (distances between source timestamps "
+            "    Statistics for mapping error (distances between source timestamps "
             "and their closest target timestamps):"
         )
         logger.info(
-            f"min={np.min(errors_ms):.3f} ms, "
-            f"max={np.max(errors_ms):.3f} ms, mean={np.mean(errors_ms):.3f} "
-            f"ms, std={np.std(errors_ms):.3f} ms"
+            f"    min={np.min(errors_ms):.3f} ms, "
+            f"    max={np.max(errors_ms):.3f} ms, mean={np.mean(errors_ms):.3f} "
+            f"    ms, std={np.std(errors_ms):.3f} ms"
         )
         if np.any(errors_ms < 0):
             logger.warning("Some distances between timestamps are negative.")
@@ -410,7 +410,7 @@ class TimeIndexMapper:
         result_counts = self._count_mapping_results(mapping_results)
         logger.debug(f"{header}")
         for result, count in result_counts.items():
-            logger.debug(f"{result}: {count}")
+            logger.debug(f"    {result}: {count}")
 
     def _count_mapping_results(
         self, mapping_results: list[MappingResult]
