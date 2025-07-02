@@ -95,8 +95,12 @@ def main() -> None:
     video = create_fake_video_with_markers(video_frame_count, stimulus_mask)
 
     # Create timestamps that will be used to synchronize the raw data and video.
-    raw_timestamps_ms = np.linspace(0, DURATION_SECONDS * 1000, raw.n_times)
-    video_timestamps_ms = np.linspace(0, DURATION_SECONDS * 1000, video.frame_count)
+    raw_timestamps_ms = np.linspace(
+        0, DURATION_SECONDS * 1000, raw.n_times, endpoint=False
+    )
+    video_timestamps_ms = np.linspace(
+        0, DURATION_SECONDS * 1000, video.frame_count, endpoint=False
+    )
 
     # Create mapping between raw data points and video frames
 
