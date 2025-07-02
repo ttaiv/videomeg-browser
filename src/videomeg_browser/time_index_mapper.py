@@ -63,6 +63,9 @@ class TimeIndexMapper:
         A function that converts a raw time point in seconds to the corresponding
         index in the raw data. Required for converting arbitrary raw time
         to a discrete index in the raw data.
+    timestamp_unit : Literal["milliseconds", "seconds"], optional
+        The unit of the timestamps in `raw_timestamps` and `video_timestamps`.
+        By default "milliseconds".
     """
 
     def __init__(
@@ -113,6 +116,18 @@ class TimeIndexMapper:
             mapping_results=self._video_frame_idx_to_raw_time,
             header="Mapping results from video frame indices to raw times:",
         )
+
+    def raw_time_to_video_frame_index(self, raw_time_seconds: float) -> MappingResult:
+        """Convert a time point from raw data (in seconds) to video frame index."""
+        # Find the raw index that corresponds to the given time point.
+        # We cannot use the given time directly, as it may not match exactly with raw
+        # times.
+        raw_idx = self._raw_time_to_index(raw_time_seconds)
+        return self._raw_idx_to_video_frame_idx[raw_idx]
+
+    def video_frame_index_to_raw_time(self, video_frame_idx: int) -> MappingResult:
+        """Convert a video frame index to a raw data time point (in seconds)."""
+        return self._video_frame_idx_to_raw_time[video_frame_idx]
 
     def _validate_timestamps(self) -> None:
         """Validate that raw and video timestamps are strictly increasing."""
@@ -380,15 +395,3 @@ class TimeIndexMapper:
             counts[key] += 1
 
         return counts
-
-    def raw_time_to_video_frame_index(self, raw_time_seconds: float) -> MappingResult:
-        """Convert a time point from raw data (in seconds) to video frame index."""
-        # Find the raw index that corresponds to the given time point.
-        # We cannot use the given time directly, as it may not match exactly with raw
-        # times.
-        raw_idx = self._raw_time_to_index(raw_time_seconds)
-        return self._raw_idx_to_video_frame_idx[raw_idx]
-
-    def video_frame_index_to_raw_time(self, video_frame_idx: int) -> MappingResult:
-        """Convert a video frame index to a raw data time point (in seconds)."""
-        return self._video_frame_idx_to_raw_time[video_frame_idx]
