@@ -86,7 +86,7 @@ class TimeIndexMapper:
             video_timestamps
         )
 
-        self._validate_timestamps()
+        self._validate_input_times()
         self._diagnose_timestamps()
 
         # Precompute mappings from raw indices to video frame indices
@@ -133,8 +133,7 @@ class TimeIndexMapper:
         """Convert a video frame index to a raw data time point (in seconds)."""
         return self._video_frame_idx_to_raw_time[video_frame_idx]
 
-    def _validate_timestamps(self) -> None:
-        """Validate that raw and video timestamps are strictly increasing."""
+    def _validate_input_times(self) -> None:
         if not np.all(np.diff(self._raw_timestamps_ms) >= 0):
             raise ValueError(
                 "Raw timestamps are not strictly increasing. "
@@ -143,6 +142,11 @@ class TimeIndexMapper:
         if not np.all(np.diff(self._video_timestamps_ms) >= 0):
             raise ValueError(
                 "Video timestamps are not strictly increasing. "
+                "This is required for the mapping to work correctly."
+            )
+        if not len(self._raw_timestamps_ms) == len(self._raw_times):
+            raise ValueError(
+                "Length of raw timestamps does not match the length of raw times. "
                 "This is required for the mapping to work correctly."
             )
 
