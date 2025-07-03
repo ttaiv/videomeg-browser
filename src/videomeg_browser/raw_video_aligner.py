@@ -400,8 +400,9 @@ class RawVideoAligner:
             mapping[source_idx] = MappingSuccess(result=result)
 
         # Make sure that all the source indices were mapped.
-        if len(mapping) != len(source_timestamps_ms):
-            raise AssertionError("Built mapping does not cover all source indices.")
+        assert len(mapping) == len(source_timestamps_ms), (
+            "Mapping should cover all the source indices."
+        )
 
         return mapping
 
