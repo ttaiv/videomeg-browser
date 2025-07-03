@@ -58,29 +58,37 @@ def test_with_matching_timestamps() -> None:
         _assert_mapping_success(mapping_to_raw_time, expected_value=correct_raw_time)
 
 
-def test_with_realistic_timestamps() -> None:
-    """Test mapping with simulated 30 fps video and 1000 Hz raw data."""
-    video_fps = 30.0
-    raw_sfreq = 1000.0
-    time_seconds = 10  # Duration of the video and raw data
-    # Can be anything, choosing something else than 0 to simulate unix timestamps.
-    timestamp_start_time_ms = 7000  # milliseconds
-
+@pytest.mark.parametrize(
+    "video_fps, raw_sfreq, duration_seconds, timestamp_start_time_ms",
+    [
+        (30.0, 1000.0, 10, 7000.0),  # 30 fps video, 1000 Hz raw data for 10 seconds
+        (60.0, 1000.0, 5, 1.1),
+        (29.95, 1100.0, 15, 999.9),
+        (100.0, 100.0, 20, 0.0),
+    ],
+)
+def test_with_realistic_timestamps(
+    video_fps: float,
+    raw_sfreq: float,
+    duration_seconds: int,
+    timestamp_start_time_ms: float,  # this should not matter for the test
+) -> None:
+    """Test mapping with simulated realistic raw and video timestamps."""
     # Simulate raw and video timestamps in milliseconds.
     video_timestamps_ms = np.arange(
         timestamp_start_time_ms,
-        timestamp_start_time_ms + time_seconds * 1000,
+        timestamp_start_time_ms + duration_seconds * 1000,
         1000.0 / video_fps,
         dtype=np.float64,
     )
     raw_timestamps_ms = np.arange(
         timestamp_start_time_ms,
-        timestamp_start_time_ms + time_seconds * 1000,
+        timestamp_start_time_ms + duration_seconds * 1000,
         1000.0 / raw_sfreq,
         dtype=np.float64,
     )
-    # Create arbitrary raw times
-    raw_times = np.arange(10, 10 + len(raw_timestamps_ms), dtype=np.float64)
+    # Create raw times that start from zero and correspond to sampling frequency.
+    raw_times = np.arange(0, duration_seconds, step=1 / raw_sfreq, dtype=np.float64)
     raw_time_to_index = _make_simple_raw_time_to_index_function(raw_times)
 
     # Create the aligner to test.
