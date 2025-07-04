@@ -67,28 +67,44 @@ def test_with_matching_timestamps() -> None:
         (100.0, 100.0, 20, 0.0),
     ],
 )
-def test_with_realistic_timestamps(
+def test_with_constant_interval_timestamps(
     video_fps: float,
     raw_sfreq: float,
     duration_seconds: int,
     timestamp_start_time_ms: float,  # this should not matter for the test
 ) -> None:
-    """Test mapping with simulated realistic raw and video timestamps."""
+    """Test mapping with simulated constant interval raw and video timestamps."""
     # Simulate raw and video timestamps in milliseconds.
-    video_timestamps_ms = np.arange(
+    video_timestamps_ms = np.linspace(
         timestamp_start_time_ms,
         timestamp_start_time_ms + duration_seconds * 1000,
-        1000.0 / video_fps,
-        dtype=np.float64,
+        num=int(video_fps * duration_seconds),  # number of frames in video
+        endpoint=False,
     )
-    raw_timestamps_ms = np.arange(
+    raw_timestamps_ms = np.linspace(
         timestamp_start_time_ms,
         timestamp_start_time_ms + duration_seconds * 1000,
-        1000.0 / raw_sfreq,
-        dtype=np.float64,
+        num=int(raw_sfreq * duration_seconds),  # number of raw samples
+        endpoint=False,
     )
     # Create raw times that start from zero and correspond to sampling frequency.
-    raw_times = np.arange(0, duration_seconds, step=1 / raw_sfreq, dtype=np.float64)
+    raw_times = np.linspace(
+        0, duration_seconds, num=int(raw_sfreq * duration_seconds), endpoint=False
+    )
+
+    _run_alignment_test(video_timestamps_ms, raw_timestamps_ms, raw_times)
+
+
+def _run_alignment_test(
+    video_timestamps_ms: npt.NDArray[np.floating],
+    raw_timestamps_ms: npt.NDArray[np.floating],
+    raw_times: npt.NDArray[np.floating],
+) -> None:
+    """Run the alignment test with given video and raw timestamps and raw times.
+
+    Tests mapping all the video frame indices (indices of `video_timestamps_ms`) to raw
+    times and all `raw_times` to video frame indices.
+    """
     raw_time_to_index = _make_simple_raw_time_to_index_function(raw_times)
 
     # Create the aligner to test.
