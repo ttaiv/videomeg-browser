@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -59,18 +60,25 @@ def test_with_matching_timestamps() -> None:
 
 
 @pytest.mark.parametrize(
-    "video_fps, raw_sfreq, duration_seconds, timestamp_start_time_ms",
+    "video_fps, raw_sfreq, duration_seconds, select_on_tie, timestamp_start_time_ms",
     [
-        (30.0, 1000.0, 10, 7000.0),  # 30 fps video, 1000 Hz raw data for 10 seconds
-        (60.0, 1000.0, 5, 1.1),
-        (29.95, 1100.0, 15, 999.9),
-        (100.0, 100.0, 20, 0.0),
+        (
+            30.0,  # 30 fps video
+            1000.0,  # 1000 Hz raw data
+            10,  # for 10 seconds
+            "left",  # select left timestamp when distance is equal
+            7000.0,  # start time of timestamps in milliseconds
+        ),
+        (60.0, 1000.0, 5, "right", 1.1),  # 60 fps video, 1000 Hz raw data for 5 seconds
+        (29.95, 1100.0, 15, "left", 999.9),
+        (100.0, 100.0, 20, "right", 0.0),
     ],
 )
 def test_with_constant_interval_timestamps(
     video_fps: float,
     raw_sfreq: float,
     duration_seconds: int,
+    select_on_tie: Literal["left", "right"],
     timestamp_start_time_ms: float,  # this should not matter for the test
 ) -> None:
     """Test mapping with simulated constant interval raw and video timestamps."""
@@ -92,13 +100,16 @@ def test_with_constant_interval_timestamps(
         0, duration_seconds, num=int(raw_sfreq * duration_seconds), endpoint=False
     )
 
-    _run_alignment_test(video_timestamps_ms, raw_timestamps_ms, raw_times)
+    _run_alignment_test(
+        video_timestamps_ms, raw_timestamps_ms, raw_times, select_on_tie
+    )
 
 
 def _run_alignment_test(
     video_timestamps_ms: npt.NDArray[np.floating],
     raw_timestamps_ms: npt.NDArray[np.floating],
     raw_times: npt.NDArray[np.floating],
+    select_on_tie: Literal["left", "right"],
 ) -> None:
     """Run the alignment test with given video and raw timestamps and raw times.
 
@@ -113,6 +124,7 @@ def _run_alignment_test(
         video_timestamps_ms,
         raw_times=raw_times,
         raw_time_to_index=raw_time_to_index,
+        select_on_tie=select_on_tie,
     )
 
     # Calculate range to which video and raw timestamps must fall in order to yield
@@ -132,7 +144,7 @@ def _run_alignment_test(
         )
         # Manually calculate the raw time closest to the video timestamp.
         closest_raw_time = _find_closest_raw_time(
-            raw_timestamps_ms, video_ts, raw_times
+            raw_timestamps_ms, video_ts, raw_times, side=select_on_tie
         )
         # Assert that mapping result is either failure with appropriate reason or a
         # success with the closest raw time, depending on min and max valid timestamps.
@@ -151,7 +163,7 @@ def _run_alignment_test(
             test_raw_time
         )
         closest_video_frame_idx = _find_closest_video_frame_index(
-            video_timestamps_ms, raw_ts
+            video_timestamps_ms, raw_ts, side=select_on_tie
         )
         _assert_correct_mapping(
             source_ts=raw_ts,
@@ -163,20 +175,43 @@ def _run_alignment_test(
 
 
 def _find_closest_video_frame_index(
-    video_timestamps: npt.NDArray[np.floating], raw_timestamp: float
+    video_timestamps: npt.NDArray[np.floating],
+    raw_timestamp: float,
+    side: Literal["left", "right"],
 ) -> int:
     """Find the video index closest to a raw timestamp to be used as ground truth."""
-    closest_video_frame_idx = int(np.argmin(np.abs(video_timestamps - raw_timestamp)))
-    return closest_video_frame_idx
+    if side == "left":
+        # Use argmin nomally, as it returns the first occurrence of the minimum value.
+        closest_video_frame_idx = int(
+            np.argmin(np.abs(video_timestamps - raw_timestamp))
+        )
+    elif side == "right":
+        # Use argmin on a reversed array to get the rightmost occurrence of the minimum.
+        reversed_idx = np.argmin(np.abs(video_timestamps[::-1] - raw_timestamp))
+        closest_video_frame_idx = len(video_timestamps) - 1 - reversed_idx
+    else:
+        raise ValueError(f"Invalid side '{side}'. Use 'left' or 'right'.")
+
+    return int(closest_video_frame_idx)
 
 
 def _find_closest_raw_time(
     raw_timestamps: npt.NDArray[np.floating],
     video_timestamp: float,
     raw_times: npt.NDArray[np.floating],
+    side: Literal["left", "right"],
 ) -> float:
     """Find the raw time closest to a video timestamp to be used as ground truth."""
-    closest_raw_idx = int(np.argmin(np.abs(raw_timestamps - video_timestamp)))
+    if side == "left":
+        # Use argmin nomally, as it returns the first occurrence of the minimum value.
+        closest_raw_idx = int(np.argmin(np.abs(raw_timestamps - video_timestamp)))
+    elif side == "right":
+        # Use argmin on a reversed array to get the rightmost occurrence of the minimum.
+        reversed_idx = np.argmin(np.abs(raw_timestamps[::-1] - video_timestamp))
+        closest_raw_idx = len(raw_timestamps) - 1 - reversed_idx
+    else:
+        raise ValueError(f"Invalid side '{side}'. Use 'left' or 'right'.")
+
     closest_raw_time = raw_times[closest_raw_idx]
     return closest_raw_time
 
