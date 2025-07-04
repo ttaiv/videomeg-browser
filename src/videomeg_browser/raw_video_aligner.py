@@ -64,6 +64,11 @@ class RawVideoAligner:
     timestamp_unit : Literal["milliseconds", "seconds"], optional
         The unit of the timestamps in `raw_timestamps` and `video_timestamps`.
         By default "milliseconds".
+    select_on_tie : Literal["left", "right"], optional
+        How to select the result when a source timestamp is exactly between two target
+        timestamps. If "left", the raw time or video frame index corresponding
+        to the left target timestamp is selected. If "right", the one corresponding
+        to the right target timestamp is selected. By default "left".
     """
 
     def __init__(
@@ -73,10 +78,12 @@ class RawVideoAligner:
         raw_times: NDArray[np.floating],
         raw_time_to_index: Callable[[float], int],
         timestamp_unit: Literal["milliseconds", "seconds"] = "milliseconds",
+        select_on_tie: Literal["left", "right"] = "left",
     ) -> None:
         self._raw_times = raw_times
         self._raw_time_to_index = raw_time_to_index
         self._timestamp_unit = timestamp_unit
+        self._select_on_tie = select_on_tie
         # Internally store timestamps in milliseconds.
         # Set _timestamp unit before calling _get_timestamps_in_milliseconds!
         self._raw_timestamps_ms = self._get_timestamps_in_milliseconds(raw_timestamps)
@@ -296,10 +303,18 @@ class RawVideoAligner:
         left_distances = np.abs(source_times - left_target)
         right_distances = np.abs(source_times - right_target)
 
-        # Choose the closest target time
-        closest_indices = np.where(
-            left_distances < right_distances, insert_indices - 1, insert_indices
-        )
+        # Determine which target time is closer and in case of a tie,
+        # select based on the _select_on_tie attribute.
+        if self._select_on_tie == "left":
+            comparison = left_distances <= right_distances
+        elif self._select_on_tie == "right":
+            comparison = left_distances < right_distances
+        else:
+            raise ValueError(
+                f"Unknown select_on_tie value: {self._select_on_tie}. "
+                "Expected 'left' or 'right'."
+            )
+        closest_indices = np.where(comparison, insert_indices - 1, insert_indices)
 
         return closest_indices
 
