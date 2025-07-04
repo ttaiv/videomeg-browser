@@ -14,30 +14,32 @@ from videomeg_browser.raw_video_aligner import (
 )
 
 
-def test_with_matching_timestamps() -> None:
+@pytest.mark.parametrize(
+    "timestamps_start_time_ms, timestamps_end_time_ms, timestamps_step_ms",
+    [
+        (5000, 9000, 1000),  # 5 seconds to 9 seconds with 1 second step
+        (1000, 2000, 100),  # 1 second to 2 seconds with 100 ms step
+        (0, 5000, 500),  # 0 seconds to 5 seconds with 500 ms step
+        (1234, 5678, 123),  # arbitrary start and end times with 123 ms step
+    ],
+)
+def test_with_matching_timestamps(
+    timestamps_start_time_ms: int, timestamps_end_time_ms: int, timestamps_step_ms: int
+) -> None:
     """Test mapping with matching raw and video timestamps (only successes).
 
     When raw and video timestamps match exactly, the mapping should be one-to-one
     and always succeed.
     """
-    # All in milliseconds
-    timestamps_start_time = 5000
-    timestamps_end_time = 9000
-    timestamps_step = 1000
     # Video timesamps corresponding to each video frame in milliseconds
     video_timestamps_ms = np.arange(
-        timestamps_start_time,
-        timestamps_end_time + 1,
-        timestamps_step,
+        timestamps_start_time_ms,
+        timestamps_end_time_ms + 1,  # +1 to include the end time
+        timestamps_step_ms,
         dtype=np.float64,
     )
     # Raw timestamps corresponding to each raw data point in milliseconds
-    raw_timestamps_ms = np.arange(
-        timestamps_start_time,
-        timestamps_end_time + 1,
-        timestamps_step,
-        dtype=np.float64,
-    )
+    raw_timestamps_ms = video_timestamps_ms.copy()
 
     # These could be anything just as long there as as many as the raw timestamps.
     raw_times = np.arange(len(raw_timestamps_ms), dtype=np.float64)
