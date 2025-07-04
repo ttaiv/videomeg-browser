@@ -15,7 +15,11 @@ from videomeg_browser.raw_video_aligner import (
 
 
 def test_with_matching_timestamps() -> None:
-    """Test mapping with matching raw and video timestamps."""
+    """Test mapping with matching raw and video timestamps (only successes).
+
+    When raw and video timestamps match exactly, the mapping should be one-to-one
+    and always succeed.
+    """
     # All in milliseconds
     timestamps_start_time = 5000
     timestamps_end_time = 9000
@@ -69,9 +73,27 @@ def test_with_matching_timestamps() -> None:
             "left",  # select left timestamp when distance is equal
             7000.0,  # start time of timestamps in milliseconds
         ),
-        (60.0, 1000.0, 5, "right", 1.1),  # 60 fps video, 1000 Hz raw data for 5 seconds
-        (29.95, 1100.0, 15, "left", 999.9),
-        (100.0, 100.0, 20, "right", 0.0),
+        (
+            60.0,  # 60 fps video
+            1000.0,  # 1000 Hz raw data
+            5,  # for 5 seconds
+            "right",  # select right timestamp when distance is equal
+            1.1,  # start time of timestamps in milliseconds
+        ),
+        (
+            29.95,  # fps,
+            1100.0,  # Hz
+            15,  # for 15 seconds
+            "left",
+            999.9,  # ms
+        ),
+        (
+            90,  # fps
+            600,  # Hz
+            20,  # for 20 seconds
+            "right",
+            0.0,  # ms
+        ),
     ],
 )
 def test_with_constant_interval_timestamps(
@@ -95,6 +117,83 @@ def test_with_constant_interval_timestamps(
         num=int(raw_sfreq * duration_seconds),  # number of raw samples
         endpoint=False,
     )
+    # Create raw times that start from zero and correspond to sampling frequency.
+    raw_times = np.linspace(
+        0, duration_seconds, num=int(raw_sfreq * duration_seconds), endpoint=False
+    )
+
+    _run_alignment_test(
+        video_timestamps_ms, raw_timestamps_ms, raw_times, select_on_tie
+    )
+
+
+@pytest.mark.parametrize(
+    "video_fps, raw_sfreq, duration_seconds, select_on_tie, timestamp_start_time_ms",
+    [
+        (
+            30.0,  # 30 fps video
+            1000.0,  # 1000 Hz raw data
+            10,  # for 10 seconds
+            "left",  # select left timestamp when distance is equal
+            7000.0,  # start time of timestamps in milliseconds
+        ),
+        (
+            60.0,  # 60 fps video
+            1000.0,  # 1000 Hz raw data
+            5,  # for 5 seconds
+            "right",  # select right timestamp when distance is equal
+            1.1,  # start time of timestamps in milliseconds
+        ),
+        (
+            29.95,  # fps,
+            1100.0,  # Hz
+            15,  # for 15 seconds
+            "left",
+            999.9,  # ms
+        ),
+        (
+            90,  # fps
+            600,  # Hz
+            20,  # for 20 seconds
+            "right",
+            0.0,  # ms
+        ),
+    ],
+)
+def test_with_random_timestamps(
+    video_fps: float,
+    raw_sfreq: float,
+    duration_seconds: int,
+    select_on_tie: Literal["left", "right"],
+    timestamp_start_time_ms: float,  # this should not matter for the test
+) -> None:
+    """Test mapping with random raw and video timestamps.
+
+    Ensures that the mapping works even when timestamps are just some strictly
+    increasing numbers that are not evenly spaced.
+    """
+    rng = np.random.default_rng(42)  # for reproducibility
+    raw_timestamps_ms = np.sort(
+        rng.uniform(
+            low=timestamp_start_time_ms,
+            high=timestamp_start_time_ms + duration_seconds * 1000,
+            size=int(raw_sfreq * duration_seconds),
+        )
+    )
+    video_timestamps_ms = np.sort(
+        rng.uniform(
+            low=timestamp_start_time_ms,
+            high=timestamp_start_time_ms + duration_seconds * 1000,
+            size=int(video_fps * duration_seconds),
+        )
+    )
+    assert np.all(np.diff(raw_timestamps_ms) > 0), (
+        "Raw timestamps must be strictly increasing. Fix the test."
+    )
+    assert np.all(np.diff(video_timestamps_ms) > 0), (
+        "Video timestamps must be strictly increasing. Fix the test."
+    )
+
     # Create raw times that start from zero and correspond to sampling frequency.
     raw_times = np.linspace(
         0, duration_seconds, num=int(raw_sfreq * duration_seconds), endpoint=False
