@@ -65,9 +65,17 @@ class VideoBrowser(QWidget):
         # Set up timer that allow automatic frame updates (playing the video)
         self._play_timer = QTimer(parent=self)
         # Milliseconds between frame updates so that video is played with original fps
-        self._play_timer_interval_ms = int(1000 / video.fps)
+        self._play_timer_interval_ms = round(1000 / video.fps)
         self._play_timer.setInterval(self._play_timer_interval_ms)
         self._play_timer.timeout.connect(self._play_next_frame)
+
+        # Instantiate frame tracker for monitoring video fps when playing.
+        self._frame_rate_tracker = FrameRateTracker(
+            max_intervals_to_average=2 * round(video.fps)  # average over two seconds
+        )
+        # Update the displayed frame rate once per second.
+        self.n_frames_between_fps_updates = round(video.fps)
+        self.n_frames_since_last_fps_update = 0
 
         self.setWindowTitle(self._video.fname)
         self.resize(1000, 800)  # Set initial size of the window
@@ -109,6 +117,10 @@ class VideoBrowser(QWidget):
         navigation_layout.addWidget(self._button)
 
         layout.addLayout(navigation_layout)
+
+        self._fps_label = QLabel()
+        self._fps_label.setText("FPS: -")
+        layout.addWidget(self._fps_label)
 
         if show_sync_status:
             self._sync_status_label = QLabel()
@@ -227,6 +239,9 @@ class VideoBrowser(QWidget):
         self._is_playing = False
         self._play_timer.stop()
         self._play_pause_button.setText("Play")
+        self._fps_label.setText("FPS: -")
+        # Reset the frame tracker to start fresh with the next play.
+        self._frame_rate_tracker.reset()
 
     @Slot()
     def toggle_play_pause(self) -> None:
@@ -240,9 +255,23 @@ class VideoBrowser(QWidget):
     def _play_next_frame(self) -> None:
         """Play next frame when play timer timeouts."""
         success = self.display_next_frame()
-        if not success:
+        if success:
+            self._update_frame_rate()
+        else:
             # Pause the video if we are in the end
             self.pause_video()
+
+    def _update_frame_rate(self) -> None:
+        """Update frame rate state and possibly also displayed fps."""
+        # Tell frame rate tracker that a new frame was displayed.
+        self._frame_rate_tracker.notify_new_frame()
+        self.n_frames_since_last_fps_update += 1
+        if self.n_frames_since_last_fps_update > self.n_frames_between_fps_updates:
+            # Update the displayed frame rate.
+            self._fps_label.setText(
+                f"FPS: {round(self._frame_rate_tracker.get_current_frame_rate())}"
+            )
+            self.n_frames_since_last_fps_update = 0
 
     def _update_play_button_enabled(self) -> None:
         """Enable play button unless at the last frame."""
