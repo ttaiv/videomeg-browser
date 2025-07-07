@@ -1,6 +1,8 @@
 """Contains VideoBrowser Qt widget for displaying video."""
 
+import collections
 import logging
+import time
 from enum import Enum, auto
 
 import pyqtgraph as pg
@@ -265,3 +267,65 @@ class VideoBrowser(QWidget):
         self._frame_slider.blockSignals(True)
         self._frame_slider.setValue(self._current_frame_idx)
         self._frame_slider.blockSignals(False)
+
+
+class FrameRateTracker:
+    """Tracks the frame rate (FPS) of playing video.
+
+    Parameters
+    ----------
+    max_intervals_to_average: int
+        The maximum number of frame intervals to average when estimating FPS.
+    """
+
+    def __init__(self, max_intervals_to_average: int) -> None:
+        if max_intervals_to_average < 1:
+            raise ValueError("Interval count must be a positive integer.")
+        # When the tracker was notified of the last frame
+        self._last_frame_time: float | None = None
+        # Queue that holds most recent frame intervals
+        self._frame_intervals: collections.deque[float] = collections.deque(
+            maxlen=max_intervals_to_average
+        )
+
+    def notify_new_frame(self) -> None:
+        """Notify the tracker that a new frame was displayed."""
+        now = time.perf_counter()
+        if self._last_frame_time is not None:
+            # Calculate and store the interval between last frame and this frame.
+            interval = now - self._last_frame_time
+            self._frame_intervals.append(interval)
+
+        self._last_frame_time = now
+
+    def get_current_frame_rate(self) -> float:
+        """Return the current frame rate estimated with average frame interval.
+
+        Returns
+        -------
+        float
+            The current frame rate (FPS). Will be zero if `notify_new_frame` has
+            been called less than two times.
+        """
+        if not self._frame_intervals:
+            logger.debug(
+                "No frame intervals to use for current frame rate estimation. "
+                "Returning zero."
+            )
+            return 0.0
+        average_interval = sum(self._frame_intervals) / len(self._frame_intervals)
+        if average_interval == 0:
+            logger.warning(
+                "Average frame interval is zero. Cannot estimate FPS. Returning zero."
+            )
+            return 0.0
+
+        return 1.0 / average_interval
+
+    def reset(self) -> None:
+        """Forget the past frame intervals.
+
+        Use this to start the tracking fresh with next call to `notify_new_frame`.
+        """
+        self._frame_intervals.clear()
+        self._last_frame_time = None
