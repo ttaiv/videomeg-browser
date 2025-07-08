@@ -1,6 +1,8 @@
 """Contains VideoBrowser Qt widget for displaying video."""
 
+import collections
 import logging
+import time
 from enum import Enum, auto
 
 import pyqtgraph as pg
@@ -63,9 +65,17 @@ class VideoBrowser(QWidget):
         # Set up timer that allow automatic frame updates (playing the video)
         self._play_timer = QTimer(parent=self)
         # Milliseconds between frame updates so that video is played with original fps
-        self._play_timer_interval_ms = int(1000 / video.fps)
+        self._play_timer_interval_ms = round(1000 / video.fps)
         self._play_timer.setInterval(self._play_timer_interval_ms)
         self._play_timer.timeout.connect(self._play_next_frame)
+
+        # Instantiate frame tracker for monitoring video fps when playing.
+        self._frame_rate_tracker = FrameRateTracker(
+            max_intervals_to_average=2 * round(video.fps)  # average over two seconds
+        )
+        # Update the displayed frame rate once per second.
+        self.n_frames_between_fps_updates = round(video.fps)
+        self.n_frames_since_last_fps_update = 0
 
         self.setWindowTitle(self._video.fname)
         self.resize(1000, 800)  # Set initial size of the window
@@ -107,6 +117,10 @@ class VideoBrowser(QWidget):
         navigation_layout.addWidget(self._button)
 
         layout.addLayout(navigation_layout)
+
+        self._fps_label = QLabel()
+        self._fps_label.setText("FPS: -")
+        layout.addWidget(self._fps_label)
 
         if show_sync_status:
             self._sync_status_label = QLabel()
@@ -225,6 +239,9 @@ class VideoBrowser(QWidget):
         self._is_playing = False
         self._play_timer.stop()
         self._play_pause_button.setText("Play")
+        self._fps_label.setText("FPS: -")
+        # Reset the frame tracker to start fresh with the next play.
+        self._frame_rate_tracker.reset()
 
     @Slot()
     def toggle_play_pause(self) -> None:
@@ -238,9 +255,23 @@ class VideoBrowser(QWidget):
     def _play_next_frame(self) -> None:
         """Play next frame when play timer timeouts."""
         success = self.display_next_frame()
-        if not success:
+        if success:
+            self._update_frame_rate()
+        else:
             # Pause the video if we are in the end
             self.pause_video()
+
+    def _update_frame_rate(self) -> None:
+        """Update frame rate state and possibly also displayed fps."""
+        # Tell frame rate tracker that a new frame was displayed.
+        self._frame_rate_tracker.notify_new_frame()
+        self.n_frames_since_last_fps_update += 1
+        if self.n_frames_since_last_fps_update >= self.n_frames_between_fps_updates:
+            # Update the displayed frame rate.
+            self._fps_label.setText(
+                f"FPS: {round(self._frame_rate_tracker.get_current_frame_rate())}"
+            )
+            self.n_frames_since_last_fps_update = 0
 
     def _update_play_button_enabled(self) -> None:
         """Enable play button unless at the last frame."""
@@ -265,3 +296,65 @@ class VideoBrowser(QWidget):
         self._frame_slider.blockSignals(True)
         self._frame_slider.setValue(self._current_frame_idx)
         self._frame_slider.blockSignals(False)
+
+
+class FrameRateTracker:
+    """Tracks the frame rate (FPS) of playing video.
+
+    Parameters
+    ----------
+    max_intervals_to_average: int
+        The maximum number of frame intervals to average when estimating FPS.
+    """
+
+    def __init__(self, max_intervals_to_average: int) -> None:
+        if max_intervals_to_average < 1:
+            raise ValueError("Interval count must be a positive integer.")
+        # When the tracker was notified of the last frame
+        self._last_frame_time: float | None = None
+        # Queue that holds most recent frame intervals
+        self._frame_intervals: collections.deque[float] = collections.deque(
+            maxlen=max_intervals_to_average
+        )
+
+    def notify_new_frame(self) -> None:
+        """Notify the tracker that a new frame was displayed."""
+        now = time.perf_counter()
+        if self._last_frame_time is not None:
+            # Calculate and store the interval between last frame and this frame.
+            interval = now - self._last_frame_time
+            self._frame_intervals.append(interval)
+
+        self._last_frame_time = now
+
+    def get_current_frame_rate(self) -> float:
+        """Return the current frame rate estimated with average frame interval.
+
+        Returns
+        -------
+        float
+            The current frame rate (FPS). Will be zero if `notify_new_frame` has
+            been called less than two times.
+        """
+        if not self._frame_intervals:
+            logger.debug(
+                "No frame intervals to use for current frame rate estimation. "
+                "Returning zero."
+            )
+            return 0.0
+        average_interval = sum(self._frame_intervals) / len(self._frame_intervals)
+        if average_interval == 0:
+            logger.warning(
+                "Average frame interval is zero. Cannot estimate FPS. Returning zero."
+            )
+            return 0.0
+
+        return 1.0 / average_interval
+
+    def reset(self) -> None:
+        """Forget the past frame intervals.
+
+        Use this to start the tracking fresh with next call to `notify_new_frame`.
+        """
+        self._frame_intervals.clear()
+        self._last_frame_time = None
