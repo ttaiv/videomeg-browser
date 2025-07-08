@@ -266,7 +266,7 @@ class VideoBrowser(QWidget):
         # Tell frame rate tracker that a new frame was displayed.
         self._frame_rate_tracker.notify_new_frame()
         self.n_frames_since_last_fps_update += 1
-        if self.n_frames_since_last_fps_update > self.n_frames_between_fps_updates:
+        if self.n_frames_since_last_fps_update >= self.n_frames_between_fps_updates:
             # Update the displayed frame rate.
             self._fps_label.setText(
                 f"FPS: {round(self._frame_rate_tracker.get_current_frame_rate())}"
