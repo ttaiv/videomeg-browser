@@ -46,6 +46,8 @@ class MappingFailure(MappingResult):
 class RawVideoAligner:
     """Maps time points from raw data to video frames and vice versa.
 
+    Uses the provided timestamps to simply find the closest matching time.
+
     Parameters
     ----------
     raw_timestamps : NDArray[np.floating]
@@ -313,9 +315,8 @@ class RawVideoAligner:
             "and their closest target timestamps):"
         )
         logger.info(
-            f"    min={np.min(errors_ms):.3f} ms, "
-            f"    max={np.max(errors_ms):.3f} ms, mean={np.mean(errors_ms):.3f} "
-            f"    ms, std={np.std(errors_ms):.3f} ms"
+            f"    min={np.min(errors_ms):.3f} ms, max={np.max(errors_ms):.3f} ms, "
+            f"mean={np.mean(errors_ms):.3f} ms, std={np.std(errors_ms):.3f} ms"
         )
         if np.any(errors_ms < 0):
             logger.warning("Some distances between timestamps are negative.")
