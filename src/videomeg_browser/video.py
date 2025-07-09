@@ -8,6 +8,7 @@ import logging
 import struct
 from abc import ABC, abstractmethod
 
+import cv2
 import imageio.v3 as iio
 import numpy as np
 import numpy.typing as npt
@@ -86,17 +87,11 @@ class VideoFile(ABC):
         pass
 
 
-# Implementation of VideoFile using OpenCV (cv2).
-# Commented out to avoid dependency on OpenCV.
-
-'''
-import cv2
-from cv2.typing import MatLike
 class VideoFileCV2(VideoFile):
     """Container that holds a video file and provides methods to read frames from it."""
 
     def __init__(self, fname: str) -> None:
-        self.fname = fname
+        self._fname = fname
         # Capture the video file for processing
         self._cap = cv2.VideoCapture(fname)
         if not self._cap.isOpened():
@@ -105,6 +100,51 @@ class VideoFileCV2(VideoFile):
         # Matches to cv2.CAP_PROP_POS_FRAMES and tells the index of the next
         # frame to be read
         self._next_frame_idx = 0
+
+    def __del__(self) -> None:
+        """Ensure the video capture object is released when the object is deleted."""
+        self.close()
+
+    def __enter__(self) -> "VideoFileCV2":
+        """Enter the runtime context for the video file."""
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        """Exit the runtime context and release the video file."""
+        self.close()
+
+    def close(self) -> None:
+        """Release the video capture object."""
+        if self._cap.isOpened():
+            self._cap.release()
+        else:
+            logger.debug(
+                "Trying to release an already released video capture, ignoring."
+            )
+
+    def get_frame_at(self, frame_idx: int):
+        """Read a specific frame from the video file.
+
+        Parameters
+        ----------
+        frame_idx : int
+            Index of the frame to read.
+
+        Returns
+        -------
+        npt.NDArray[np.uint8] | None
+            The frame as a NumPy array of shape (height, width, 3) or None if the frame
+            cannot be read. The color format is RGB and the frame is in row-major order.
+        """
+        if not self._cap.isOpened():
+            raise ValueError("Trying to read from a closed video file.")
+
+        if frame_idx < 0 or frame_idx >= self.frame_count:
+            logger.debug(f"Frame index out of bounds: {frame_idx}, returning None.")
+            return None
+
+        self._set_next_frame(frame_idx)
+        return self._read_next_frame()
 
     @property
     def frame_count(self) -> int:
@@ -122,7 +162,11 @@ class VideoFileCV2(VideoFile):
     def frame_height(self) -> int:
         return int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    def _read_next_frame(self) -> MatLike | None:
+    @property
+    def fname(self) -> str:
+        return self._fname
+
+    def _read_next_frame(self) -> npt.NDArray[np.uint8] | None:
         """Read the next frame from the video file."""
         if not self._cap.isOpened():
             raise ValueError("Trying to read from a closed video file.")
@@ -136,19 +180,7 @@ class VideoFileCV2(VideoFile):
         # Convert the frame from BGR to RGB format
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        return frame
-
-    def get_frame_at(self, frame_idx: int) -> MatLike | None:
-        """Read a specific frame from the video file."""
-        if not self._cap.isOpened():
-            raise ValueError("Trying to read from a closed video file.")
-
-        if frame_idx < 0 or frame_idx >= self.frame_count:
-            logger.debug(f"Frame index out of bounds: {frame_idx}, returning None.")
-            return None
-
-        self._set_next_frame(frame_idx)
-        return self._read_next_frame()
+        return frame.astype(np.uint8, copy=False)
 
     def _set_next_frame(self, frame_idx: int) -> None:
         """Set the next frame to be read from the video file."""
@@ -158,23 +190,6 @@ class VideoFileCV2(VideoFile):
         self._next_frame_idx = frame_idx
         self._cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
 
-    def close(self) -> None:
-        """Release the video capture object."""
-        if self._cap.isOpened():
-            self._cap.release()
-
-    def __del__(self) -> None:
-        """Ensure the video capture object is released when the object is deleted."""
-        self.close()
-
-    def __enter__(self) -> "VideoFileCV2":
-        """Enter the runtime context for the video file."""
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
-        """Exit the runtime context and release the video file."""
-        self.close()
-'''
 
 # --- Code below is adapted from PyVideoMEG project ---
 
