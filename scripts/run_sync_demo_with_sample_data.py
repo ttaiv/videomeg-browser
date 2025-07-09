@@ -37,7 +37,7 @@ def _create_binary_stimulus_vector(
 
 
 def _add_stimulus_channel(raw: mne.io.Raw, stimulus_vec: npt.NDArray[np.bool_]) -> None:
-    """Add an artificial binary stimulus channel to the raw data."""
+    """Add an artificial stimulus channel to the raw data."""
     info = mne.create_info(
         ch_names=["artificial_stimulus"],
         sfreq=raw.info["sfreq"],
@@ -94,25 +94,20 @@ def main() -> None:
     )
     video = create_fake_video_with_markers(video_frame_count, stimulus_mask)
 
-    # Create timestamps that will be used to synchronize the raw data and video.
-    raw_timestamps_ms = np.linspace(
-        0, DURATION_SECONDS * 1000, raw.n_times, endpoint=False
-    )
-    video_timestamps_ms = np.linspace(
-        0, DURATION_SECONDS * 1000, video.frame_count, endpoint=False
-    )
-
     # Create mapping between raw data points and video frames
 
     def raw_time_to_index(time: float) -> int:
         """Convert a time in seconds to the corresponding index in the raw data."""
         return raw.time_as_index(time, use_rounding=True)[0]
 
+    # Both raw times and video times go from 0 to DURATION_SECONDS, so we can use them
+    # directly as synchronization timestamps.
     aligner = RawVideoAligner(
-        raw_timestamps_ms,
-        video_timestamps_ms,
+        raw_timestamps=raw.times,
+        video_timestamps=video_times,
         raw_times=raw.times,
         raw_time_to_index=raw_time_to_index,
+        timestamp_unit="seconds",
     )
 
     # Launch the synced raw and video browsers.
