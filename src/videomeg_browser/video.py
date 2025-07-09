@@ -143,7 +143,11 @@ class VideoFileCV2(VideoFile):
             logger.debug(f"Frame index out of bounds: {frame_idx}, returning None.")
             return None
 
-        self._set_next_frame(frame_idx)
+        # Only alter the next frame to be read if necessary.
+        # This increases performance when reading frames sequentially.
+        if frame_idx != self._next_frame_idx:
+            self._set_next_frame(frame_idx)
+
         return self._read_next_frame()
 
     @property
