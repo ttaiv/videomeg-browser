@@ -260,18 +260,6 @@ class RawVideoAligner:
                 "Expected 'milliseconds' or 'seconds'."
             )
 
-    def _get_timestamp_unit_symbol(self) -> str:
-        """Get the symbol for the timestamp unit."""
-        if self._timestamp_unit == "milliseconds":
-            return "ms"
-        elif self._timestamp_unit == "seconds":
-            return "s"
-        else:
-            raise ValueError(
-                f"Unknown timestamp unit: {self._timestamp_unit}. "
-                "Expected 'milliseconds' or 'seconds'."
-            )
-
     def _find_indices_with_closest_values(
         self, source_times: NDArray[np.floating], target_times: NDArray[np.floating]
     ) -> NDArray[np.intp]:
