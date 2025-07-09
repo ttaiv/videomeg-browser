@@ -369,3 +369,105 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
             )
 
         return float(1 / avg_time_diff)
+
+
+class VideoFileImageIO(VideoFile):
+    """Reads standard video files (at least .mp4) using imageio.v3. with pyav plugin.
+
+    NOTE: This seems to be slower than the implementation using OpenCV (cv2).
+    Especially random access to frames is slower. This problem might be mitigated
+    by reading part of the video file into memory at once. Furthermore, for some reason,
+    reading the last frame of the video causes StopIteration exception.
+
+    Parameters
+    ----------
+    fname : str
+        Full path to the video file to be read.
+    """
+
+    def __init__(self, fname: str) -> None:
+        self._fname = fname
+        self._file = iio.imopen(fname, "r", plugin="pyav")
+
+        video_properties = self._file.properties()
+        n_frames = video_properties.n_images
+        if n_frames is None:
+            raise ValueError(
+                "Could not determine the number of frames in the video file."
+            )
+        self._n_frames = n_frames
+        assert self._n_frames == video_properties.shape[0], (
+            "n_images in the properties should match the shape[0]."
+        )
+        self._frame_height = video_properties.shape[1]
+        self._frame_width = video_properties.shape[2]
+
+        metadata = self._file.metadata()
+        if "fps" in metadata:
+            self._fps = metadata["fps"]
+        else:
+            raise ValueError(
+                "Could not determine the frames per second (FPS) of the video file."
+            )
+
+    def __del__(self) -> None:
+        """Ensure the video file is closed when the object is deleted."""
+        self.close()
+
+    def __enter__(self) -> "VideoFileImageIO":
+        """Enter the runtime context with opened video file."""
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        """Exit the runtime context and close the video file."""
+        self.close()
+
+    def close(self) -> None:
+        """Close the video file."""
+        if not hasattr(self, "_file"):
+            # The file opening probably failed during initialization of the object.
+            logger.debug(
+                "Trying to close a video file that was never opened, ignoring."
+            )
+        else:
+            self._file.close()
+
+    def get_frame_at(self, frame_idx: int) -> npt.NDArray[np.uint8] | None:
+        """Read a specific frame from the video file.
+
+        Parameters
+        ----------
+        frame_idx : int
+            Index of the frame to read.
+
+        Returns
+        -------
+        npt.NDArray[np.uint8] | None
+            The frame as a NumPy array of shape (height, width, 3) or None if the frame
+            cannot be read. The color format is RGB and the frame is in row-major order.
+        """
+        if frame_idx < 0 or frame_idx >= self._n_frames:
+            logger.debug(f"Frame index out of bounds: {frame_idx}, returning None.")
+            return None
+
+        return self._file.read(index=frame_idx)
+
+    @property
+    def frame_count(self) -> int:
+        return self._n_frames
+
+    @property
+    def fps(self) -> float:
+        return self._fps
+
+    @property
+    def frame_width(self) -> int:
+        return self._frame_width
+
+    @property
+    def frame_height(self) -> int:
+        return self._frame_height
+
+    @property
+    def fname(self) -> str:
+        return self._fname
