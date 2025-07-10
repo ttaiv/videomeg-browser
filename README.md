@@ -5,14 +5,13 @@ and currently works with video files recorded using software from that project.
 
 ## Installation for development
 
-This project does not have any dependencies outside of MNE Python. However, to
-avoid interference with your stable MNE Python installation, it is recommended to
-install in a separate environment. Here's how to achieve this with `conda`:
+In addition to MNE-Python, this project currently requires package `OpenCV` for standard video file reading.
+Here's how to set up a environment with all the necessary dependencies:
 
-1. Create a new conda environment (named `mne-videomeg`) with MNE Python installed:
+1. Create a new conda environment (named `mne-videomeg`) with MNE-Python and OpenCV:
 
    ```bash
-   conda create --channel=conda-forge --strict-channel-priority --name=mne-videomeg mne
+   conda create --channel=conda-forge --strict-channel-priority --name=mne-videomeg mne opencv
    ```
 
 2. Clone this repository and navigate to project root.
