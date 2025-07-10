@@ -4,6 +4,7 @@ import collections
 import logging
 import time
 from enum import Enum, auto
+from typing import Literal
 
 import pyqtgraph as pg
 from qtpy.QtCore import Qt, QTimer, Signal, Slot  # type: ignore
@@ -41,6 +42,10 @@ class VideoBrowser(QWidget):
     show_sync_status : bool, optional
         Whether to show a label indicating the synchronization status of the video and
         and raw data, by default False
+    display_method : Literal["image_view", "image_item"], optional
+        The method used to display the video frames. If "image_view", uses
+        `pyqtgraph.ImageView` with histogram and extra controls. If "image_item", uses
+        plain 'pyqtgraph.ImageItem' inside a `pyqtgraph.ViewBox`.
     parent : QWidget, optional
         The parent widget for this browser, by default None
     """
@@ -53,6 +58,7 @@ class VideoBrowser(QWidget):
         self,
         video: VideoFile,
         show_sync_status: bool = False,
+        display_method: Literal["image_view", "image_item"] = "image_view",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
@@ -85,9 +91,25 @@ class VideoBrowser(QWidget):
 
         # Create widgets for displaying video frames and navigation controls
 
-        # Widget for displaying video frames
-        self._image_view = pg.ImageView(parent=self)
-        layout.addWidget(self._image_view)
+        if display_method == "image_view":
+            self._image_view = pg.ImageView(parent=self)
+            layout.addWidget(self._image_view)
+        elif display_method == "image_item":
+            # Manually create a GraphicsLayoutWidget with ViewBox and ImageItem.
+            graphics_widget = pg.GraphicsLayoutWidget(parent=self)
+            layout.addWidget(graphics_widget)
+            view_box = graphics_widget.addViewBox()
+            view_box.setAspectLocked(True)
+            # Inverting Y makes the orientation the same as in ImageView.
+            view_box.invertY(True)
+            # The ImageItem has method `setImage` just like ImageView!
+            self._image_view = pg.ImageItem()
+            view_box.addItem(self._image_view)
+        else:
+            raise ValueError(
+                f"Invalid display method: {display_method}. "
+                "Use 'image_view' or 'image_item'."
+            )
 
         # Label to display the current frame index
         self._frame_label = QLabel()
