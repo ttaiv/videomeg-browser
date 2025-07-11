@@ -2,6 +2,7 @@
 
 import collections
 import logging
+import os
 import time
 from enum import Enum, auto
 from typing import Literal
@@ -9,6 +10,7 @@ from typing import Literal
 import pyqtgraph as pg
 from qtpy.QtCore import Qt, QTimer, Signal, Slot  # type: ignore
 from qtpy.QtWidgets import (
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -33,12 +35,12 @@ class SyncStatus(Enum):
 
 
 class VideoBrowser(QWidget):
-    """A browser for viewing video frames.
+    """A browser for viewing video frames from one or more video files.
 
     Parameters
     ----------
-    video : VideoFile
-        The video file to be displayed.
+    videos : list[VideoFile]
+        The video file(s) to be displayed.
     show_sync_status : bool, optional
         Whether to show a label indicating the synchronization status of the video and
         and raw data, by default False
@@ -50,87 +52,115 @@ class VideoBrowser(QWidget):
         The parent widget for this browser, by default None
     """
 
-    # Emits a signal when the displayed frame changes.
-    # The signal carries the index of the new currently displayed frame.
-    sigFrameChanged = Signal(int)
+    # Emits a signal when the displayed frame of any shown video changes.
+    sigFrameChanged = Signal(int, int)  # video index, frame index
 
     def __init__(
         self,
-        video: VideoFile,
+        videos: list[VideoFile],
         show_sync_status: bool = False,
         display_method: Literal["image_view", "image_item"] = "image_view",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
-        self._video = video
+        self._videos = videos
         self._show_sync_status = show_sync_status
+
+        self._multiple_videos = len(videos) > 1
+        # To which video the navigation controls currently apply
+        self._selected_video_idx = 0
         self._is_playing = False  # Whether the frame updates are currently automatic
 
         # Set up timer that allow automatic frame updates (playing the video)
         self._play_timer = QTimer(parent=self)
-        # Milliseconds between frame updates so that video is played with original fps
-        self._play_timer_interval_ms = round(1000 / video.fps)
-        self._play_timer.setInterval(self._play_timer_interval_ms)
+        self._set_play_timer_interval()
         self._play_timer.timeout.connect(self._play_next_frame)
 
         # Instantiate frame tracker for monitoring video fps when playing.
-        self._frame_rate_tracker = FrameRateTracker(
-            max_intervals_to_average=2 * round(video.fps)  # average over two seconds
-        )
-        # Update the displayed frame rate once per second.
-        self._n_frames_between_fps_updates = round(video.fps)
+        self._frame_rate_tracker = FrameRateTracker(max_intervals_to_average=30)
+        # Define helper variables for tracking when to update the displayed fps.
+        self._n_frames_between_fps_updates = 30
         self._n_frames_since_last_fps_update = 0
 
-        self.setWindowTitle(self._video.fname)
+        self.setWindowTitle("Video Browser")
         self.resize(1000, 800)  # Set initial size of the window
 
         # Create layout that will hold widgets that make up the browser
-        layout = QVBoxLayout(self)
+        self._layout = QVBoxLayout(self)
 
-        # Create widgets for displaying video frames and navigation controls
-
-        self._video_view = VideoView(video, display_method=display_method, parent=self)
-        layout.addWidget(self._video_view)
+        # Add video view(s).
+        # If multiple videos are provided, they are displayed side by side.
+        video_layout = QHBoxLayout()
+        self._video_views = [
+            VideoView(video, display_method=display_method, parent=self)
+            for video in videos
+        ]
+        for video_view in self._video_views:
+            video_layout.addWidget(video_view)
+        self._layout.addLayout(video_layout)
 
         # Slider for navigating to a specific frame
         self._frame_slider = QSlider(Qt.Horizontal)
         self._frame_slider.setMinimum(0)
-        self._frame_slider.setMaximum(self._video.frame_count - 1)
+        self._frame_slider.setMaximum(
+            self._videos[self._selected_video_idx].frame_count - 1
+        )
         self._frame_slider.setValue(0)
-        self._frame_slider.valueChanged.connect(self.display_frame_at)
-        layout.addWidget(self._frame_slider)
+        self._frame_slider.valueChanged.connect(self.display_frame_for_selected_video)
+        self._layout.addWidget(self._frame_slider)
 
         # Navigation bar with buttons: previous frame, play/pause, next frame
+        # and possibly a video selector if multiple videos are shown.
         navigation_layout = QHBoxLayout()
+        play_prev_pause_width = 150  # Fixed width for play/pause buttons
 
         self._prev_button = QPushButton("Previous Frame")
-        self._prev_button.clicked.connect(self.display_previous_frame)
+        self._prev_button.clicked.connect(
+            self.display_previous_frame_for_selected_video
+        )
+        self._prev_button.setMinimumWidth(play_prev_pause_width)
         navigation_layout.addWidget(self._prev_button)
 
         self._play_pause_button = QPushButton("Play")
         self._play_pause_button.clicked.connect(self.toggle_play_pause)
+        self._play_pause_button.setMinimumWidth(play_prev_pause_width)
         navigation_layout.addWidget(self._play_pause_button)
-        self._update_play_button_enabled()
 
-        self._button = QPushButton("Next Frame")
-        self._button.clicked.connect(self.display_next_frame)
-        navigation_layout.addWidget(self._button)
+        self._next_button = QPushButton("Next Frame")
+        self._next_button.clicked.connect(self.display_next_frame_for_selected_video)
+        self._next_button.setMinimumWidth(play_prev_pause_width)
+        navigation_layout.addWidget(self._next_button)
 
-        layout.addLayout(navigation_layout)
+        # Add drop-down menu for selecting which video to control.
+        if self._multiple_videos:
+            self._video_selector = QComboBox()
+            self._video_selector.addItems(
+                [os.path.basename(video.fname) for video in self._videos]
+            )
+            self._video_selector.setCurrentIndex(self._selected_video_idx)
+            self._video_selector.currentIndexChanged.connect(
+                lambda idx: self._on_selected_video_change(idx)
+            )
+            navigation_layout.addStretch()  # Push the selector to the right
+            navigation_layout.addWidget(self._video_selector)
+
+        self._layout.addLayout(navigation_layout)
 
         self._fps_label = QLabel()
         self._fps_label.setText("FPS: -")
-        layout.addWidget(self._fps_label)
+        self._layout.addWidget(self._fps_label)
 
         if show_sync_status:
             self._sync_status_label = QLabel()
-            layout.addWidget(self._sync_status_label)
+            self._layout.addWidget(self._sync_status_label)
         else:
             self._sync_status_label = None
 
+        self._update_buttons_enabled()
+
     @Slot(int)
-    def display_frame_at(self, frame_idx: int) -> bool:
-        """Display the frame at the specified index.
+    def display_frame_for_selected_video(self, frame_idx: int) -> bool:
+        """Display the frame at the specified index for the selected video view.
 
         Parameters
         ----------
@@ -142,21 +172,44 @@ class VideoBrowser(QWidget):
         bool
             True if the frame was displayed, False if the index is out of bounds.
         """
-        success = self._video_view.display_frame_at(frame_idx)
-        if not success:
+        return self.display_frame_for_video_with_idx(
+            frame_idx, self._selected_video_idx
+        )
+
+    @Slot(int)
+    def display_frame_for_video_with_idx(self, frame_idx: int, video_idx: int) -> bool:
+        """Display the frame at the specified index for a specific video view.
+
+        Parameters
+        ----------
+        frame_idx : int
+            The index of the frame to display.
+        video_idx : int
+            The index of the video view to update.
+
+        Returns
+        -------
+        bool
+            True if the frame was displayed, False if the index is out of bounds.
+        """
+        frame_shown = self._video_views[video_idx].display_frame_at(frame_idx)
+        if not frame_shown:
+            logger.debug(
+                f"Could not display frame at index {frame_idx} for video {video_idx}."
+            )
             return False
 
         self._update_slider_internal()
-        self._update_play_button_enabled()
+        self._update_buttons_enabled()
 
         # Emit signal that the frame has changed
-        self.sigFrameChanged.emit(frame_idx)
+        self.sigFrameChanged.emit(video_idx, frame_idx)
 
         return True
 
     @Slot()
-    def display_next_frame(self) -> bool:
-        """Display the next frame in the video.
+    def display_next_frame_for_selected_video(self) -> bool:
+        """Display the next frame for the currently selected video.
 
         Returns
         -------
@@ -164,11 +217,13 @@ class VideoBrowser(QWidget):
             True if the next frame was displayed, False if next frame could not be
             retrieved (end of video?)
         """
-        return self.display_frame_at(self._video_view.current_frame_idx + 1)
+        return self.display_frame_for_selected_video(
+            self._get_current_frame_index_of_selected_video() + 1
+        )
 
     @Slot()
-    def display_previous_frame(self) -> bool:
-        """Display the previous frame in the video.
+    def display_previous_frame_for_selected_video(self) -> bool:
+        """Display the previous frame for the currently selected video.
 
         Returns
         -------
@@ -176,7 +231,9 @@ class VideoBrowser(QWidget):
             True if the previous frame was displayed, False if previous frame could not
             be retrieved (beginning of video?)
         """
-        return self.display_frame_at(self._video_view.current_frame_idx - 1)
+        return self.display_frame_for_selected_video(
+            self._get_current_frame_index_of_selected_video() - 1
+        )
 
     @Slot(SyncStatus)
     def set_sync_status(self, status: SyncStatus) -> None:
@@ -197,7 +254,7 @@ class VideoBrowser(QWidget):
 
     @Slot()
     def play_video(self) -> None:
-        """Play the video frame by frame with its original fps."""
+        """Play the selected video with its original frame rate."""
         if self._is_playing:
             logger.warning(
                 "Received signal to play video even though video should be "
@@ -236,9 +293,9 @@ class VideoBrowser(QWidget):
 
     @Slot()
     def _play_next_frame(self) -> None:
-        """Play next frame when play timer timeouts."""
-        success = self.display_next_frame()
-        if success:
+        """Play next frame of currently selected video when play timer timeouts."""
+        frame_shown = self.display_next_frame_for_selected_video()
+        if frame_shown:
             self._update_frame_rate()
         else:
             # Pause the video if we are in the end
@@ -256,12 +313,14 @@ class VideoBrowser(QWidget):
             )
             self._n_frames_since_last_fps_update = 0
 
-    def _update_play_button_enabled(self) -> None:
-        """Enable play button unless at the last frame."""
-        if self._video_view.current_frame_idx >= self._video.frame_count - 1:
-            self._play_pause_button.setEnabled(False)
-        else:
-            self._play_pause_button.setEnabled(True)
+    def _update_buttons_enabled(self) -> None:
+        """Enable/disable navigation buttons based on the frame of selected video."""
+        current_frame_idx = self._get_current_frame_index_of_selected_video()
+        max_frame_idx = self._videos[self._selected_video_idx].frame_count - 1
+
+        self._prev_button.setEnabled(current_frame_idx > 0)
+        self._next_button.setEnabled(current_frame_idx < max_frame_idx)
+        self._play_pause_button.setEnabled(current_frame_idx < max_frame_idx)
 
     def _update_slider_internal(self) -> None:
         """Update the slider to reflect the current frame index.
@@ -270,8 +329,29 @@ class VideoBrowser(QWidget):
         triggering the valueChanged signal of the slider.
         """
         self._frame_slider.blockSignals(True)
-        self._frame_slider.setValue(self._video_view.current_frame_idx)
+        self._frame_slider.setValue(self._get_current_frame_index_of_selected_video())
         self._frame_slider.blockSignals(False)
+
+    def _get_current_frame_index_of_selected_video(self) -> int:
+        """Get the current index for the currently selected video."""
+        return self._video_views[self._selected_video_idx].current_frame_idx
+
+    @Slot(int)
+    def _on_selected_video_change(self, new_index: int) -> None:
+        """Handle user changing the selected video."""
+        self._selected_video_idx = new_index
+        self._frame_slider.setMaximum(self._videos[new_index].frame_count - 1)
+        self._update_slider_internal()
+        self._update_buttons_enabled()
+        self._set_play_timer_interval()
+
+    def _set_play_timer_interval(self) -> None:
+        """Set up the play timer interval based on currently selected video."""
+        # Milliseconds between frame updates so that video is played with original fps
+        self._play_timer_interval_ms = round(
+            1000 / self._videos[self._selected_video_idx].fps
+        )
+        self._play_timer.setInterval(self._play_timer_interval_ms)
 
 
 class VideoView(QWidget):
@@ -308,6 +388,7 @@ class VideoView(QWidget):
 
         if display_method == "image_view":
             self._image_view = pg.ImageView(parent=self)
+            # self._image_view.setMinimumSize(video.frame_width, video.frame_height)
             self._layout.addWidget(self._image_view)
         elif display_method == "image_item":
             # Manually create a GraphicsLayoutWidget with ViewBox and ImageItem.
