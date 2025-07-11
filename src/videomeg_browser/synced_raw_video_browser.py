@@ -58,53 +58,55 @@ class SyncedRawVideoBrowser(QObject):
         # Flag to prevent infinite recursion during synchronization
         self._syncing = False
 
-        self.raw_update_max_fps = raw_update_max_fps
-        self.min_raw_update_interval_ms = int(1000 / self.raw_update_max_fps)
+        self._raw_update_max_fps = raw_update_max_fps
+        self._min_raw_update_interval_ms = int(1000 / self._raw_update_max_fps)
         # Create a throttler that limits the update rate of the raw browser
-        self.raw_update_throttler = BufferedThrottler(
-            self.min_raw_update_interval_ms, parent=self
+        self._raw_update_throttler = BufferedThrottler(
+            self._min_raw_update_interval_ms, parent=self
         )
 
         # Wrap the raw browser to a class that exposes the necessary methods.
         raw_browser_interface = RawBrowserInterface(raw_browser, parent=self)
         # Pass interface for manager that contains actual logic for managing the browser
         # in sync with the video browser.
-        self.raw_browser_manager = RawBrowserManager(raw_browser_interface, parent=self)
+        self._raw_browser_manager = RawBrowserManager(
+            raw_browser_interface, parent=self
+        )
         # Make sure that raw browse visibility matches the `show` parameter.
         if show:
-            self.raw_browser_manager.show_browser()
+            self._raw_browser_manager.show_browser()
         else:
-            self.raw_browser_manager.hide_browser()
+            self._raw_browser_manager.hide_browser()
 
         # Set up the video browser.
-        self.video_browser = VideoBrowser(
+        self._video_browser = VideoBrowser(
             video_file, show_sync_status=True, parent=None
         )
 
         # Dock the video browser to the raw data browser with Qt magic
-        self.dock = QtWidgets.QDockWidget("Video Browser", raw_browser)
-        self.dock.setWidget(self.video_browser)
-        self.dock.setFloating(True)
-        raw_browser.addDockWidget(Qt.RightDockWidgetArea, self.dock)
-        self.dock.resize(1000, 800)  # Set initial size of the video browser
+        self._dock = QtWidgets.QDockWidget("Video Browser", raw_browser)
+        self._dock.setWidget(self._video_browser)
+        self._dock.setFloating(True)
+        raw_browser.addDockWidget(Qt.RightDockWidgetArea, self._dock)
+        self._dock.resize(1000, 800)  # Set initial size of the video browser
         if not show:
-            self.dock.hide()
+            self._dock.hide()
 
         # Set up synchronization
 
         # When video browser frame changes, update the raw data browser's view.
         # Connect the signal through a throttler to limit the update rate
         # of the raw data browser to `raw_update_max_fps`.
-        self.video_browser.sigFrameChanged.connect(self.raw_update_throttler.trigger)
-        self.raw_update_throttler.triggered.connect(self.sync_raw_to_video)
+        self._video_browser.sigFrameChanged.connect(self._raw_update_throttler.trigger)
+        self._raw_update_throttler.triggered.connect(self.sync_raw_to_video)
 
         # When either raw time selector value or raw data browser's view changes,
         # update the video browser
-        self.raw_browser_manager.sigSelectedTimeChanged.connect(self.sync_video_to_raw)
+        self._raw_browser_manager.sigSelectedTimeChanged.connect(self.sync_video_to_raw)
 
         # Consider raw data browser to be the main browser and start by
         # synchronizing the video browser to the raw data browser's view
-        initial_raw_time = self.raw_browser_manager.get_selected_time()
+        initial_raw_time = self._raw_browser_manager.get_selected_time()
         # Also updates the raw time selector
         self.sync_video_to_raw(initial_raw_time)
 
@@ -136,7 +138,7 @@ class SyncedRawVideoBrowser(QObject):
         raw_time_seconds : float
             The raw time point in seconds to which the video browser should be synced.
         """
-        mapping = self.aligner.raw_time_to_video_frame_index(raw_time_seconds)
+        mapping = self._aligner.raw_time_to_video_frame_index(raw_time_seconds)
 
         match mapping:
             case MappingSuccess(result=video_idx):
@@ -144,24 +146,24 @@ class SyncedRawVideoBrowser(QObject):
                 logger.debug(
                     f"Setting video browser to show frame with index: {video_idx}"
                 )
-                self.video_browser.display_frame_at(video_idx)
-                self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
+                self._video_browser.display_frame_at(video_idx)
+                self._video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
                 # Raw time stamp is smaller than the first video frame timestamp
                 logger.debug(
                     "No video data for this small raw time point, showing first frame."
                 )
-                self.video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
-                self.video_browser.display_frame_at(0)
+                self._video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
+                self._video_browser.display_frame_at(0)
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
                 # Raw time stamp is larger than the last video frame timestamp
                 logger.debug(
                     "No video data for this large raw time point, showing last frame."
                 )
-                self.video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
-                self.video_browser.display_frame_at(self.video_file.frame_count - 1)
+                self._video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
+                self._video_browser.display_frame_at(self.video_file.frame_count - 1)
             case _:
                 raise ValueError(f"Unexpected mapping result: {mapping}. ")
 
@@ -192,36 +194,36 @@ class SyncedRawVideoBrowser(QObject):
             The video frame index to which the raw browser should be synced.
 
         """
-        mapping = self.aligner.video_frame_index_to_raw_time(video_frame_idx)
+        mapping = self._aligner.video_frame_index_to_raw_time(video_frame_idx)
 
         match mapping:
             case MappingSuccess(result=raw_time):
                 # Video frame index has a corresponding raw time point
                 logger.debug(f"Corresponding raw time in seconds: {raw_time:.3f}")
-                self.raw_browser_manager.set_selected_time(raw_time)
-                self.video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
+                self._raw_browser_manager.set_selected_time(raw_time)
+                self._video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
                 # Video frame index is smaller than the first raw time point
                 logger.debug(
                     "No raw data for this small video frame, moving raw view to start."
                 )
-                self.video_browser.set_sync_status(SyncStatus.NO_RAW_DATA)
-                self.raw_browser_manager.jump_to_start()
+                self._video_browser.set_sync_status(SyncStatus.NO_RAW_DATA)
+                self._raw_browser_manager.jump_to_start()
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
                 logger.debug(
                     "No raw data for this large video frame, moving raw view to end."
                 )
-                self.video_browser.set_sync_status(SyncStatus.NO_RAW_DATA)
-                self.raw_browser_manager.jump_to_end()
+                self._video_browser.set_sync_status(SyncStatus.NO_RAW_DATA)
+                self._raw_browser_manager.jump_to_end()
             case _:
                 raise ValueError(f"Unexpected mapping result: {mapping}. ")
 
     def show(self) -> None:
         """Show the synchronized raw and video browsers."""
-        self.raw_browser_manager.show_browser()
-        self.dock.show()
+        self._raw_browser_manager.show_browser()
+        self._dock.show()
 
 
 class BufferedThrottler(QObject):
