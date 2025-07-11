@@ -39,6 +39,8 @@ class SyncedRawVideoBrowser(QObject):
     raw_update_max_fps : int, optional
         The maximum frames per second for updating the raw data browser view,
         by default 10. This has effect on the performance of the browser.
+    parent : QObject, optional
+        The parent QObject for this synchronized browser, by default None.
     """
 
     def __init__(
