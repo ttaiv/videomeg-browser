@@ -64,8 +64,6 @@ class VideoBrowser(QWidget):
         super().__init__(parent=parent)
         self._video = video
         self._show_sync_status = show_sync_status
-
-        self._current_frame_idx = 0
         self._is_playing = False  # Whether the frame updates are currently automatic
 
         # Set up timer that allow automatic frame updates (playing the video)
@@ -80,8 +78,8 @@ class VideoBrowser(QWidget):
             max_intervals_to_average=2 * round(video.fps)  # average over two seconds
         )
         # Update the displayed frame rate once per second.
-        self.n_frames_between_fps_updates = round(video.fps)
-        self.n_frames_since_last_fps_update = 0
+        self._n_frames_between_fps_updates = round(video.fps)
+        self._n_frames_since_last_fps_update = 0
 
         self.setWindowTitle(self._video.fname)
         self.resize(1000, 800)  # Set initial size of the window
@@ -91,29 +89,8 @@ class VideoBrowser(QWidget):
 
         # Create widgets for displaying video frames and navigation controls
 
-        if display_method == "image_view":
-            self._image_view = pg.ImageView(parent=self)
-            layout.addWidget(self._image_view)
-        elif display_method == "image_item":
-            # Manually create a GraphicsLayoutWidget with ViewBox and ImageItem.
-            graphics_widget = pg.GraphicsLayoutWidget(parent=self)
-            layout.addWidget(graphics_widget)
-            view_box = graphics_widget.addViewBox()
-            view_box.setAspectLocked(True)
-            # Inverting Y makes the orientation the same as in ImageView.
-            view_box.invertY(True)
-            # The ImageItem has method `setImage` just like ImageView!
-            self._image_view = pg.ImageItem()
-            view_box.addItem(self._image_view)
-        else:
-            raise ValueError(
-                f"Invalid display method: {display_method}. "
-                "Use 'image_view' or 'image_item'."
-            )
-
-        # Label to display the current frame index
-        self._frame_label = QLabel()
-        layout.addWidget(self._frame_label)
+        self._video_view = VideoView(video, display_method=display_method, parent=self)
+        layout.addWidget(self._video_view)
 
         # Slider for navigating to a specific frame
         self._frame_slider = QSlider(Qt.Horizontal)
@@ -133,6 +110,7 @@ class VideoBrowser(QWidget):
         self._play_pause_button = QPushButton("Play")
         self._play_pause_button.clicked.connect(self.toggle_play_pause)
         navigation_layout.addWidget(self._play_pause_button)
+        self._update_play_button_enabled()
 
         self._button = QPushButton("Next Frame")
         self._button.clicked.connect(self.display_next_frame)
@@ -150,16 +128,6 @@ class VideoBrowser(QWidget):
         else:
             self._sync_status_label = None
 
-        # Set up initial state
-
-        first_frame = self._video.get_frame_at(0)
-        if first_frame is None:
-            raise ValueError("Could not read the first frame of the video.")
-        self._image_view.setImage(first_frame)
-
-        self._frame_label.setText(f"Current Frame: 1/{self._video.frame_count}")
-        self._update_play_button_enabled()
-
     @Slot(int)
     def display_frame_at(self, frame_idx: int) -> bool:
         """Display the frame at the specified index.
@@ -174,22 +142,15 @@ class VideoBrowser(QWidget):
         bool
             True if the frame was displayed, False if the index is out of bounds.
         """
-        frame = self._video.get_frame_at(frame_idx)
-        if frame is None:
-            logger.info(
-                f"Could not retrieve frame at index {frame_idx}. "
-                "Skipping updating the frame."
-            )
+        success = self._video_view.display_frame_at(frame_idx)
+        if not success:
             return False
 
-        self._current_frame_idx = frame_idx
-        self._image_view.setImage(frame)
-        self._update_frame_label()
         self._update_slider_internal()
         self._update_play_button_enabled()
 
         # Emit signal that the frame has changed
-        self.sigFrameChanged.emit(self._current_frame_idx)
+        self.sigFrameChanged.emit(frame_idx)
 
         return True
 
@@ -203,7 +164,7 @@ class VideoBrowser(QWidget):
             True if the next frame was displayed, False if next frame could not be
             retrieved (end of video?)
         """
-        return self.display_frame_at(self._current_frame_idx + 1)
+        return self.display_frame_at(self._video_view.current_frame_idx + 1)
 
     @Slot()
     def display_previous_frame(self) -> bool:
@@ -215,7 +176,7 @@ class VideoBrowser(QWidget):
             True if the previous frame was displayed, False if previous frame could not
             be retrieved (beginning of video?)
         """
-        return self.display_frame_at(self._current_frame_idx - 1)
+        return self.display_frame_at(self._video_view.current_frame_idx - 1)
 
     @Slot(SyncStatus)
     def set_sync_status(self, status: SyncStatus) -> None:
@@ -287,27 +248,20 @@ class VideoBrowser(QWidget):
         """Update frame rate state and possibly also displayed fps."""
         # Tell frame rate tracker that a new frame was displayed.
         self._frame_rate_tracker.notify_new_frame()
-        self.n_frames_since_last_fps_update += 1
-        if self.n_frames_since_last_fps_update >= self.n_frames_between_fps_updates:
+        self._n_frames_since_last_fps_update += 1
+        if self._n_frames_since_last_fps_update >= self._n_frames_between_fps_updates:
             # Update the displayed frame rate.
             self._fps_label.setText(
                 f"FPS: {round(self._frame_rate_tracker.get_current_frame_rate())}"
             )
-            self.n_frames_since_last_fps_update = 0
+            self._n_frames_since_last_fps_update = 0
 
     def _update_play_button_enabled(self) -> None:
         """Enable play button unless at the last frame."""
-        if self._current_frame_idx >= self._video.frame_count - 1:
+        if self._video_view.current_frame_idx >= self._video.frame_count - 1:
             self._play_pause_button.setEnabled(False)
         else:
             self._play_pause_button.setEnabled(True)
-
-    def _update_frame_label(self) -> None:
-        """Update the frame label to show the current frame number."""
-        # Use one-based index for display
-        self._frame_label.setText(
-            f"Current Frame: {self._current_frame_idx + 1}/{self._video.frame_count}"
-        )
 
     def _update_slider_internal(self) -> None:
         """Update the slider to reflect the current frame index.
@@ -316,8 +270,115 @@ class VideoBrowser(QWidget):
         triggering the valueChanged signal of the slider.
         """
         self._frame_slider.blockSignals(True)
-        self._frame_slider.setValue(self._current_frame_idx)
+        self._frame_slider.setValue(self._video_view.current_frame_idx)
         self._frame_slider.blockSignals(False)
+
+
+class VideoView(QWidget):
+    """A widget for displaying video.
+
+    Parameters
+    ----------
+    video : VideoFile
+        The video file to be displayed.
+    display_method : Literal["image_view", "image_item"], optional
+        The method used to display the video frames. If "image_view", uses
+        `pyqtgraph.ImageView` with histogram and extra controls. If "image_item",
+        uses plain 'pyqtgraph.ImageItem' inside a `pyqtgraph.ViewBox`.
+        By default "image_view".
+    parent : QWidget, optional
+        The parent widget for this view, by default None
+    """
+
+    # Emits a signal with the index of the new currently displayed frame
+    # when the displayed frame changes.
+    sigFrameChanged = Signal(int)
+
+    def __init__(
+        self,
+        video: VideoFile,
+        display_method: Literal["image_view", "image_item"] = "image_view",
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent=parent)
+        self._video = video
+        self._current_frame_idx = 0
+
+        self._layout = QVBoxLayout(self)
+
+        if display_method == "image_view":
+            self._image_view = pg.ImageView(parent=self)
+            self._layout.addWidget(self._image_view)
+        elif display_method == "image_item":
+            # Manually create a GraphicsLayoutWidget with ViewBox and ImageItem.
+            graphics_widget = pg.GraphicsLayoutWidget(parent=self)
+            self._layout.addWidget(graphics_widget)
+            view_box = graphics_widget.addViewBox()
+            view_box.setAspectLocked(True)
+            # Inverting Y makes the orientation the same as in ImageView.
+            view_box.invertY(True)
+            # The ImageItem has method `setImage` just like ImageView!
+            self._image_view = pg.ImageItem()
+            view_box.addItem(self._image_view)
+        else:
+            raise ValueError(
+                f"Invalid display method: {display_method}. "
+                "Use 'image_view' or 'image_item'."
+            )
+
+        # Label to display the current frame index
+        self._frame_label = QLabel()
+        self._layout.addWidget(self._frame_label)
+
+        # Set up initial state
+        first_frame = self._video.get_frame_at(0)
+        if first_frame is None:
+            raise ValueError("Could not read the first frame of the video.")
+        self._image_view.setImage(first_frame)
+        self._frame_label.setText(f"Current Frame: 1/{self._video.frame_count}")
+
+    @Slot(int)
+    def display_frame_at(self, frame_idx: int) -> bool:
+        """Display the frame at the specified index.
+
+        Parameters
+        ----------
+        frame_idx : int
+            The index of the frame to display.
+
+        Returns
+        -------
+        bool
+            True if the frame was displayed, False if the index is out of bounds.
+        """
+        frame = self._video.get_frame_at(frame_idx)
+        if frame is None:
+            logger.info(
+                f"Could not retrieve frame at index {frame_idx}. "
+                "Skipping updating the frame."
+            )
+            return False
+
+        self._current_frame_idx = frame_idx
+        self._image_view.setImage(frame)
+        self._update_frame_label()
+
+        # Emit signal that the frame has changed
+        self.sigFrameChanged.emit(self._current_frame_idx)
+
+        return True
+
+    @property
+    def current_frame_idx(self) -> int:
+        """Get the index of the currently displayed frame."""
+        return self._current_frame_idx
+
+    def _update_frame_label(self) -> None:
+        """Update the frame label to show the current frame number."""
+        # Use one-based index for display
+        self._frame_label.setText(
+            f"Current Frame: {self._current_frame_idx + 1}/{self._video.frame_count}"
+        )
 
 
 class FrameRateTracker:
