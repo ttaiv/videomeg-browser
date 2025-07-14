@@ -34,7 +34,8 @@ if __name__ == "__main__":
 
     # Create a video file object
     video_file = VideoFileHelsinkiVideoMEG(
-        op.join(BASE_PATH, "Video_MEG", "animal_meg_subject_2_240614.video.dat")
+        op.join(BASE_PATH, "Video_MEG", "animal_meg_subject_2_240614.video.dat"),
+        magic_str="ELEKTA_VIDEO_FILE",
     )
     # Create a raw data object
     raw = mne.io.read_raw_fif(

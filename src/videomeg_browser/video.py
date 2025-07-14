@@ -205,18 +205,17 @@ class UnknownVersionError(Exception):
 
 
 def _read_attrib(data_file, ver):
+    """Read data block attributes.
+
+    If cannot read the attributes (EOF?), return -1 in ts.
     """
-    Read data block attributes. If cannot read the attributes (EOF?), return
-    -1 in ts
-    """
-    if ver == 1:
+    if ver == 0 or ver == 1:
         attrib = data_file.read(12)
         if len(attrib) == 12:
             ts, sz = struct.unpack("QI", attrib)
         else:
             ts = -1
             sz = -1
-        block_id = 0
         total_sz = sz + 12
 
     elif ver == 2 or ver == 3:
@@ -225,14 +224,13 @@ def _read_attrib(data_file, ver):
             ts, block_id, sz = struct.unpack("QQI", attrib)
         else:
             ts = -1
-            block_id = 0
             sz = -1
         total_sz = sz + 20
 
     else:
-        raise UnknownVersionError()
+        raise UnknownVersionError(ver)
 
-    return ts, block_id, sz, total_sz
+    return ts, sz, total_sz
 
 
 class VideoFileHelsinkiVideoMEG(VideoFile):
@@ -245,25 +243,35 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
     ----------
     fname : str
         Full path to the video file to be read.
+    magic_str : str
+        Magic string that should be at the beginning of video file.
     """
 
-    def __init__(self, fname) -> None:
+    def __init__(
+        self, fname: str, magic_str: str = "HELSINKI_VIDEO_MEG_PROJECT_VIDEO_FILE"
+    ) -> None:
         self._file_name = fname
         self._file = open(fname, "rb")
-        assert (
-            self._file.read(len("ELEKTA_VIDEO_FILE")) == b"ELEKTA_VIDEO_FILE"
-        )  # make sure the magic string is OK
-        self.ver = struct.unpack("I", self._file.read(4))[0]
+        if not self._file.read(len(magic_str)) == magic_str.encode("utf-8"):
+            self._file.close()
+            raise ValueError(
+                f"File {fname} does not start with the expected "
+                f"magic string: {magic_str}."
+            )
+        self._version = struct.unpack("I", self._file.read(4))[0]
+        logger.debug(f"Video file version: {self._version}")
 
-        if self.ver == 1 or self.ver == 2:
+        # Parse site id and is_sender attribute from the file depending on the version.
+        if self._version == 0:
+            pass  # nothing to parse
+        elif self._version == 1 or self._version == 2:
             self.site_id = -1
             self.is_sender = -1
-
-        elif self.ver == 3:
+        elif self._version == 3:
             self.site_id, self.is_sender = struct.unpack("BB", self._file.read(2))
-
         else:
-            raise UnknownVersionError()
+            self._file.close()
+            raise UnknownVersionError(self._version)
 
         # Get the file size.
         begin_data = self._file.tell()
@@ -276,7 +284,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         self._frame_ptrs = []  # List of tuples (offset, size) for each frame
 
         while self._file.tell() < end_data:  # we did not reach end of file
-            ts, block_id, sz, total_sz = _read_attrib(self._file, self.ver)
+            ts, sz, total_sz = _read_attrib(self._file, self._version)
             assert ts != -1
             timestamps_list.append(ts)
             self._frame_ptrs.append((self._file.tell(), sz))
@@ -290,6 +298,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         # Use first frame to determine width and height
         first_frame = self.get_frame_at(0)
         if first_frame is None:
+            self._file.close()
             raise ValueError("Could not read the first frame of the video.")
         self._frame_width = first_frame.shape[1]
         self._frame_height = first_frame.shape[0]
