@@ -230,7 +230,7 @@ def _read_attrib(data_file, ver):
         total_sz = sz + 20
 
     else:
-        raise UnknownVersionError()
+        raise UnknownVersionError(ver)
 
     return ts, block_id, sz, total_sz
 
@@ -259,17 +259,18 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
                 f"File {fname} does not start with the expected "
                 f"magic string: {magic_str}."
             )
-        self.ver = struct.unpack("I", self._file.read(4))[0]
+        self._version = struct.unpack("I", self._file.read(4))[0]
+        logger.debug(f"Video file version: {self._version}")
 
-        if self.ver == 1 or self.ver == 2:
+        if self._version == 1 or self._version == 2:
             self.site_id = -1
             self.is_sender = -1
 
-        elif self.ver == 3:
+        elif self._version == 3:
             self.site_id, self.is_sender = struct.unpack("BB", self._file.read(2))
 
         else:
-            raise UnknownVersionError()
+            raise UnknownVersionError(self._version)
 
         # Get the file size.
         begin_data = self._file.tell()
@@ -282,7 +283,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         self._frame_ptrs = []  # List of tuples (offset, size) for each frame
 
         while self._file.tell() < end_data:  # we did not reach end of file
-            ts, block_id, sz, total_sz = _read_attrib(self._file, self.ver)
+            ts, block_id, sz, total_sz = _read_attrib(self._file, self._version)
             assert ts != -1
             timestamps_list.append(ts)
             self._frame_ptrs.append((self._file.tell(), sz))
