@@ -12,6 +12,7 @@ VIDEO_PATH = (
     "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna/Video_MEG/"
     "animal_meg_subject_2_240614.video.dat"
 )
+MAGIC_STR = "ELEKTA_VIDEO_FILE"  # Magic string at the beginning of the video file
 VIDEO_FPS = 30.0  # Frames per second for the test video
 
 
@@ -23,7 +24,7 @@ class TestVideoFileHelsinkiVideoMEG:
 
     def test_open_close(self):
         """Test opening and closing the video file."""
-        video = VideoFileHelsinkiVideoMEG(VIDEO_PATH)
+        video = VideoFileHelsinkiVideoMEG(VIDEO_PATH, MAGIC_STR)
         # Check that we can read frames after opening
         assert video.frame_count > 0
         assert video.get_frame_at(video.frame_count // 2) is not None
@@ -38,7 +39,7 @@ class TestVideoFileHelsinkiVideoMEG:
 
     def test_open_close_context_manager(self):
         """Test opening and closing the video file using context manager."""
-        with VideoFileHelsinkiVideoMEG(VIDEO_PATH) as video:
+        with VideoFileHelsinkiVideoMEG(VIDEO_PATH, MAGIC_STR) as video:
             # Check that we can read frames while the context is open
             assert video.frame_count > 0
             assert video.get_frame_at(video.frame_count // 2) is not None
@@ -52,7 +53,7 @@ class TestVideoFileHelsinkiVideoMEG:
 
     def test_properties(self):
         """Test video file properties after initialization."""
-        with VideoFileHelsinkiVideoMEG(VIDEO_PATH) as video:
+        with VideoFileHelsinkiVideoMEG(VIDEO_PATH, MAGIC_STR) as video:
             assert video.fname == VIDEO_PATH
             # Using approx as Helsinki videoMEG video files do not have exact FPS
             # and it is approximated using time between frames.
@@ -64,7 +65,7 @@ class TestVideoFileHelsinkiVideoMEG:
 
     def test_get_frame_at(self):
         """Test getting frames at specific indices."""
-        with VideoFileHelsinkiVideoMEG(VIDEO_PATH) as video:
+        with VideoFileHelsinkiVideoMEG(VIDEO_PATH, MAGIC_STR) as video:
             # Test that all frames can be accessed and have correct dimensions
             test_frame_indices = np.linspace(
                 0, video.frame_count - 1, num=100, dtype=int

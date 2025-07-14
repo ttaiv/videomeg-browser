@@ -245,14 +245,20 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
     ----------
     fname : str
         Full path to the video file to be read.
+    magic_str : str
+        Magic string that should be at the beginning of video file.
     """
 
-    def __init__(self, fname) -> None:
+    def __init__(
+        self, fname: str, magic_str: str = "HELSINKI_VIDEO_MEG_PROJECT_VIDEO_FILE"
+    ) -> None:
         self._file_name = fname
         self._file = open(fname, "rb")
-        assert (
-            self._file.read(len("ELEKTA_VIDEO_FILE")) == b"ELEKTA_VIDEO_FILE"
-        )  # make sure the magic string is OK
+        if not self._file.read(len(magic_str)) == magic_str.encode("utf-8"):
+            raise ValueError(
+                f"File {fname} does not start with the expected "
+                f"magic string: {magic_str}."
+            )
         self.ver = struct.unpack("I", self._file.read(4))[0]
 
         if self.ver == 1 or self.ver == 2:
