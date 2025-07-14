@@ -253,6 +253,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         self._file_name = fname
         self._file = open(fname, "rb")
         if not self._file.read(len(magic_str)) == magic_str.encode("utf-8"):
+            self._file.close()
             raise ValueError(
                 f"File {fname} does not start with the expected "
                 f"magic string: {magic_str}."
@@ -269,6 +270,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         elif self._version == 3:
             self.site_id, self.is_sender = struct.unpack("BB", self._file.read(2))
         else:
+            self._file.close()
             raise UnknownVersionError(self._version)
 
         # Get the file size.
@@ -296,6 +298,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         # Use first frame to determine width and height
         first_frame = self.get_frame_at(0)
         if first_frame is None:
+            self._file.close()
             raise ValueError("Could not read the first frame of the video.")
         self._frame_width = first_frame.shape[1]
         self._frame_height = first_frame.shape[0]
