@@ -209,23 +209,13 @@ def _read_attrib(data_file, ver):
 
     If cannot read the attributes (EOF?), return -1 in ts.
     """
-    if ver == 0:
+    if ver == 0 or ver == 1:
         attrib = data_file.read(12)
         if len(attrib) == 12:
             ts, sz = struct.unpack("QI", attrib)
         else:
             ts = -1
             sz = -1
-        total_sz = sz + 12
-
-    elif ver == 1:
-        attrib = data_file.read(12)
-        if len(attrib) == 12:
-            ts, sz = struct.unpack("QI", attrib)
-        else:
-            ts = -1
-            sz = -1
-        block_id = 0
         total_sz = sz + 12
 
     elif ver == 2 or ver == 3:
@@ -234,14 +224,13 @@ def _read_attrib(data_file, ver):
             ts, block_id, sz = struct.unpack("QQI", attrib)
         else:
             ts = -1
-            block_id = 0
             sz = -1
         total_sz = sz + 20
 
     else:
         raise UnknownVersionError(ver)
 
-    return ts, block_id, sz, total_sz
+    return ts, sz, total_sz
 
 
 class VideoFileHelsinkiVideoMEG(VideoFile):
@@ -293,7 +282,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         self._frame_ptrs = []  # List of tuples (offset, size) for each frame
 
         while self._file.tell() < end_data:  # we did not reach end of file
-            ts, block_id, sz, total_sz = _read_attrib(self._file, self._version)
+            ts, sz, total_sz = _read_attrib(self._file, self._version)
             assert ts != -1
             timestamps_list.append(ts)
             self._frame_ptrs.append((self._file.tell(), sz))
