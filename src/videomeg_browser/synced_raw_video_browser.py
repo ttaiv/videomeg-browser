@@ -54,7 +54,7 @@ class SyncedRawVideoBrowser(QObject):
     ) -> None:
         super().__init__(parent=parent)
         self.video_file = video_file
-        self.aligner = aligner
+        self._aligner = aligner
         # Flag to prevent infinite recursion during synchronization
         self._syncing = False
 
@@ -80,7 +80,7 @@ class SyncedRawVideoBrowser(QObject):
 
         # Set up the video browser.
         self._video_browser = VideoBrowser(
-            video_file, show_sync_status=True, parent=None
+            [video_file], show_sync_status=True, parent=None
         )
 
         # Dock the video browser to the raw data browser with Qt magic
@@ -146,7 +146,7 @@ class SyncedRawVideoBrowser(QObject):
                 logger.debug(
                     f"Setting video browser to show frame with index: {video_idx}"
                 )
-                self._video_browser.display_frame_at(video_idx)
+                self._video_browser.display_frame_for_selected_video(video_idx)
                 self._video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
@@ -155,7 +155,7 @@ class SyncedRawVideoBrowser(QObject):
                     "No video data for this small raw time point, showing first frame."
                 )
                 self._video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
-                self._video_browser.display_frame_at(0)
+                self._video_browser.display_frame_for_selected_video(0)
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
                 # Raw time stamp is larger than the last video frame timestamp
@@ -163,7 +163,9 @@ class SyncedRawVideoBrowser(QObject):
                     "No video data for this large raw time point, showing last frame."
                 )
                 self._video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
-                self._video_browser.display_frame_at(self.video_file.frame_count - 1)
+                self._video_browser.display_frame_for_selected_video(
+                    self.video_file.frame_count - 1
+                )
             case _:
                 raise ValueError(f"Unexpected mapping result: {mapping}. ")
 
