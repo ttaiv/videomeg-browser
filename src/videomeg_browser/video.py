@@ -205,11 +205,20 @@ class UnknownVersionError(Exception):
 
 
 def _read_attrib(data_file, ver):
+    """Read data block attributes.
+
+    If cannot read the attributes (EOF?), return -1 in ts.
     """
-    Read data block attributes. If cannot read the attributes (EOF?), return
-    -1 in ts
-    """
-    if ver == 1:
+    if ver == 0:
+        attrib = data_file.read(12)
+        if len(attrib) == 12:
+            ts, sz = struct.unpack("QI", attrib)
+        else:
+            ts = -1
+            sz = -1
+        total_sz = sz + 12
+
+    elif ver == 1:
         attrib = data_file.read(12)
         if len(attrib) == 12:
             ts, sz = struct.unpack("QI", attrib)
@@ -262,13 +271,14 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         self._version = struct.unpack("I", self._file.read(4))[0]
         logger.debug(f"Video file version: {self._version}")
 
-        if self._version == 1 or self._version == 2:
+        # Parse site id and is_sender attribute from the file depending on the version.
+        if self._version == 0:
+            pass  # nothing to parse
+        elif self._version == 1 or self._version == 2:
             self.site_id = -1
             self.is_sender = -1
-
         elif self._version == 3:
             self.site_id, self.is_sender = struct.unpack("BB", self._file.read(2))
-
         else:
             raise UnknownVersionError(self._version)
 
