@@ -139,7 +139,7 @@ class VideoBrowser(QWidget):
             )
             self._video_selector.setCurrentIndex(self._selected_video_idx)
             self._video_selector.currentIndexChanged.connect(
-                lambda idx: self._on_selected_video_change(idx)
+                self._on_selected_video_change
             )
             navigation_layout.addStretch()  # Push the selector to the right
             navigation_layout.addWidget(self._video_selector)
