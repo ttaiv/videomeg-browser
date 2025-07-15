@@ -177,7 +177,9 @@ class VideoBrowser(QWidget):
         )
 
     @Slot(int)
-    def display_frame_for_video_with_idx(self, frame_idx: int, video_idx: int) -> bool:
+    def display_frame_for_video_with_idx(
+        self, frame_idx: int, video_idx: int, signal: bool = True
+    ) -> bool:
         """Display the frame at the specified index for a specific video view.
 
         Parameters
@@ -186,6 +188,11 @@ class VideoBrowser(QWidget):
             The index of the frame to display.
         video_idx : int
             The index of the video view to update.
+        signal : bool, optional
+            Whether to emit the frame changed signal, by default True.
+            Setting this to False is useful when setting the view programmatically
+            and you do not want to trigger any additional actions that might be
+            connected to the signal.
 
         Returns
         -------
@@ -202,8 +209,8 @@ class VideoBrowser(QWidget):
         self._update_slider_internal()
         self._update_buttons_enabled()
 
-        # Emit signal that the frame has changed
-        self.sigFrameChanged.emit(video_idx, frame_idx)
+        if signal:
+            self.sigFrameChanged.emit(video_idx, frame_idx)
 
         return True
 
