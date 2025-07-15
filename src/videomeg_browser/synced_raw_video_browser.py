@@ -52,21 +52,15 @@ class SyncedRawVideoBrowser(QObject):
         videos: list[VideoFile],
         aligners: list[RawVideoAligner],
         show: bool = True,
-        raw_update_max_fps: int = 10,
+        max_sync_fps: int = 10,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent=parent)
         self._video = videos
         self._aligners = aligners
-        self._raw_update_max_fps = raw_update_max_fps
+        self._raw_update_max_fps = max_sync_fps
         # Flag to prevent infinite recursion during synchronization
         self._syncing = False
-
-        self._min_raw_update_interval_ms = int(1000 / self._raw_update_max_fps)
-        # Create a throttler that limits the update rate of the raw browser
-        self._raw_update_throttler = BufferedThrottler(
-            self._min_raw_update_interval_ms, parent=self
-        )
 
         # Wrap the raw browser to a class that exposes the necessary methods.
         raw_browser_interface = RawBrowserInterface(raw_browser, parent=self)
@@ -96,16 +90,22 @@ class SyncedRawVideoBrowser(QObject):
             self._dock.hide()
 
         # Set up synchronization
-        self._video_browser.sigFrameChanged.connect(self.sync_all_to_video)
+
+        self._min_sync_interval_ms = int(1000 / max_sync_fps)
+        # Create a throttler that limits the updates of both raw and other videos
+        # due to fast change of one video (playback).
+        self._throttler = BufferedThrottler(self._min_sync_interval_ms, parent=self)
+        self._video_browser.sigFrameChanged.connect(self._throttler.trigger)
+        self._throttler.triggered.connect(self.sync_all_to_video)
 
         # When either raw time selector value or raw data browser's view changes,
-        # update the video browser
+        # update the video browser (no throttling needed here).
         self._raw_browser_manager.sigSelectedTimeChanged.connect(
             self.sync_videos_to_raw
         )
 
         # Consider raw data browser to be the main browser and start by
-        # synchronizing the video browser to the raw data browser's view
+        # synchronizing the videos to the raw data browser's view
         initial_raw_time = self._raw_browser_manager.get_selected_time()
         self.sync_videos_to_raw(initial_raw_time)
 
@@ -151,7 +151,7 @@ class SyncedRawVideoBrowser(QObject):
                     f"Setting video on index {video_idx} to show frame: {frame_idx}"
                 )
                 self._video_browser.display_frame_for_video_with_idx(
-                    frame_idx, video_idx
+                    frame_idx, video_idx, signal=False
                 )
                 # self._video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
 
@@ -162,7 +162,9 @@ class SyncedRawVideoBrowser(QObject):
                     "point, showing first frame."
                 )
                 # self._video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
-                self._video_browser.display_frame_for_video_with_idx(0, video_idx)
+                self._video_browser.display_frame_for_video_with_idx(
+                    0, video_idx, signal=False
+                )
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
                 # Raw time stamp is larger than the last video frame timestamp
@@ -172,7 +174,7 @@ class SyncedRawVideoBrowser(QObject):
                 )
                 # self._video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
                 self._video_browser.display_frame_for_video_with_idx(
-                    self._video[video_idx].frame_count - 1, video_idx
+                    self._video[video_idx].frame_count - 1, video_idx, signal=False
                 )
 
             case _:
@@ -256,7 +258,7 @@ class SyncedRawVideoBrowser(QObject):
 
 
 class BufferedThrottler(QObject):
-    """Emits the most recent payload no more than once every `interval_ms`.
+    """Emits the most recent input payload no more than once every `interval_ms`.
 
     If enough time has passed since last emit, emits the received payload immediately.
     Otherwise schedules the received payload to be emitted after the required time has
@@ -270,7 +272,7 @@ class BufferedThrottler(QObject):
         The parent QObject for this throttler, by default None.
     """
 
-    triggered = Signal(int)
+    triggered = Signal(int, int)  # hard coded for signal emitted by video browser
 
     def __init__(self, interval_ms: int, parent: QObject | None = None) -> None:
         super().__init__(parent=parent)
@@ -287,10 +289,10 @@ class BufferedThrottler(QObject):
         self._delayed_emit_timer.setSingleShot(True)
         self._delayed_emit_timer.timeout.connect(self._emit_now)
 
-    @Slot(int)
-    def trigger(self, payload: int) -> None:
+    @Slot(int, int)
+    def trigger(self, payload1: int, payload2: int) -> None:
         """Trigger the throttler with a new payload."""
-        self._latest_payload = payload
+        self._latest_payload = (payload1, payload2)
 
         elapsed_time_ms = self._elapsed_timer.elapsed()
         remaining_time_ms = self._emit_interval_ms - elapsed_time_ms
@@ -304,11 +306,12 @@ class BufferedThrottler(QObject):
                 self._delayed_emit_timer.start(remaining_time_ms)
 
     @Slot()
-    def _emit_now(self):
+    def _emit_now(self) -> None:
         # Start counting time since last emit again from zero.
         self._elapsed_timer.restart()
         # Make sure that no delayed emits will happen before new trigger.
         self._delayed_emit_timer.stop()
         # Fire!
+        assert self._latest_payload is not None, "No payload to emit."
         logger.debug(f"Emitting latest payload: {self._latest_payload}")
-        self.triggered.emit(self._latest_payload)
+        self.triggered.emit(self._latest_payload[0], self._latest_payload[1])
