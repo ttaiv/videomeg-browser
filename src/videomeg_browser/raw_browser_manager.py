@@ -153,10 +153,11 @@ class RawBrowserManager(QObject):
         self.browser.set_view_time_range(min_time, self.raw_max_time)
         self.raw_time_selector.set_selected_time_no_signal(self.raw_max_time)
 
-    def set_selected_time(self, time_seconds: float) -> None:
+    def set_selected_time_no_signal(self, time_seconds: float) -> None:
         """Set the raw time selector to a specific time point in seconds.
 
         This will also update the view of the raw data browser accordingly.
+        Does NOT emit a signal for the selected time change.
         """
         logger.debug(f"Setting raw time selector to {time_seconds:.3f} seconds.")
         self.raw_time_selector.set_selected_time_no_signal(time_seconds)
