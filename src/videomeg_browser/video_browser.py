@@ -474,13 +474,13 @@ class VideoView(QWidget):
             )
             return
         if status == SyncStatus.SYNCHRONIZED:
-            self._sync_status_label.setText("Synchronized")
+            self._sync_status_label.setText("Synchronized to raw")
             self._sync_status_label.setStyleSheet("color: green; font-weight: bold;")
         elif status == SyncStatus.NO_RAW_DATA:
             self._sync_status_label.setText("No raw data for this frame")
             self._sync_status_label.setStyleSheet("color: red; font-weight: bold;")
         elif status == SyncStatus.NO_VIDEO_DATA:
-            self._sync_status_label.setText("No video for this raw data")
+            self._sync_status_label.setText("No video for selected raw data")
             self._sync_status_label.setStyleSheet("color: red; font-weight: bold;")
         else:
             raise ValueError(f"Unknown sync status: {status}")
