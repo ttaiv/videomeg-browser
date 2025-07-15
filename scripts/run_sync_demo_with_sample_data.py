@@ -116,7 +116,7 @@ def main() -> None:
 
     raw_browser = raw.plot(block=False, show=False)
 
-    browser = SyncedRawVideoBrowser(raw_browser, video, aligner)
+    browser = SyncedRawVideoBrowser(raw_browser, [video], [aligner])
 
     app.exec_()  # Start the Qt event loop
 

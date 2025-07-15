@@ -64,7 +64,7 @@ if __name__ == "__main__":
     # Instantiate raw browser
     raw_browser = raw.plot(block=False, show=False)
 
-    browser = SyncedRawVideoBrowser(raw_browser, video_file, aligner)
+    browser = SyncedRawVideoBrowser(raw_browser, [video_file], [aligner])
 
     app.exec_()  # Start the Qt event loop
     video_file.close()
