@@ -140,7 +140,7 @@ class SyncedRawVideoBrowser(QObject):
 
         Either shows the video frame that corresponds to the raw time point,
         or shows the first or last frame of the video if the raw time point
-        is out of bounds of the video data.
+        is out of bounds of the video data. Also updates the sync status of the video.
 
         Parameters
         ----------
@@ -161,17 +161,20 @@ class SyncedRawVideoBrowser(QObject):
                 self._video_browser.display_frame_for_video_with_idx(
                     frame_idx, video_idx, signal=False
                 )
-                # self._video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
-
+                self._video_browser.set_sync_status_for_video_with_idx(
+                    video_idx, SyncStatus.SYNCHRONIZED
+                )
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
                 # Raw time stamp is smaller than the first video frame timestamp
                 logger.debug(
                     f"Video on index {video_idx} has no data for this small raw time "
                     "point, showing first frame."
                 )
-                # self._video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
                 self._video_browser.display_frame_for_video_with_idx(
                     0, video_idx, signal=False
+                )
+                self._video_browser.set_sync_status_for_video_with_idx(
+                    video_idx, SyncStatus.NO_VIDEO_DATA
                 )
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
@@ -180,9 +183,11 @@ class SyncedRawVideoBrowser(QObject):
                     f"Video on index {video_idx} has no data for this large raw time "
                     "point, showing last frame."
                 )
-                # self._video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
                 self._video_browser.display_frame_for_video_with_idx(
                     self._video[video_idx].frame_count - 1, video_idx, signal=False
+                )
+                self._video_browser.set_sync_status_for_video_with_idx(
+                    video_idx, SyncStatus.NO_VIDEO_DATA
                 )
 
             case _:
@@ -200,7 +205,16 @@ class SyncedRawVideoBrowser(QObject):
         mapping_to_raw = self._aligners[video_idx].video_frame_index_to_raw_time(
             frame_idx
         )
-        self._update_raw(mapping_to_raw)
+        mapping_success = self._update_raw(mapping_to_raw)
+        if mapping_success:
+            self._video_browser.set_sync_status_for_video_with_idx(
+                video_idx, SyncStatus.SYNCHRONIZED
+            )
+        else:
+            # Signal that there is no raw data for this video frame index.
+            self._video_browser.set_sync_status_for_video_with_idx(
+                video_idx, SyncStatus.NO_RAW_DATA
+            )
         # Get the resulting raw time by asking it from the browser and use
         # it to update other videos (if any).
         raw_time_seconds = self._raw_browser_manager.get_selected_time()
@@ -215,7 +229,7 @@ class SyncedRawVideoBrowser(QObject):
             mapping_to_video = aligner.raw_time_to_video_frame_index(raw_time_seconds)
             self._update_video(idx, mapping_to_video)
 
-    def _update_raw(self, mapping: MappingResult) -> None:
+    def _update_raw(self, mapping: MappingResult) -> bool:
         """Update raw browser view based on mapping from video frame index to raw time.
 
         If the video frame index is out of bounds of the raw data, moves the raw view
@@ -225,28 +239,34 @@ class SyncedRawVideoBrowser(QObject):
         ----------
         mapping : MappingResult
             The result of mapping the video frame index to a raw time point.
+
+        Returns
+        -------
+        bool
+            True if the mapping was successful and yielded a valid raw time point,
+            False if the video frame index was out of bounds of the raw data.
         """
         match mapping:
             case MappingSuccess(result=raw_time):
                 # Video frame index has a corresponding raw time point
                 logger.debug(f"Setting raw browser to time: {raw_time:.3f} seconds.")
                 self._raw_browser_manager.set_selected_time_no_signal(raw_time)
-                self._video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
+                return True
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
                 # Video frame index is smaller than the first raw time point
                 logger.debug(
                     "No raw data for this small video frame, moving raw view to start."
                 )
-                self._video_browser.set_sync_status(SyncStatus.NO_RAW_DATA)
                 self._raw_browser_manager.jump_to_start()
+                return False
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
                 logger.debug(
                     "No raw data for this large video frame, moving raw view to end."
                 )
-                self._video_browser.set_sync_status(SyncStatus.NO_RAW_DATA)
                 self._raw_browser_manager.jump_to_end()
+                return False
 
             case _:
                 raise ValueError(f"Unexpected mapping result: {mapping}. ")
