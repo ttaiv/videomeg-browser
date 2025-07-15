@@ -76,7 +76,11 @@ class SyncedRawVideoBrowser(QObject):
 
         # Set up the video browser.
         self._video_browser = VideoBrowser(
-            videos, show_sync_status=True, parent=None, display_method="image_item"
+            videos,
+            show_sync_status=True,
+            parent=None,
+            # Save space in the UI excluding histogram with multiple videos.
+            display_method="image_item" if len(videos) > 1 else "image_view",
         )
 
         # Dock the video browser to the raw data browser with Qt magic
