@@ -1,3 +1,9 @@
+"""Example script that demonstrates inspecting two videos in sync with raw data.
+
+Loads sample MEG data and two video files, creates artificial MEG timestamps that align
+well with the video timestamps and displays the videos in sync with the raw data.
+"""
+
 import logging
 import os.path as op
 
@@ -10,7 +16,9 @@ from videomeg_browser.raw_video_aligner import RawVideoAligner
 from videomeg_browser.synced_raw_video_browser import SyncedRawVideoBrowser
 from videomeg_browser.video import VideoFileHelsinkiVideoMEG
 
-if __name__ == "__main__":
+
+def main() -> None:
+    """Run the two-video synchronization demo."""
     BASE_PATH = "/u/69/taivait1/unix/video_meg_testing/2025-07-11_MEG2MEG_test/"
 
     logging.basicConfig(
@@ -35,13 +43,14 @@ if __name__ == "__main__":
 
     for video in [video1, video2]:
         print(f"Stats for video {video.fname}:")
-        print(f"  Frame count: {video.frame_count}")
-        print(f"  {video.fps} FPS")
-        print(f"  Duration: {video.frame_count / video.fps:.2f} seconds")
+        print(f"  - Frame count: {video.frame_count}")
+        print(f"  - FPS: {video.fps}")
+        print(f"  - Duration: {video.frame_count / video.fps:.2f} seconds")
         print(
-            f"  Timestamps: {video.timestamps_ms[0] / 1000:.2f} ... {video.timestamps_ms[-1] / 1000:.2f}"
+            f"   -Timestamps: from {video.timestamps_ms[0] / 1000:.2f} s "
+            f"to {video.timestamps_ms[-1] / 1000:.2f} s"
         )
-        print(f"Frame size: {video.frame_width}x{video.frame_height}")
+        print(f"  - Frame size: {video.frame_width}x{video.frame_height}")
 
     # Create artificial timestamps for raw data.
     start_ts = video1.timestamps_ms[0]
@@ -74,4 +83,8 @@ if __name__ == "__main__":
     app = QApplication([])
     raw_browser = raw.plot(block=False, show=False)
     browser = SyncedRawVideoBrowser(raw_browser, [video1, video2], [aligner1, aligner2])
-    app.exec_()  # Start the Qt event loop
+    app.exec_()
+
+
+if __name__ == "__main__":
+    main()
