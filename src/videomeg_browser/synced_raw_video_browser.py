@@ -94,15 +94,18 @@ class SyncedRawVideoBrowser(QObject):
 
         # Set up synchronization
 
-        self._min_sync_interval_ms = int(1000 / max_sync_fps)
         # Create a throttler that limits the updates of both raw and other videos
         # due to fast change of one video (playback).
+        self._min_sync_interval_ms = int(1000 / max_sync_fps)
         self._throttler = BufferedThrottler(self._min_sync_interval_ms, parent=self)
+
+        # When the current frame of a video changes,
+        # update the raw browser and other videos through throttler.
         self._video_browser.sigFrameChanged.connect(self._throttler.trigger)
         self._throttler.triggered.connect(self.sync_all_to_video)
 
-        # When either raw time selector value or raw data browser's view changes,
-        # update the video browser (no throttling needed here).
+        # When selected time of raw browser changes,
+        # update the videos (no throttling needed here).
         self._raw_browser_manager.sigSelectedTimeChanged.connect(
             self.sync_videos_to_raw
         )
