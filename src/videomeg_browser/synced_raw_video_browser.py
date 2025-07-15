@@ -10,6 +10,7 @@ from .raw_browser_manager import RawBrowserInterface, RawBrowserManager
 from .raw_video_aligner import (
     MapFailureReason,
     MappingFailure,
+    MappingResult,
     MappingSuccess,
     RawVideoAligner,
 )
@@ -28,11 +29,13 @@ class SyncedRawVideoBrowser(QObject):
         The MNE raw data browser object to be synchronized with the video browser.
         This can be created with 'plot' method of MNE raw data object when using qt
         backend.
-    video_file : VideoFile
-        The video file object to be displayed in the video browser.
-    aligner : RawVideoAligner
-        An instance of `RawVideoAligner` that provides the mapping between raw data
-        time points and video frames.
+    videos : list[VideoFile]
+        The video file object(s) to be displayed in the video browser.
+    aligners : list[RawVideoAligner]
+        A list of `RawVideoAligner` instances, one for each video file.
+        Each aligner provides the mapping between raw data time points and video frames
+        for the corresponding video file. The order of the aligners must match the order
+        of the video files in the `videos` parameter.
     show : bool, optional
         Whether to show the raw data browser immediately upon instantiation,
         by default True.
@@ -46,19 +49,19 @@ class SyncedRawVideoBrowser(QObject):
     def __init__(
         self,
         raw_browser: MNEQtBrowser,
-        video_file: VideoFile,
-        aligner: RawVideoAligner,
+        videos: list[VideoFile],
+        aligners: list[RawVideoAligner],
         show: bool = True,
         raw_update_max_fps: int = 10,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent=parent)
-        self.video_file = video_file
-        self._aligner = aligner
+        self._video = videos
+        self._aligners = aligners
+        self._raw_update_max_fps = raw_update_max_fps
         # Flag to prevent infinite recursion during synchronization
         self._syncing = False
 
-        self._raw_update_max_fps = raw_update_max_fps
         self._min_raw_update_interval_ms = int(1000 / self._raw_update_max_fps)
         # Create a throttler that limits the update rate of the raw browser
         self._raw_update_throttler = BufferedThrottler(
@@ -80,7 +83,7 @@ class SyncedRawVideoBrowser(QObject):
 
         # Set up the video browser.
         self._video_browser = VideoBrowser(
-            [video_file], show_sync_status=True, parent=None
+            videos, show_sync_status=True, parent=None, display_method="image_item"
         )
 
         # Dock the video browser to the raw data browser with Qt magic
@@ -93,41 +96,42 @@ class SyncedRawVideoBrowser(QObject):
             self._dock.hide()
 
         # Set up synchronization
-
-        # When video browser frame changes, update the raw data browser's view.
-        # Connect the signal through a throttler to limit the update rate
-        # of the raw data browser to `raw_update_max_fps`.
-        self._video_browser.sigFrameChanged.connect(self._raw_update_throttler.trigger)
-        self._raw_update_throttler.triggered.connect(self.sync_raw_to_video)
+        self._video_browser.sigFrameChanged.connect(self.sync_all_to_video)
 
         # When either raw time selector value or raw data browser's view changes,
         # update the video browser
-        self._raw_browser_manager.sigSelectedTimeChanged.connect(self.sync_video_to_raw)
+        self._raw_browser_manager.sigSelectedTimeChanged.connect(
+            self.sync_videos_to_raw
+        )
 
         # Consider raw data browser to be the main browser and start by
         # synchronizing the video browser to the raw data browser's view
         initial_raw_time = self._raw_browser_manager.get_selected_time()
-        # Also updates the raw time selector
-        self.sync_video_to_raw(initial_raw_time)
+        self.sync_videos_to_raw(initial_raw_time)
 
     @Slot(float)
-    def sync_video_to_raw(self, raw_time_seconds: float) -> None:
-        """Update the displayed video frame when raw view changes."""
+    def sync_videos_to_raw(self, raw_time_seconds: float) -> None:
+        """Update the displayed video frame(s) when raw view changes."""
         if self._syncing:
             # Prevent infinite recursion
-            logger.debug("Already syncing, skip updating video view.")
+            logger.debug("Already syncing, skip updating video view(s).")
             return
         self._syncing = True
         logger.debug("")  # Clear debug log for clarity
         logger.debug(
-            "Detected change in raw data browser's selected time, syncing video."
+            "Detected change in raw data browser's selected time, syncing video(s)."
         )
-
-        self._update_video(raw_time_seconds)
+        for video_idx, aligner in enumerate(self._aligners):
+            logger.debug(
+                f"Syncing video {video_idx + 1}/{len(self._aligners)} to raw time: "
+                f"{raw_time_seconds:.3f} seconds."
+            )
+            mapping_to_video = aligner.raw_time_to_video_frame_index(raw_time_seconds)
+            self._update_video(video_idx, mapping_to_video)
         self._syncing = False
 
-    def _update_video(self, raw_time_seconds: float) -> None:
-        """Update video browser view based on selected raw time point.
+    def _update_video(self, video_idx: int, mapping: MappingResult) -> None:
+        """Update a video view based on mapping from a raw time to video frame index.
 
         Either shows the video frame that corresponds to the raw time point,
         or shows the first or last frame of the video if the raw time point
@@ -135,43 +139,48 @@ class SyncedRawVideoBrowser(QObject):
 
         Parameters
         ----------
-        raw_time_seconds : float
-            The raw time point in seconds to which the video browser should be synced.
+        video_idx : int
+            The index of the video to update.
+        mapping : MappingResult
+            The result of mapping the raw time point to a video frame index.
         """
-        mapping = self._aligner.raw_time_to_video_frame_index(raw_time_seconds)
-
         match mapping:
-            case MappingSuccess(result=video_idx):
+            case MappingSuccess(result=frame_idx):
                 # Raw time point has a corresponding video frame index
                 logger.debug(
-                    f"Setting video browser to show frame with index: {video_idx}"
+                    f"Setting video on index {video_idx} to show frame: {frame_idx}"
                 )
-                self._video_browser.display_frame_for_selected_video(video_idx)
-                self._video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
+                self._video_browser.display_frame_for_video_with_idx(
+                    frame_idx, video_idx
+                )
+                # self._video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
                 # Raw time stamp is smaller than the first video frame timestamp
                 logger.debug(
-                    "No video data for this small raw time point, showing first frame."
+                    f"Video on index {video_idx} has no data for this small raw time "
+                    "point, showing first frame."
                 )
-                self._video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
-                self._video_browser.display_frame_for_selected_video(0)
+                # self._video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
+                self._video_browser.display_frame_for_video_with_idx(0, video_idx)
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
                 # Raw time stamp is larger than the last video frame timestamp
                 logger.debug(
-                    "No video data for this large raw time point, showing last frame."
+                    f"Video on index {video_idx} has no data for this large raw time "
+                    "point, showing last frame."
                 )
-                self._video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
-                self._video_browser.display_frame_for_selected_video(
-                    self.video_file.frame_count - 1
+                # self._video_browser.set_sync_status(SyncStatus.NO_VIDEO_DATA)
+                self._video_browser.display_frame_for_video_with_idx(
+                    self._video[video_idx].frame_count - 1, video_idx
                 )
+
             case _:
                 raise ValueError(f"Unexpected mapping result: {mapping}. ")
 
-    @Slot(int)
-    def sync_raw_to_video(self, video_frame_idx: int) -> None:
-        """Update raw data browser's view and time selector when video frame changes."""
+    @Slot(int, int)
+    def sync_all_to_video(self, video_idx: int, frame_idx: int) -> None:
+        """Update raw data browser's view and other videos when video frame changes."""
         if self._syncing:
             # Prevent infinite recursion
             logger.debug("Already syncing, skip updating raw view.")
@@ -179,29 +188,46 @@ class SyncedRawVideoBrowser(QObject):
         self._syncing = True
 
         logger.debug("")  # Clear debug log for clarity
-        logger.debug(f"Syncing raw browser to video frame index: {video_frame_idx}")
+        logger.debug(
+            f"Detected change in video {video_idx + 1} to frame index: {frame_idx}. "
+            "Syncing raw data browser."
+        )
+        # Update the raw browser view based on the selected video frame index.
+        mapping_to_raw = self._aligners[video_idx].video_frame_index_to_raw_time(
+            frame_idx
+        )
+        self._update_raw(mapping_to_raw)
+        # Get the resulting raw time by asking it from the browser and use
+        # it to update other videos (if any).
+        raw_time_seconds = self._raw_browser_manager.get_selected_time()
+        for idx, aligner in enumerate(self._aligners):
+            if idx == video_idx:
+                # Skip the video that triggered the change
+                continue
+            logger.debug(
+                f"Syncing video {idx + 1}/{len(self._aligners)} to raw time: "
+                f"{raw_time_seconds:.3f} seconds."
+            )
+            mapping_to_video = aligner.raw_time_to_video_frame_index(raw_time_seconds)
+            self._update_video(idx, mapping_to_video)
 
-        self._update_raw(video_frame_idx)
         self._syncing = False
 
-    def _update_raw(self, video_frame_idx: int) -> None:
-        """Update raw browser view based on selected video frame index.
+    def _update_raw(self, mapping: MappingResult) -> None:
+        """Update raw browser view based on mapping from video frame index to raw time.
 
         If the video frame index is out of bounds of the raw data, moves the raw view
         to the start or end of the raw data.
 
         Parameters
         ----------
-        video_frame_idx : int
-            The video frame index to which the raw browser should be synced.
-
+        mapping : MappingResult
+            The result of mapping the video frame index to a raw time point.
         """
-        mapping = self._aligner.video_frame_index_to_raw_time(video_frame_idx)
-
         match mapping:
             case MappingSuccess(result=raw_time):
                 # Video frame index has a corresponding raw time point
-                logger.debug(f"Corresponding raw time in seconds: {raw_time:.3f}")
+                logger.debug(f"Setting raw browser to time: {raw_time:.3f} seconds.")
                 self._raw_browser_manager.set_selected_time(raw_time)
                 self._video_browser.set_sync_status(SyncStatus.SYNCHRONIZED)
 
@@ -219,6 +245,7 @@ class SyncedRawVideoBrowser(QObject):
                 )
                 self._video_browser.set_sync_status(SyncStatus.NO_RAW_DATA)
                 self._raw_browser_manager.jump_to_end()
+
             case _:
                 raise ValueError(f"Unexpected mapping result: {mapping}. ")
 
