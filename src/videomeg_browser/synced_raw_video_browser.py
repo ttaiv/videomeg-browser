@@ -36,12 +36,13 @@ class SyncedRawVideoBrowser(QObject):
         Each aligner provides the mapping between raw data time points and video frames
         for the corresponding video file. The order of the aligners must match the order
         of the video files in the `videos` parameter.
+    max_sync_fps : int, optional
+        The maximum frames per second for synchronizing the raw data browser and video
+        browser. This determines how often the synchronization updates can happen and
+        has an effect on the performance.
     show : bool, optional
         Whether to show the raw data browser immediately upon instantiation,
         by default True.
-    raw_update_max_fps : int, optional
-        The maximum frames per second for updating the raw data browser view,
-        by default 10. This has effect on the performance of the browser.
     parent : QObject, optional
         The parent QObject for this synchronized browser, by default None.
     """
@@ -67,7 +68,7 @@ class SyncedRawVideoBrowser(QObject):
         self._raw_browser_manager = RawBrowserManager(
             raw_browser_interface, parent=self
         )
-        # Make sure that raw browse visibility matches the `show` parameter.
+        # Make sure that raw browser visibility matches the `show` parameter.
         if show:
             self._raw_browser_manager.show_browser()
         else:
