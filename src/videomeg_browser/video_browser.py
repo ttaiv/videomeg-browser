@@ -325,14 +325,16 @@ class VideoBrowser(QWidget):
         self._next_button.setEnabled(current_frame_idx < max_frame_idx)
         self._play_pause_button.setEnabled(current_frame_idx < max_frame_idx)
 
-    def _update_slider_internal(self) -> None:
-        """Update the slider to reflect the current frame index.
+    def _update_slider_internal(self, new_maximum: int | None = None) -> None:
+        """Update the slider to the current frame index and optionally set new maximum.
 
         This is a helper method to update the slider value without
         triggering the valueChanged signal of the slider.
         """
         self._frame_slider.blockSignals(True)
         self._frame_slider.setValue(self._get_current_frame_index_of_selected_video())
+        if new_maximum is not None:
+            self._frame_slider.setMaximum(new_maximum)
         self._frame_slider.blockSignals(False)
 
     def _get_current_frame_index_of_selected_video(self) -> int:
@@ -343,8 +345,9 @@ class VideoBrowser(QWidget):
     def _on_selected_video_change(self, new_index: int) -> None:
         """Handle user changing the selected video."""
         self._selected_video_idx = new_index
-        self._frame_slider.setMaximum(self._videos[new_index].frame_count - 1)
-        self._update_slider_internal()
+        self._update_slider_internal(
+            new_maximum=self._videos[new_index].frame_count - 1
+        )
         self._update_buttons_enabled()
         self._set_play_timer_interval()
 
