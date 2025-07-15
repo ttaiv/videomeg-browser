@@ -102,21 +102,26 @@ class SyncedRawVideoBrowser(QObject):
         # When the current frame of a video changes,
         # update the raw browser and other videos through throttler.
         self._video_browser.sigFrameChanged.connect(self._throttler.trigger)
-        self._throttler.triggered.connect(self.sync_all_to_video)
+        self._throttler.triggered.connect(self._sync_all_to_video)
 
         # When selected time of raw browser changes,
         # update the videos (no throttling needed here).
         self._raw_browser_manager.sigSelectedTimeChanged.connect(
-            self.sync_videos_to_raw
+            self._sync_videos_to_raw
         )
 
         # Consider raw data browser to be the main browser and start by
         # synchronizing the videos to the raw data browser's view
         initial_raw_time = self._raw_browser_manager.get_selected_time()
-        self.sync_videos_to_raw(initial_raw_time)
+        self._sync_videos_to_raw(initial_raw_time)
+
+    def show(self) -> None:
+        """Show the synchronized raw and video browsers."""
+        self._raw_browser_manager.show_browser()
+        self._dock.show()
 
     @Slot(float)
-    def sync_videos_to_raw(self, raw_time_seconds: float) -> None:
+    def _sync_videos_to_raw(self, raw_time_seconds: float) -> None:
         """Update the displayed video frame(s) when raw view changes."""
         logger.debug("")  # Clear debug log for clarity
         logger.debug(
@@ -184,7 +189,7 @@ class SyncedRawVideoBrowser(QObject):
                 raise ValueError(f"Unexpected mapping result: {mapping}. ")
 
     @Slot(int, int)
-    def sync_all_to_video(self, video_idx: int, frame_idx: int) -> None:
+    def _sync_all_to_video(self, video_idx: int, frame_idx: int) -> None:
         """Update raw data browser's view and other videos when video frame changes."""
         logger.debug("")  # Clear debug log for clarity
         logger.debug(
@@ -245,11 +250,6 @@ class SyncedRawVideoBrowser(QObject):
 
             case _:
                 raise ValueError(f"Unexpected mapping result: {mapping}. ")
-
-    def show(self) -> None:
-        """Show the synchronized raw and video browsers."""
-        self._raw_browser_manager.show_browser()
-        self._dock.show()
 
 
 class BufferedThrottler(QObject):
