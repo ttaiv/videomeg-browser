@@ -42,8 +42,8 @@ class VideoBrowser(QWidget):
     videos : list[VideoFile]
         The video file(s) to be displayed.
     show_sync_status : bool, optional
-        Whether to show a label indicating the synchronization status of the video and
-        and raw data, by default False
+        Whether to show a label indicating the synchronization status of each video,
+        by default False.
     display_method : Literal["image_view", "image_item"], optional
         The method used to display the video frames. If "image_view", uses
         `pyqtgraph.ImageView` with histogram and extra controls. If "image_item", uses
@@ -92,7 +92,12 @@ class VideoBrowser(QWidget):
         # If multiple videos are provided, they are displayed side by side.
         video_layout = QHBoxLayout()
         self._video_views = [
-            VideoView(video, display_method=display_method, parent=self)
+            VideoView(
+                video,
+                show_sync_status=show_sync_status,
+                display_method=display_method,
+                parent=self,
+            )
             for video in videos
         ]
         for video_view in self._video_views:
@@ -149,12 +154,6 @@ class VideoBrowser(QWidget):
         self._fps_label = QLabel()
         self._fps_label.setText("FPS: -")
         self._layout.addWidget(self._fps_label)
-
-        if show_sync_status:
-            self._sync_status_label = QLabel()
-            self._layout.addWidget(self._sync_status_label)
-        else:
-            self._sync_status_label = None
 
         self._update_buttons_enabled()
 
@@ -242,23 +241,6 @@ class VideoBrowser(QWidget):
             self._get_current_frame_index_of_selected_video() - 1
         )
 
-    @Slot(SyncStatus)
-    def set_sync_status(self, status: SyncStatus) -> None:
-        """Set the sync status label and color."""
-        if not self._show_sync_status or self._sync_status_label is None:
-            return
-        if status == SyncStatus.SYNCHRONIZED:
-            self._sync_status_label.setText("Synchronized")
-            self._sync_status_label.setStyleSheet("color: green; font-weight: bold;")
-        elif status == SyncStatus.NO_RAW_DATA:
-            self._sync_status_label.setText("No raw data for this frame")
-            self._sync_status_label.setStyleSheet("color: red; font-weight: bold;")
-        elif status == SyncStatus.NO_VIDEO_DATA:
-            self._sync_status_label.setText("No video for this raw data")
-            self._sync_status_label.setStyleSheet("color: red; font-weight: bold;")
-        else:
-            raise ValueError(f"Unknown sync status: {status}")
-
     @Slot()
     def play_video(self) -> None:
         """Play the selected video with its original frame rate."""
@@ -297,6 +279,20 @@ class VideoBrowser(QWidget):
             self.pause_video()
         else:
             self.play_video()
+
+    def set_sync_status_for_video_with_idx(
+        self, video_idx: int, status: SyncStatus
+    ) -> None:
+        """Set the sync status for a specific video view.
+
+        Parameters
+        ----------
+        video_idx : int
+            The index of the video view to update.
+        status : SyncStatus
+            The synchronization status to set.
+        """
+        self._video_views[video_idx].set_sync_status(status)
 
     @Slot()
     def _play_next_frame(self) -> None:
@@ -368,6 +364,9 @@ class VideoView(QWidget):
     ----------
     video : VideoFile
         The video file to be displayed.
+    show_sync_status : bool, optional
+        Whether to show a label indicating the synchronization status of the video,
+        by default False.
     display_method : Literal["image_view", "image_item"], optional
         The method used to display the video frames. If "image_view", uses
         `pyqtgraph.ImageView` with histogram and extra controls. If "image_item",
@@ -384,6 +383,7 @@ class VideoView(QWidget):
     def __init__(
         self,
         video: VideoFile,
+        show_sync_status: bool = False,
         display_method: Literal["image_view", "image_item"] = "image_view",
         parent: QWidget | None = None,
     ) -> None:
@@ -417,6 +417,12 @@ class VideoView(QWidget):
         # Label to display the current frame index
         self._frame_label = QLabel()
         self._layout.addWidget(self._frame_label)
+
+        if show_sync_status:
+            self._sync_status_label = QLabel()
+            self._layout.addWidget(self._sync_status_label)
+        else:
+            self._sync_status_label = None
 
         # Set up initial state
         first_frame = self._video.get_frame_at(0)
@@ -455,6 +461,26 @@ class VideoView(QWidget):
         self.sigFrameChanged.emit(self._current_frame_idx)
 
         return True
+
+    def set_sync_status(self, status: SyncStatus) -> None:
+        """Set the sync status label and color."""
+        print("Setting sync status:", status)
+        if self._sync_status_label is None:
+            logger.warning(
+                "No sync status label available. Skipping setting sync status."
+            )
+            return
+        if status == SyncStatus.SYNCHRONIZED:
+            self._sync_status_label.setText("Synchronized")
+            self._sync_status_label.setStyleSheet("color: green; font-weight: bold;")
+        elif status == SyncStatus.NO_RAW_DATA:
+            self._sync_status_label.setText("No raw data for this frame")
+            self._sync_status_label.setStyleSheet("color: red; font-weight: bold;")
+        elif status == SyncStatus.NO_VIDEO_DATA:
+            self._sync_status_label.setText("No video for this raw data")
+            self._sync_status_label.setStyleSheet("color: red; font-weight: bold;")
+        else:
+            raise ValueError(f"Unknown sync status: {status}")
 
     @property
     def current_frame_idx(self) -> int:
