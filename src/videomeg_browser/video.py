@@ -86,6 +86,14 @@ class VideoFile(ABC):
         """Return the full path to the video file."""
         pass
 
+    def print_stats(self) -> None:
+        """Print statistics about the video file."""
+        print(f"Stats for video {self.fname}:")
+        print(f"  - Frame count: {self.frame_count}")
+        print(f"  - FPS: {self.fps:.2f}")
+        print(f"  - Duration: {self.frame_count / self.fps:.2f} seconds")
+        print(f"  - Frame size: {self.frame_width}x{self.frame_height}")
+
 
 class VideoFileCV2(VideoFile):
     """Container that holds a video file and provides methods to read frames from it."""
@@ -374,6 +382,19 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
     @property
     def fname(self) -> str:
         return self._file_name
+
+    def print_stats(self) -> None:
+        """Print statistics about the video file."""
+        # Override the base class method to include additional stats about timestamps.
+        super().print_stats()
+        print(
+            f"  - Timestamp range: {self.timestamps_ms[0] / 1000:.2f} s to "
+            f"{self.timestamps_ms[-1] / 1000:.2f} s"
+        )
+        print(
+            "  - Timestamp mean interval: "
+            f"{(np.diff(self.timestamps_ms).mean()):.2f} ms"
+        )
 
     def _estimate_fps(self, estimate_with: str = "mean") -> float:
         """Estimate frames per second (FPS) based on timestamps."""

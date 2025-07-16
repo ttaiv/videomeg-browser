@@ -44,6 +44,8 @@ def main() -> None:
         op.join(BASE_PATH, "Video_MEG", "animal_meg_subject_2_240614.video.dat"),
         magic_str="ELEKTA_VIDEO_FILE",
     )
+    video_file.print_stats()
+
     # Create a raw data object
     raw = mne.io.read_raw_fif(
         op.join(BASE_PATH, "Raw", "animal_meg_subject_2_240614.fif"), preload=True

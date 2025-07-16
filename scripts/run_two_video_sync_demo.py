@@ -45,15 +45,7 @@ def main() -> None:
     )
 
     for video in [video1, video2]:
-        print(f"Stats for video {video.fname}:")
-        print(f"  - Frame count: {video.frame_count}")
-        print(f"  - FPS: {video.fps}")
-        print(f"  - Duration: {video.frame_count / video.fps:.2f} seconds")
-        print(
-            f"   -Timestamps: from {video.timestamps_ms[0] / 1000:.2f} s "
-            f"to {video.timestamps_ms[-1] / 1000:.2f} s"
-        )
-        print(f"  - Frame size: {video.frame_width}x{video.frame_height}")
+        video.print_stats()
 
     # Create artificial timestamps for raw data.
     start_ts = video1.timestamps_ms[0]

@@ -30,6 +30,9 @@ def main() -> None:
     video = VideoFileHelsinkiVideoMEG(video_path, magic_str="ELEKTA_VIDEO_FILE")
     # video = VideoFileCV2(video_path)  # suitable for .mp4, .avi, etc.
 
+    # Print video stats
+    video.print_stats()
+
     app = QApplication([])
     window = VideoBrowser([video])
     window.resize(1000, 800)
