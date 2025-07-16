@@ -1,3 +1,9 @@
+"""Inspect MEG data and video recorded with Helsinki videoMEG project software.
+
+Running this requires MEG data and video files recorded with the Helsinki videoMEG
+project software. You also need to adjust file paths.
+"""
+
 import logging
 import os.path as op
 
@@ -13,16 +19,17 @@ from videomeg_browser.video import VideoFileHelsinkiVideoMEG
 
 
 def get_raw_timestamps(raw: mne.io.Raw, timing_channel: str) -> NDArray[np.floating]:
-    """Get the timestamps from the raw data."""
+    """Get the timestamps from raw data having Helsinki videoMEG timing channel."""
     timing_data = raw.get_data(picks=timing_channel, return_times=False)
     # Remove the channel dimension
     # Ignoring warning about timing_data possibly being tuple,
-    # as we do not ask times from raw.get_data
+    # as we do not ask times from raw.get_data.
     timing_data = timing_data.squeeze()  # type: ignore
     return comp_tstamps(timing_data, raw.info["sfreq"])
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Run the demo."""
     BASE_PATH = "/u/69/taivait1/unix/video_meg_testing/Subject_2_Luna"
     RAW_TIMING_CHANNEL = "STI016"
 
@@ -68,3 +75,7 @@ if __name__ == "__main__":
 
     app.exec_()  # Start the Qt event loop
     video_file.close()
+
+
+if __name__ == "__main__":
+    main()
