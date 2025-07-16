@@ -42,10 +42,11 @@ class RawTimeSelector(QObject):
     def get_selected_time(self) -> float:
         """Get the currently selected time in seconds."""
         time = self._selector.value()
-        # Get rid of IDE type warnings by explicitly checking the type
-        if not isinstance(time, float):
-            raise TypeError(f"Expected selected time to be float, got {type(time)}")
-        return time
+
+        if not isinstance(time, int | float):
+            raise TypeError(f"Expected time to be a number, got {type(time)} instead.")
+
+        return float(time)
 
     def set_selected_time_no_signal(self, time_seconds: float) -> None:
         """Set the position of the selector in seconds WITHOUT emitting a signal."""
