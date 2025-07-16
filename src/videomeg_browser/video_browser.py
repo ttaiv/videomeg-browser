@@ -398,7 +398,6 @@ class VideoView(QWidget):
 
         if display_method == "image_view":
             self._image_view = pg.ImageView(parent=self)
-            # self._image_view.setMinimumSize(video.frame_width, video.frame_height)
             self._layout.addWidget(self._image_view)
         elif display_method == "image_item":
             # Manually create a GraphicsLayoutWidget with ViewBox and ImageItem.
@@ -467,7 +466,6 @@ class VideoView(QWidget):
 
     def set_sync_status(self, status: SyncStatus) -> None:
         """Set the sync status label and color."""
-        print("Setting sync status:", status)
         if self._sync_status_label is None:
             logger.warning(
                 "No sync status label available. Skipping setting sync status."
