@@ -123,23 +123,23 @@ class VideoBrowser(QWidget):
         navigation_layout = QHBoxLayout()
         self._layout.addLayout(navigation_layout)
 
-        play_prev_pause_width = 150  # Fixed width for play/pause buttons
+        nav_button_min_width = 100
 
         self._prev_button = QPushButton("Previous Frame")
         self._prev_button.clicked.connect(
             self.display_previous_frame_for_selected_video
         )
-        self._prev_button.setMinimumWidth(play_prev_pause_width)
+        self._prev_button.setMinimumWidth(nav_button_min_width)
         navigation_layout.addWidget(self._prev_button)
 
         self._play_pause_button = QPushButton("Play")
         self._play_pause_button.clicked.connect(self.toggle_play_pause)
-        self._play_pause_button.setMinimumWidth(play_prev_pause_width)
+        self._play_pause_button.setMinimumWidth(nav_button_min_width)
         navigation_layout.addWidget(self._play_pause_button)
 
         self._next_button = QPushButton("Next Frame")
         self._next_button.clicked.connect(self.display_next_frame_for_selected_video)
-        self._next_button.setMinimumWidth(play_prev_pause_width)
+        self._next_button.setMinimumWidth(nav_button_min_width)
         navigation_layout.addWidget(self._next_button)
 
         # Add drop-down menu for selecting which video to control.
