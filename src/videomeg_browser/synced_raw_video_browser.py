@@ -1,6 +1,7 @@
 """Contains the main class for synchronizing MNE raw data browser and video browser."""
 
 import logging
+from typing import Literal
 
 from mne_qt_browser.figure import MNEQtBrowser
 from qtpy import QtWidgets
@@ -36,6 +37,9 @@ class SyncedRawVideoBrowser(QObject):
         Each aligner provides the mapping between raw data time points and video frames
         for the corresponding video file. The order of the aligners must match the order
         of the video files in the `videos` parameter.
+    video_splitter_orientation : Literal["horizontal", "vertical"], optional
+        Whether to show multiple videos in a horizontal or vertical layout.
+        This has no effect if only one video is provided.
     max_sync_fps : int, optional
         The maximum frames per second for synchronizing the raw data browser and video
         browser. This determines how often the synchronization updates can happen and
@@ -52,6 +56,7 @@ class SyncedRawVideoBrowser(QObject):
         raw_browser: MNEQtBrowser,
         videos: list[VideoFile],
         aligners: list[RawVideoAligner],
+        video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
         show: bool = True,
         max_sync_fps: int = 10,
         parent: QObject | None = None,
@@ -81,6 +86,7 @@ class SyncedRawVideoBrowser(QObject):
             parent=None,
             # Save space in the UI excluding histogram with multiple videos.
             display_method="image_item" if len(videos) > 1 else "image_view",
+            video_splitter_orientation=video_splitter_orientation,
         )
 
         # Dock the video browser to the raw data browser with Qt magic
