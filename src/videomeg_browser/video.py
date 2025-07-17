@@ -86,12 +86,17 @@ class VideoFile(ABC):
         """Return the full path to the video file."""
         pass
 
+    @property
+    def duration(self) -> float:
+        """Return the possibly estimated duration of the video in seconds."""
+        return self.frame_count / self.fps if self.fps > 0 else 0.0
+
     def print_stats(self) -> None:
         """Print statistics about the video file."""
         print(f"Stats for video {self.fname}:")
         print(f"  - Frame count: {self.frame_count}")
         print(f"  - FPS: {self.fps:.2f}")
-        print(f"  - Duration: {self.frame_count / self.fps:.2f} seconds")
+        print(f"  - Duration: {self.duration:.2f} seconds")
         print(f"  - Frame size: {self.frame_width}x{self.frame_height}")
 
 
@@ -382,6 +387,19 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
     @property
     def fname(self) -> str:
         return self._file_name
+
+    @property
+    def duration(self) -> float:
+        """Return the duration of the video in seconds.
+
+        This overrides the base class method to provide a more accurate
+        duration that is based on the timestamps of the frames.
+        """
+        if self._nframes < 2:
+            return 0.0
+
+        # Duration is the difference between the last and first timestamp in seconds
+        return (self.timestamps_ms[-1] - self.timestamps_ms[0]) / 1000.0
 
     def print_stats(self) -> None:
         """Print statistics about the video file."""
