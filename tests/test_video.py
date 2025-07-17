@@ -61,7 +61,14 @@ class TestVideoFileHelsinkiVideoMEG:
             assert video.frame_count > 0
             assert video.frame_height > 0
             assert video.frame_width > 0
+            assert video.duration > 0
             assert len(video.timestamps_ms) == video.frame_count
+            assert video.duration == pytest.approx(
+                video.frame_count / VIDEO_FPS, rel=1e-3
+            )
+            assert video.duration == pytest.approx(
+                (video.timestamps_ms[-1] - video.timestamps_ms[0]) / 1000.0
+            )
 
     def test_get_frame_at(self):
         """Test getting frames at specific indices."""
