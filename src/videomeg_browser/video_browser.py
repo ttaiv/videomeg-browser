@@ -15,6 +15,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QPushButton,
     QSlider,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -48,6 +49,9 @@ class VideoBrowser(QWidget):
         The method used to display the video frames. If "image_view", uses
         `pyqtgraph.ImageView` with histogram and extra controls. If "image_item", uses
         plain 'pyqtgraph.ImageItem' inside a `pyqtgraph.ViewBox`.
+    video_splitter_orientation : Literal["horizontal", "vertical"], optional
+        The orientation of the video splitter that separates multiple video views,
+        by default "horizontal". Has no effect if only one video is provided.
     parent : QWidget, optional
         The parent widget for this browser, by default None
     """
@@ -60,6 +64,7 @@ class VideoBrowser(QWidget):
         videos: list[VideoFile],
         show_sync_status: bool = False,
         display_method: Literal["image_view", "image_item"] = "image_view",
+        video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
@@ -83,14 +88,12 @@ class VideoBrowser(QWidget):
         self._n_frames_since_last_fps_update = 0
 
         self.setWindowTitle("Video Browser")
-        self.resize(1000, 800)  # Set initial size of the window
 
-        # Create layout that will hold widgets that make up the browser
-        self._layout = QVBoxLayout(self)
+        # Create the main layout for the browser.
+        self._layout = QVBoxLayout()
+        self.setLayout(self._layout)
 
         # Add video view(s).
-        # If multiple videos are provided, they are displayed side by side.
-        video_layout = QHBoxLayout()
         self._video_views = [
             VideoView(
                 video,
@@ -100,9 +103,10 @@ class VideoBrowser(QWidget):
             )
             for video in videos
         ]
-        for video_view in self._video_views:
-            video_layout.addWidget(video_view)
-        self._layout.addLayout(video_layout)
+        if self._multiple_videos:
+            self._add_multi_video_view(video_splitter_orientation)
+        else:
+            self._layout.addWidget(self._video_views[0])
 
         # Slider for navigating to a specific frame
         self._frame_slider = QSlider(Qt.Horizontal)
@@ -117,6 +121,8 @@ class VideoBrowser(QWidget):
         # Navigation bar with buttons: previous frame, play/pause, next frame
         # and possibly a video selector if multiple videos are shown.
         navigation_layout = QHBoxLayout()
+        self._layout.addLayout(navigation_layout)
+
         play_prev_pause_width = 150  # Fixed width for play/pause buttons
 
         self._prev_button = QPushButton("Previous Frame")
@@ -149,8 +155,7 @@ class VideoBrowser(QWidget):
             navigation_layout.addStretch()  # Push the selector to the right
             navigation_layout.addWidget(self._video_selector)
 
-        self._layout.addLayout(navigation_layout)
-
+        # Label to display the current frame rate (FPS)
         self._fps_label = QLabel()
         self._fps_label.setText("FPS: -")
         self._layout.addWidget(self._fps_label)
@@ -358,6 +363,23 @@ class VideoBrowser(QWidget):
             1000 / self._videos[self._selected_video_idx].fps
         )
         self._play_timer.setInterval(self._play_timer_interval_ms)
+
+    def _add_multi_video_view(
+        self, video_splitter_orientation: Literal["horizontal", "vertical"]
+    ) -> None:
+        """Add a splitter with video views to the layout."""
+        if video_splitter_orientation == "horizontal":
+            video_splitter = QSplitter(Qt.Horizontal, parent=self)
+        elif video_splitter_orientation == "vertical":
+            video_splitter = QSplitter(Qt.Vertical, parent=self)
+        else:
+            raise ValueError(
+                f"Invalid video splitter orientation: {video_splitter_orientation}. "
+                "Use 'horizontal' or 'vertical'."
+            )
+        for video_view in self._video_views:
+            video_splitter.addWidget(video_view)
+        self._layout.addWidget(video_splitter, stretch=1)
 
 
 class VideoView(QWidget):
