@@ -438,17 +438,22 @@ class VideoView(QWidget):
                 "Use 'image_view' or 'image_item'."
             )
 
+        # Add a horizontal layout for info labels
+        info_layout = QHBoxLayout()
+        self._layout.addLayout(info_layout)
+
         # Label to display the current frame index
         self._frame_label = QLabel()
-        self._layout.addWidget(self._frame_label)
+        info_layout.addWidget(self._frame_label)
 
         if show_sync_status:
             self._sync_status_label = QLabel()
-            self._layout.addWidget(self._sync_status_label)
+            info_layout.addStretch()  # Push the sync status label to the right
+            info_layout.addWidget(self._sync_status_label)
         else:
             self._sync_status_label = None
 
-        # Set up initial state
+        # Show the first frame of the video by default.
         first_frame = self._video.get_frame_at(0)
         if first_frame is None:
             raise ValueError("Could not read the first frame of the video.")
