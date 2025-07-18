@@ -411,6 +411,8 @@ class VideoBrowser(QWidget):
 class VideoView(QWidget):
     """A widget for displaying video.
 
+    Includes labels for current frame index and optionally for synchronization status.
+
     Parameters
     ----------
     video : VideoFile
