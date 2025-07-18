@@ -77,7 +77,12 @@ def main() -> None:
 
     app = QApplication([])
     raw_browser = raw.plot(block=False, show=False)
-    browser = SyncedRawVideoBrowser(raw_browser, [video1, video2], [aligner1, aligner2])
+    browser = SyncedRawVideoBrowser(
+        raw_browser,
+        [video1, video2],
+        [aligner1, aligner2],
+        video_splitter_orientation="vertical",
+    )
     app.exec_()
 
 
