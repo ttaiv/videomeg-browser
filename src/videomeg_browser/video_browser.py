@@ -125,7 +125,7 @@ class VideoBrowser(QWidget):
         # Slider for navigating to a specific frame
         self._frame_slider = IndexSlider(
             min_value=0,
-            max_value=self._videos[self._selected_video_idx].frame_count - 1,
+            max_value=self._selected_video.frame_count - 1,
             value=0,
             parent=self,
         )
@@ -343,7 +343,7 @@ class VideoBrowser(QWidget):
     def _update_buttons_enabled(self) -> None:
         """Enable/disable navigation buttons based on the frame of selected video."""
         current_frame_idx = self._get_current_frame_index_of_selected_video()
-        max_frame_idx = self._videos[self._selected_video_idx].frame_count - 1
+        max_frame_idx = self._selected_video.frame_count - 1
 
         self._prev_button.setEnabled(current_frame_idx > 0)
         self._next_button.setEnabled(current_frame_idx < max_frame_idx)
