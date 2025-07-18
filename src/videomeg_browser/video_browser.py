@@ -173,7 +173,7 @@ class VideoBrowser(QWidget):
 
         # Label to display the current frame rate (FPS)
         self._fps_label = QLabel()
-        self._fps_label.setText("FPS: -")
+        self._fps_label.setText("Playing FPS: -")
         self._layout.addWidget(self._fps_label)
 
         self._update_buttons_enabled()
@@ -292,7 +292,7 @@ class VideoBrowser(QWidget):
         self._is_playing = False
         self._play_timer.stop()
         self._play_pause_button.setText("Play")
-        self._fps_label.setText("FPS: -")
+        self._fps_label.setText("Playing FPS: -")
         # Reset the frame tracker to start fresh with the next play.
         self._frame_rate_tracker.reset()
 
@@ -336,7 +336,8 @@ class VideoBrowser(QWidget):
         if self._n_frames_since_last_fps_update >= self._n_frames_between_fps_updates:
             # Update the displayed frame rate.
             self._fps_label.setText(
-                f"FPS: {round(self._frame_rate_tracker.get_current_frame_rate())}"
+                "Playing FPS: "
+                f"{round(self._frame_rate_tracker.get_current_frame_rate())}"
             )
             self._n_frames_since_last_fps_update = 0
 
