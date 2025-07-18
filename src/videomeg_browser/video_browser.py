@@ -75,6 +75,7 @@ class VideoBrowser(QWidget):
         self._multiple_videos = len(videos) > 1
         # To which video the navigation controls currently apply
         self._selected_video_idx = 0
+        self._selected_video = videos[self._selected_video_idx]
         self._is_playing = False  # Whether the frame updates are currently automatic
 
         # Set up timer that allow automatic frame updates (playing the video)
@@ -109,6 +110,18 @@ class VideoBrowser(QWidget):
         else:
             self._layout.addWidget(self._video_views[0])
 
+        # Add a horizontal layout that has time label and a frame slider.
+        slider_layout = QHBoxLayout()
+        self._layout.addLayout(slider_layout)
+
+        # Label that shows the current time of the selected video.
+        self._time_label = ElapsedTimeLabel(
+            current_time_seconds=0.0,
+            max_time_seconds=self._selected_video.duration,
+            parent=self,
+        )
+        self._time_label.add_to_layout(slider_layout)
+
         # Slider for navigating to a specific frame
         self._frame_slider = IndexSlider(
             min_value=0,
@@ -119,7 +132,7 @@ class VideoBrowser(QWidget):
         self._frame_slider.sigIndexChanged.connect(
             self.display_frame_for_selected_video
         )
-        self._frame_slider.add_to_layout(self._layout)
+        self._frame_slider.add_to_layout(slider_layout)
 
         # Navigation bar with buttons: previous frame, play/pause, next frame
         # and possibly a video selector if multiple videos are shown.
@@ -216,6 +229,7 @@ class VideoBrowser(QWidget):
         self._frame_slider.set_value(
             self._get_current_frame_index_of_selected_video(), signal=False
         )
+        self._update_time_label()
         self._update_buttons_enabled()
 
         if signal:
@@ -343,13 +357,15 @@ class VideoBrowser(QWidget):
     def _on_selected_video_change(self, new_index: int) -> None:
         """Handle user changing the selected video."""
         self._selected_video_idx = new_index
+        self._selected_video = self._videos[new_index]
 
-        new_maximum = self._videos[new_index].frame_count - 1
-        self._frame_slider.set_max_value(new_maximum, signal=False)
+        self._frame_slider.set_max_value(
+            self._selected_video.frame_count - 1, signal=False
+        )
         self._frame_slider.set_value(
             self._get_current_frame_index_of_selected_video(), signal=False
         )
-
+        self._update_time_label(new_max=self._selected_video.duration)
         self._update_buttons_enabled()
         self._set_play_timer_interval()
 
@@ -377,6 +393,18 @@ class VideoBrowser(QWidget):
         for video_view in self._video_views:
             video_splitter.addWidget(video_view)
         self._layout.addWidget(video_splitter, stretch=1)
+
+    def _update_time_label(self, new_max: float | None = None) -> None:
+        """Update the time label to show the current time of the selected video.
+
+        Optionally set a new maximum time for the label.
+        """
+        video_frame_idx = self._get_current_frame_index_of_selected_video()
+        time_seconds = video_frame_idx / self._selected_video.fps
+        if new_max is None:
+            self._time_label.set_current_time(time_seconds)
+        else:
+            self._time_label.set_current_and_max_time(time_seconds, new_max)
 
 
 class VideoView(QWidget):
@@ -618,6 +646,104 @@ class IndexSlider(QObject):
             The layout to which the slider will be added.
         """
         layout.addWidget(self._slider)
+
+
+class ElapsedTimeLabel:
+    """A label for displaying time in a format [current_time] / [max_time].
+
+    The format is either mm:ss or hh:mm:ss, depending on whether the
+    maximum time is less than or greater than one hour.
+
+    Parameters
+    ----------
+    current_time_seconds : float
+        The current time in seconds to display.
+    max_time_seconds : float
+        The maximum time in seconds to display.
+    parent : QWidget, optional
+        The parent widget for this label, by default None
+    """
+
+    def __init__(
+        self,
+        current_time_seconds: float,
+        max_time_seconds: float,
+        parent: QWidget | None = None,
+    ) -> None:
+        assert current_time_seconds <= max_time_seconds, (
+            "Current time should be less than or equal to maximum time."
+        )
+        self._current_time_seconds = current_time_seconds
+        self._max_time_seconds = max_time_seconds
+        self._label = QLabel(parent=parent)
+
+        # Determine whether to include hours in the time display.
+        if max_time_seconds < 3600:
+            self._include_hours = False
+        else:
+            self._include_hours = True
+
+        self._current_time_text = self._format_time(current_time_seconds)
+        self._max_time_text = self._format_time(max_time_seconds)
+        self._label.setText(f"{self._current_time_text} / {self._max_time_text}")
+
+    def set_current_time(self, current_time_seconds: float) -> None:
+        """Update the current time displayed in the label."""
+        assert current_time_seconds <= self._max_time_seconds, (
+            "Current time should be less than or equal to maximum time."
+        )
+        self._current_time_text = self._format_time(current_time_seconds)
+        self._label.setText(f"{self._current_time_text} / {self._max_time_text}")
+
+    def set_max_time(self, max_time_seconds: float) -> None:
+        """Update the maximum time displayed in the label.
+
+        Also updates the display format to include or exclude hours based on
+        `max_time_seconds` being more or less than an hour.
+        """
+        if max_time_seconds < 3600:
+            self._include_hours = False
+        else:
+            self._include_hours = True
+
+        self._max_time_text = self._format_time(max_time_seconds)
+        # Also update the current time text in case display format changed.
+        self._current_time_text = self._format_time(self._current_time_seconds)
+        self._label.setText(f"{self._current_time_text} / {self._max_time_text}")
+
+    def set_current_and_max_time(
+        self, current_time_seconds: float, max_time_seconds: float
+    ) -> None:
+        """Update both current and maximum time displayed in the label.
+
+        Also updates the display format to include or exclude hours based on
+        `max_time_seconds` being more or less than an hour.
+        """
+        assert current_time_seconds <= max_time_seconds, (
+            "Current time should be less than or equal to maximum time."
+        )
+        self._current_time_seconds = current_time_seconds
+        # This handles also updating the current time text.
+        self.set_max_time(max_time_seconds)
+
+    def add_to_layout(self, layout: QLayout) -> None:
+        """Add the label to the given layout.
+
+        Parameters
+        ----------
+        layout : QLayout
+            The layout to which the label will be added.
+        """
+        layout.addWidget(self._label)
+
+    def _format_time(self, time_seconds: float) -> str:
+        """Format seconds as mm:ss or hh:mm:ss, depending on the include_hours flag."""
+        minutes, seconds = divmod(int(time_seconds), 60)
+        if self._include_hours:
+            hours, minutes = divmod(minutes, 60)
+            return f"{hours}:{minutes:02d}:{seconds:02d}"
+
+        return f"{minutes}:{seconds:02d}"
 
 
 class FrameRateTracker:
