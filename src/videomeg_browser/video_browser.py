@@ -544,7 +544,7 @@ class VideoView(QWidget):
         """Update the frame label to show the current frame number."""
         # Use one-based index for display
         self._frame_label.setText(
-            f"Current Frame: {self._current_frame_idx + 1}/{self._video.frame_count}"
+            f"Frame {self._current_frame_idx + 1}/{self._video.frame_count}"
         )
 
 
