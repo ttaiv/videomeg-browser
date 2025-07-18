@@ -15,6 +15,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QLayout,
     QPushButton,
+    QSizePolicy,
     QSlider,
     QSplitter,
     QVBoxLayout,
@@ -446,18 +447,20 @@ class VideoView(QWidget):
 
         self._layout = QVBoxLayout(self)
 
+        # Add either ImageView or plain GraphicsLayoutWidget with ImageItem.
+        # Both ImageItem and ImageView have method `setImage()` to display the image.
         if display_method == "image_view":
             self._image_view = pg.ImageView(parent=self)
             self._layout.addWidget(self._image_view)
         elif display_method == "image_item":
-            # Manually create a GraphicsLayoutWidget with ViewBox and ImageItem.
+            # Manually create a GraphicsLayoutWidget with ViewBox.
             graphics_widget = pg.GraphicsLayoutWidget(parent=self)
             self._layout.addWidget(graphics_widget)
             view_box = graphics_widget.addViewBox()
             view_box.setAspectLocked(True)
             # Inverting Y makes the orientation the same as in ImageView.
             view_box.invertY(True)
-            # The ImageItem has method `setImage` just like ImageView!
+            # Place the ImageItem in the ViewBox.
             self._image_view = pg.ImageItem()
             view_box.addItem(self._image_view)
         else:
@@ -466,27 +469,36 @@ class VideoView(QWidget):
                 "Use 'image_view' or 'image_item'."
             )
 
-        # Add a horizontal layout for info labels
-        info_layout = QHBoxLayout()
-        self._layout.addLayout(info_layout)
+        # Add a horizontal layout for extras like frame index label and center button.
+        extras_layout = QHBoxLayout()
+        self._layout.addLayout(extras_layout)
 
         # Label to display the current frame index
         self._frame_label = QLabel()
-        info_layout.addWidget(self._frame_label)
+        extras_layout.addWidget(self._frame_label)
+
+        # Button to center the video view
+        self._center_button = QPushButton("Center Video")
+        self._center_button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        self._center_button.clicked.connect(self.center_video)
+        extras_layout.addWidget(self._center_button)
+
+        # Make sure that the center button does not take too much space
+        # and sync status label is aligned to the right.
+        extras_layout.addStretch()
 
         if show_sync_status:
             self._sync_status_label = QLabel()
-            info_layout.addStretch()  # Push the sync status label to the right
-            info_layout.addWidget(self._sync_status_label)
+            extras_layout.addWidget(self._sync_status_label)
         else:
             self._sync_status_label = None
 
-        # Show the first frame of the video by default.
+        # Make sure that we can display the first frame of the video.
         first_frame = self._video.get_frame_at(0)
         if first_frame is None:
             raise ValueError("Could not read the first frame of the video.")
-        self._image_view.setImage(first_frame)
-        self._frame_label.setText(f"Current Frame: 1/{self._video.frame_count}")
+        # Display the first frame.
+        self.display_frame_at(0)
 
     @Slot(int)
     def display_frame_at(self, frame_idx: int) -> bool:
@@ -504,10 +516,7 @@ class VideoView(QWidget):
         """
         frame = self._video.get_frame_at(frame_idx)
         if frame is None:
-            logger.info(
-                f"Could not retrieve frame at index {frame_idx}. "
-                "Skipping updating the frame."
-            )
+            logger.info(f"Could not retrieve frame at index {frame_idx}. ")
             return False
 
         self._current_frame_idx = frame_idx
@@ -537,6 +546,15 @@ class VideoView(QWidget):
             self._sync_status_label.setStyleSheet("color: red; font-weight: bold;")
         else:
             raise ValueError(f"Unknown sync status: {status}")
+
+    def center_video(self) -> None:
+        """Scale and pan the view around video such that the image fills the view."""
+        if isinstance(self._image_view, pg.ImageView):
+            self._image_view.getView().autoRange()
+        elif isinstance(self._image_view, pg.ImageItem):
+            self._image_view.getViewBox().autoRange()
+        else:
+            logger.warning("Unknown image view type. Cannot center and scale the view.")
 
     @property
     def current_frame_idx(self) -> int:
