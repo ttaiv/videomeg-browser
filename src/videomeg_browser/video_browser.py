@@ -485,11 +485,15 @@ class VideoView(QWidget):
         info_icon = QLabel()
         info_pixmap = QPixmap()
         info_icon_resource = files("videomeg_browser.icons").joinpath("info.png")
-        with info_icon_resource.open("rb") as f:
-            info_pixmap.loadFromData(f.read())
-        info_icon.setPixmap(
-            info_pixmap.scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        )
+        try:
+            with info_icon_resource.open("rb") as f:
+                info_pixmap.loadFromData(f.read())
+            info_icon.setPixmap(
+                info_pixmap.scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+        except (FileNotFoundError, ModuleNotFoundError) as e:
+            logger.warning(f"Info icon not found, using text-based icon: {e}")
+            info_icon.setText("ℹ️")  # Fallback to a text-based icon
         info_icon.setToolTip(
             f"File: {video.fname}\n"
             f"Duration: {video.duration:.2f} seconds\n"
