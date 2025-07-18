@@ -3,6 +3,8 @@
 **Work in progress.** This project is based on [Helsinki VideoMEG project](https://github.com/Helsinki-VideoMEG-Project)
 and currently works with video files recorded using software from that project.
 
+![VideoMEG browser screenshot](browser_screenshot.png)
+
 ## Installation for development
 
 In addition to MNE-Python, this project currently requires package `OpenCV` for standard video file reading.
