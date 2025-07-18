@@ -5,10 +5,12 @@ import logging
 import os
 import time
 from enum import Enum, auto
+from importlib.resources import files
 from typing import Literal
 
 import pyqtgraph as pg
 from qtpy.QtCore import QObject, Qt, QTimer, Signal, Slot  # type: ignore
+from qtpy.QtGui import QPixmap
 from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -473,9 +475,31 @@ class VideoView(QWidget):
         extras_layout = QHBoxLayout()
         self._layout.addLayout(extras_layout)
 
-        # Label to display the current frame index
-        self._frame_label = QLabel()
-        extras_layout.addWidget(self._frame_label)
+        # Add name of the video file as a label.
+        video_name = os.path.basename(self._video.fname)
+        video_label = QLabel(f"{video_name}")
+        video_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        extras_layout.addWidget(video_label)
+
+        # Add info icon that shows video stats when hovered over.
+        info_icon = QLabel()
+        info_pixmap = QPixmap()
+        info_icon_resource = files("videomeg_browser.icons").joinpath("info.png")
+        with info_icon_resource.open("rb") as f:
+            info_pixmap.loadFromData(f.read())
+        info_icon.setPixmap(
+            info_pixmap.scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        )
+        info_icon.setToolTip(
+            f"File: {video.fname}\n"
+            f"Duration: {video.duration:.2f} seconds\n"
+            f"Frame count: {video.frame_count}\n"
+            f"Resolution: {video.frame_width}x{video.frame_height}\n"
+            f"FPS: {video.fps:.2f}"
+        )
+        extras_layout.addWidget(info_icon)
+        # Add the same hover info to the video label.
+        video_label.setToolTip(info_icon.toolTip())
 
         # Button to center the video view
         self._center_button = QPushButton("Center Video")
@@ -483,9 +507,11 @@ class VideoView(QWidget):
         self._center_button.clicked.connect(self.center_video)
         extras_layout.addWidget(self._center_button)
 
-        # Make sure that the center button does not take too much space
-        # and sync status label is aligned to the right.
         extras_layout.addStretch()
+
+        # Label to display the current frame index
+        self._frame_label = QLabel()
+        extras_layout.addWidget(self._frame_label)
 
         if show_sync_status:
             self._sync_status_label = QLabel()
@@ -596,7 +622,8 @@ class IndexSlider(QObject):
             raise ValueError("Maximum value must be greater than or equal to minimum.")
         if value < min_value or value > max_value:
             raise ValueError(
-                f"Value must be between {min_value} and {max_value}, inclusive. Got {value}."
+                f"Value must be between {min_value} and {max_value}, inclusive. "
+                f"Got {value}."
             )
         self._min_value = min_value
         self._max_value = max_value
@@ -624,8 +651,8 @@ class IndexSlider(QObject):
         """
         if max_value < self._min_value:
             raise ValueError(
-                f"Maximum value must be greater than or equal to minimum value {self._min_value}. "
-                f"Got {max_value}."
+                f"Maximum value must be greater than or equal to minimum value "
+                f"{self._min_value}. Got {max_value}."
             )
         self._max_value = max_value
         if signal:
