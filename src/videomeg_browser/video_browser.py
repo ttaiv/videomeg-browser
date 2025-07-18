@@ -718,9 +718,10 @@ class ElapsedTimeLabel:
         max_time_seconds: float,
         parent: QWidget | None = None,
     ) -> None:
-        assert current_time_seconds <= max_time_seconds, (
-            "Current time should be less than or equal to maximum time."
-        )
+        if current_time_seconds > max_time_seconds:
+            raise ValueError(
+                "Current time should be less than or equal to maximum time."
+            )
         self._current_time_seconds = current_time_seconds
         self._max_time_seconds = max_time_seconds
         self._label = QLabel(parent=parent)
@@ -737,9 +738,8 @@ class ElapsedTimeLabel:
 
     def set_current_time(self, current_time_seconds: float) -> None:
         """Update the current time displayed in the label."""
-        assert current_time_seconds <= self._max_time_seconds, (
-            "Current time should be less than or equal to maximum time."
-        )
+        if current_time_seconds > self._max_time_seconds:
+            raise ValueError("Current time should be less than or equal to maximum time.")
         self._current_time_text = self._format_time(current_time_seconds)
         self._label.setText(f"{self._current_time_text} / {self._max_time_text}")
 
@@ -767,9 +767,10 @@ class ElapsedTimeLabel:
         Also updates the display format to include or exclude hours based on
         `max_time_seconds` being more or less than an hour.
         """
-        assert current_time_seconds <= max_time_seconds, (
-            "Current time should be less than or equal to maximum time."
-        )
+        if current_time_seconds > max_time_seconds:
+            raise ValueError(
+                "Current time should be less than or equal to maximum time."
+            )
         self._current_time_seconds = current_time_seconds
         # This handles also updating the current time text.
         self.set_max_time(max_time_seconds)
