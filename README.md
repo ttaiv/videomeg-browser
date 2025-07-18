@@ -4,6 +4,8 @@
 and currently works with video files recorded using software from that project.
 
 ![VideoMEG browser screenshot](browser_screenshot.png)
+Screenshot of the browser extension showing video from our validation measurement (in which a plushie named Herba kindly
+volunteered to be the test subject), synchronized with MNE-Python's sample MEG data.
 
 ## Installation for development
 
