@@ -5,16 +5,21 @@ import logging
 import os
 import time
 from enum import Enum, auto
+from importlib.resources import files
 from typing import Literal
 
 import pyqtgraph as pg
-from qtpy.QtCore import Qt, QTimer, Signal, Slot  # type: ignore
+from qtpy.QtCore import QObject, Qt, QTimer, Signal, Slot  # type: ignore
+from qtpy.QtGui import QPixmap
 from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QPushButton,
+    QSizePolicy,
     QSlider,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -48,6 +53,9 @@ class VideoBrowser(QWidget):
         The method used to display the video frames. If "image_view", uses
         `pyqtgraph.ImageView` with histogram and extra controls. If "image_item", uses
         plain 'pyqtgraph.ImageItem' inside a `pyqtgraph.ViewBox`.
+    video_splitter_orientation : Literal["horizontal", "vertical"], optional
+        The orientation of the video splitter that separates multiple video views,
+        by default "horizontal". Has no effect if only one video is provided.
     parent : QWidget, optional
         The parent widget for this browser, by default None
     """
@@ -60,6 +68,7 @@ class VideoBrowser(QWidget):
         videos: list[VideoFile],
         show_sync_status: bool = False,
         display_method: Literal["image_view", "image_item"] = "image_view",
+        video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
@@ -69,6 +78,7 @@ class VideoBrowser(QWidget):
         self._multiple_videos = len(videos) > 1
         # To which video the navigation controls currently apply
         self._selected_video_idx = 0
+        self._selected_video = videos[self._selected_video_idx]
         self._is_playing = False  # Whether the frame updates are currently automatic
 
         # Set up timer that allow automatic frame updates (playing the video)
@@ -83,14 +93,12 @@ class VideoBrowser(QWidget):
         self._n_frames_since_last_fps_update = 0
 
         self.setWindowTitle("Video Browser")
-        self.resize(1000, 800)  # Set initial size of the window
 
-        # Create layout that will hold widgets that make up the browser
-        self._layout = QVBoxLayout(self)
+        # Create the main layout for the browser.
+        self._layout = QVBoxLayout()
+        self.setLayout(self._layout)
 
         # Add video view(s).
-        # If multiple videos are provided, they are displayed side by side.
-        video_layout = QHBoxLayout()
         self._video_views = [
             VideoView(
                 video,
@@ -100,40 +108,57 @@ class VideoBrowser(QWidget):
             )
             for video in videos
         ]
-        for video_view in self._video_views:
-            video_layout.addWidget(video_view)
-        self._layout.addLayout(video_layout)
+        if self._multiple_videos:
+            self._add_multi_video_view(video_splitter_orientation)
+        else:
+            self._layout.addWidget(self._video_views[0])
+
+        # Add a horizontal layout that has time label and a frame slider.
+        slider_layout = QHBoxLayout()
+        self._layout.addLayout(slider_layout)
+
+        # Label that shows the current time of the selected video.
+        self._time_label = ElapsedTimeLabel(
+            current_time_seconds=0.0,
+            max_time_seconds=self._selected_video.duration,
+            parent=self,
+        )
+        self._time_label.add_to_layout(slider_layout)
 
         # Slider for navigating to a specific frame
-        self._frame_slider = QSlider(Qt.Horizontal)
-        self._frame_slider.setMinimum(0)
-        self._frame_slider.setMaximum(
-            self._videos[self._selected_video_idx].frame_count - 1
+        self._frame_slider = IndexSlider(
+            min_value=0,
+            max_value=self._selected_video.frame_count - 1,
+            value=0,
+            parent=self,
         )
-        self._frame_slider.setValue(0)
-        self._frame_slider.valueChanged.connect(self.display_frame_for_selected_video)
-        self._layout.addWidget(self._frame_slider)
+        self._frame_slider.sigIndexChanged.connect(
+            self.display_frame_for_selected_video
+        )
+        self._frame_slider.add_to_layout(slider_layout)
 
         # Navigation bar with buttons: previous frame, play/pause, next frame
         # and possibly a video selector if multiple videos are shown.
         navigation_layout = QHBoxLayout()
-        play_prev_pause_width = 150  # Fixed width for play/pause buttons
+        self._layout.addLayout(navigation_layout)
+
+        nav_button_min_width = 100
 
         self._prev_button = QPushButton("Previous Frame")
         self._prev_button.clicked.connect(
             self.display_previous_frame_for_selected_video
         )
-        self._prev_button.setMinimumWidth(play_prev_pause_width)
+        self._prev_button.setMinimumWidth(nav_button_min_width)
         navigation_layout.addWidget(self._prev_button)
 
         self._play_pause_button = QPushButton("Play")
         self._play_pause_button.clicked.connect(self.toggle_play_pause)
-        self._play_pause_button.setMinimumWidth(play_prev_pause_width)
+        self._play_pause_button.setMinimumWidth(nav_button_min_width)
         navigation_layout.addWidget(self._play_pause_button)
 
         self._next_button = QPushButton("Next Frame")
         self._next_button.clicked.connect(self.display_next_frame_for_selected_video)
-        self._next_button.setMinimumWidth(play_prev_pause_width)
+        self._next_button.setMinimumWidth(nav_button_min_width)
         navigation_layout.addWidget(self._next_button)
 
         # Add drop-down menu for selecting which video to control.
@@ -149,10 +174,9 @@ class VideoBrowser(QWidget):
             navigation_layout.addStretch()  # Push the selector to the right
             navigation_layout.addWidget(self._video_selector)
 
-        self._layout.addLayout(navigation_layout)
-
+        # Label to display the current frame rate (FPS)
         self._fps_label = QLabel()
-        self._fps_label.setText("FPS: -")
+        self._fps_label.setText("Playing FPS: -")
         self._layout.addWidget(self._fps_label)
 
         self._update_buttons_enabled()
@@ -205,7 +229,10 @@ class VideoBrowser(QWidget):
             )
             return False
 
-        self._update_slider_internal()
+        self._frame_slider.set_value(
+            self._get_current_frame_index_of_selected_video(), signal=False
+        )
+        self._update_time_label()
         self._update_buttons_enabled()
 
         if signal:
@@ -268,7 +295,7 @@ class VideoBrowser(QWidget):
         self._is_playing = False
         self._play_timer.stop()
         self._play_pause_button.setText("Play")
-        self._fps_label.setText("FPS: -")
+        self._fps_label.setText("Playing FPS: -")
         # Reset the frame tracker to start fresh with the next play.
         self._frame_rate_tracker.reset()
 
@@ -312,30 +339,19 @@ class VideoBrowser(QWidget):
         if self._n_frames_since_last_fps_update >= self._n_frames_between_fps_updates:
             # Update the displayed frame rate.
             self._fps_label.setText(
-                f"FPS: {round(self._frame_rate_tracker.get_current_frame_rate())}"
+                "Playing FPS: "
+                f"{round(self._frame_rate_tracker.get_current_frame_rate())}"
             )
             self._n_frames_since_last_fps_update = 0
 
     def _update_buttons_enabled(self) -> None:
         """Enable/disable navigation buttons based on the frame of selected video."""
         current_frame_idx = self._get_current_frame_index_of_selected_video()
-        max_frame_idx = self._videos[self._selected_video_idx].frame_count - 1
+        max_frame_idx = self._selected_video.frame_count - 1
 
         self._prev_button.setEnabled(current_frame_idx > 0)
         self._next_button.setEnabled(current_frame_idx < max_frame_idx)
         self._play_pause_button.setEnabled(current_frame_idx < max_frame_idx)
-
-    def _update_slider_internal(self, new_maximum: int | None = None) -> None:
-        """Update the slider to the current frame index and optionally set new maximum.
-
-        This is a helper method to update the slider value without
-        triggering the valueChanged signal of the slider.
-        """
-        self._frame_slider.blockSignals(True)
-        self._frame_slider.setValue(self._get_current_frame_index_of_selected_video())
-        if new_maximum is not None:
-            self._frame_slider.setMaximum(new_maximum)
-        self._frame_slider.blockSignals(False)
 
     def _get_current_frame_index_of_selected_video(self) -> int:
         """Get the current index for the currently selected video."""
@@ -345,9 +361,15 @@ class VideoBrowser(QWidget):
     def _on_selected_video_change(self, new_index: int) -> None:
         """Handle user changing the selected video."""
         self._selected_video_idx = new_index
-        self._update_slider_internal(
-            new_maximum=self._videos[new_index].frame_count - 1
+        self._selected_video = self._videos[new_index]
+
+        self._frame_slider.set_max_value(
+            self._selected_video.frame_count - 1, signal=False
         )
+        self._frame_slider.set_value(
+            self._get_current_frame_index_of_selected_video(), signal=False
+        )
+        self._update_time_label(new_max=self._selected_video.duration)
         self._update_buttons_enabled()
         self._set_play_timer_interval()
 
@@ -359,9 +381,40 @@ class VideoBrowser(QWidget):
         )
         self._play_timer.setInterval(self._play_timer_interval_ms)
 
+    def _add_multi_video_view(
+        self, video_splitter_orientation: Literal["horizontal", "vertical"]
+    ) -> None:
+        """Add a splitter with video views to the layout."""
+        if video_splitter_orientation == "horizontal":
+            video_splitter = QSplitter(Qt.Horizontal, parent=self)
+        elif video_splitter_orientation == "vertical":
+            video_splitter = QSplitter(Qt.Vertical, parent=self)
+        else:
+            raise ValueError(
+                f"Invalid video splitter orientation: {video_splitter_orientation}. "
+                "Use 'horizontal' or 'vertical'."
+            )
+        for video_view in self._video_views:
+            video_splitter.addWidget(video_view)
+        self._layout.addWidget(video_splitter, stretch=1)
+
+    def _update_time_label(self, new_max: float | None = None) -> None:
+        """Update the time label to show the current time of the selected video.
+
+        Optionally set a new maximum time for the label.
+        """
+        video_frame_idx = self._get_current_frame_index_of_selected_video()
+        time_seconds = video_frame_idx / self._selected_video.fps
+        if new_max is None:
+            self._time_label.set_current_time(time_seconds)
+        else:
+            self._time_label.set_current_and_max_time(time_seconds, new_max)
+
 
 class VideoView(QWidget):
     """A widget for displaying video.
+
+    Includes labels for current frame index and optionally for synchronization status.
 
     Parameters
     ----------
@@ -396,18 +449,20 @@ class VideoView(QWidget):
 
         self._layout = QVBoxLayout(self)
 
+        # Add either ImageView or plain GraphicsLayoutWidget with ImageItem.
+        # Both ImageItem and ImageView have method `setImage()` to display the image.
         if display_method == "image_view":
             self._image_view = pg.ImageView(parent=self)
             self._layout.addWidget(self._image_view)
         elif display_method == "image_item":
-            # Manually create a GraphicsLayoutWidget with ViewBox and ImageItem.
+            # Manually create a GraphicsLayoutWidget with ViewBox.
             graphics_widget = pg.GraphicsLayoutWidget(parent=self)
             self._layout.addWidget(graphics_widget)
             view_box = graphics_widget.addViewBox()
             view_box.setAspectLocked(True)
             # Inverting Y makes the orientation the same as in ImageView.
             view_box.invertY(True)
-            # The ImageItem has method `setImage` just like ImageView!
+            # Place the ImageItem in the ViewBox.
             self._image_view = pg.ImageItem()
             view_box.addItem(self._image_view)
         else:
@@ -416,22 +471,64 @@ class VideoView(QWidget):
                 "Use 'image_view' or 'image_item'."
             )
 
+        # Add a horizontal layout for extras like frame index label and center button.
+        extras_layout = QHBoxLayout()
+        self._layout.addLayout(extras_layout)
+
+        # Add name of the video file as a label.
+        video_name = os.path.basename(self._video.fname)
+        video_label = QLabel(f"{video_name}")
+        video_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        extras_layout.addWidget(video_label)
+
+        # Add info icon that shows video stats when hovered over.
+        info_icon = QLabel()
+        info_pixmap = QPixmap()
+        info_icon_resource = files("videomeg_browser.icons").joinpath("info.png")
+        try:
+            with info_icon_resource.open("rb") as f:
+                info_pixmap.loadFromData(f.read())
+            info_icon.setPixmap(
+                info_pixmap.scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+        except (FileNotFoundError, ModuleNotFoundError) as e:
+            logger.warning(f"Info icon not found, using text-based icon: {e}")
+            info_icon.setText("ℹ️")  # Fallback to a text-based icon
+        info_icon.setToolTip(
+            f"File: {video.fname}\n"
+            f"Duration: {video.duration:.2f} seconds\n"
+            f"Frame count: {video.frame_count}\n"
+            f"Resolution: {video.frame_width}x{video.frame_height}\n"
+            f"FPS: {video.fps:.2f}"
+        )
+        extras_layout.addWidget(info_icon)
+        # Add the same hover info to the video label.
+        video_label.setToolTip(info_icon.toolTip())
+
+        # Button to center the video view
+        self._center_button = QPushButton("Center Video")
+        self._center_button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        self._center_button.clicked.connect(self.center_video)
+        extras_layout.addWidget(self._center_button)
+
+        extras_layout.addStretch()
+
         # Label to display the current frame index
         self._frame_label = QLabel()
-        self._layout.addWidget(self._frame_label)
+        extras_layout.addWidget(self._frame_label)
 
         if show_sync_status:
             self._sync_status_label = QLabel()
-            self._layout.addWidget(self._sync_status_label)
+            extras_layout.addWidget(self._sync_status_label)
         else:
             self._sync_status_label = None
 
-        # Set up initial state
+        # Make sure that we can display the first frame of the video.
         first_frame = self._video.get_frame_at(0)
         if first_frame is None:
             raise ValueError("Could not read the first frame of the video.")
-        self._image_view.setImage(first_frame)
-        self._frame_label.setText(f"Current Frame: 1/{self._video.frame_count}")
+        # Display the first frame.
+        self.display_frame_at(0)
 
     @Slot(int)
     def display_frame_at(self, frame_idx: int) -> bool:
@@ -449,10 +546,7 @@ class VideoView(QWidget):
         """
         frame = self._video.get_frame_at(frame_idx)
         if frame is None:
-            logger.info(
-                f"Could not retrieve frame at index {frame_idx}. "
-                "Skipping updating the frame."
-            )
+            logger.info(f"Could not retrieve frame at index {frame_idx}. ")
             return False
 
         self._current_frame_idx = frame_idx
@@ -483,6 +577,15 @@ class VideoView(QWidget):
         else:
             raise ValueError(f"Unknown sync status: {status}")
 
+    def center_video(self) -> None:
+        """Scale and pan the view around video such that the image fills the view."""
+        if isinstance(self._image_view, pg.ImageView):
+            self._image_view.getView().autoRange()
+        elif isinstance(self._image_view, pg.ImageItem):
+            self._image_view.getViewBox().autoRange()
+        else:
+            logger.warning("Unknown image view type. Cannot center and scale the view.")
+
     @property
     def current_frame_idx(self) -> int:
         """Get the index of the currently displayed frame."""
@@ -492,8 +595,206 @@ class VideoView(QWidget):
         """Update the frame label to show the current frame number."""
         # Use one-based index for display
         self._frame_label.setText(
-            f"Current Frame: {self._current_frame_idx + 1}/{self._video.frame_count}"
+            f"Frame {self._current_frame_idx + 1}/{self._video.frame_count}"
         )
+
+
+class IndexSlider(QObject):
+    """A slider for navigating indices, such as video frames.
+
+    Emits a signal when the index changes and provides methods to manipulate the slider,
+    optionally without emitting the signal.
+
+    Parameters
+    ----------
+    min_value : int
+        The minimum value of the slider.
+    max_value : int
+        The maximum value of the slider.
+    value : int
+        The initial value of the slider.
+    parent : QWidget, optional
+        The parent widget for this slider, by default None
+    """
+
+    sigIndexChanged = Signal(int)
+
+    def __init__(
+        self, min_value: int, max_value: int, value: int, parent: QWidget | None = None
+    ) -> None:
+        if max_value < min_value:
+            raise ValueError("Maximum value must be greater than or equal to minimum.")
+        if value < min_value or value > max_value:
+            raise ValueError(
+                f"Value must be between {min_value} and {max_value}, inclusive. "
+                f"Got {value}."
+            )
+        self._min_value = min_value
+        self._max_value = max_value
+
+        super().__init__(parent=parent)
+        self._slider = QSlider(Qt.Horizontal, parent=parent)
+
+        self._slider.setMinimum(min_value)
+        self._slider.setMaximum(max_value)
+        self._slider.setValue(value)
+
+        self._slider.valueChanged.connect(
+            lambda value: self.sigIndexChanged.emit(value)
+        )
+
+    def set_max_value(self, max_value: int, signal: bool) -> None:
+        """Set the maximum value of the slider.
+
+        Parameters
+        ----------
+        max_value : int
+            The maximum value to set for the slider.
+        signal : bool
+            Whether to emit the `sigIndexChanged` if the value of the slider changes.
+        """
+        if max_value < self._min_value:
+            raise ValueError(
+                f"Maximum value must be greater than or equal to minimum value "
+                f"{self._min_value}. Got {max_value}."
+            )
+        self._max_value = max_value
+        if signal:
+            self._slider.setMaximum(max_value)
+        else:
+            self._slider.blockSignals(True)
+            self._slider.setMaximum(max_value)
+            self._slider.blockSignals(False)
+
+    def set_value(self, value: int, signal: bool) -> None:
+        """Set the slider value and optionally emit the valueChanged signal.
+
+        Parameters
+        ----------
+        value : int
+            The value to set for the slider.
+        signal : bool, optional
+            Whether to emit the `sigIndexChanged` signal if the value of the slider
+            changes.
+        """
+        if value < self._min_value or value > self._max_value:
+            raise ValueError(
+                f"Value must be between {self._min_value} and {self._max_value}, "
+                f"inclusive. Got {value}."
+            )
+        if signal:
+            self._slider.setValue(value)
+        else:
+            self._slider.blockSignals(True)
+            self._slider.setValue(value)
+            self._slider.blockSignals(False)
+
+    def add_to_layout(self, layout: QLayout) -> None:
+        """Add the slider to the given layout.
+
+        Parameters
+        ----------
+        layout : QLayout
+            The layout to which the slider will be added.
+        """
+        layout.addWidget(self._slider)
+
+
+class ElapsedTimeLabel:
+    """A label for displaying time in a format [current_time] / [max_time].
+
+    The format is either mm:ss or hh:mm:ss, depending on whether the
+    maximum time is less than or greater than one hour.
+
+    Parameters
+    ----------
+    current_time_seconds : float
+        The current time in seconds to display.
+    max_time_seconds : float
+        The maximum time in seconds to display.
+    parent : QWidget, optional
+        The parent widget for this label, by default None
+    """
+
+    def __init__(
+        self,
+        current_time_seconds: float,
+        max_time_seconds: float,
+        parent: QWidget | None = None,
+    ) -> None:
+        if current_time_seconds > max_time_seconds:
+            logger.warning("Current time exceeds maximum time.")
+        self._current_time_seconds = current_time_seconds
+        self._max_time_seconds = max_time_seconds
+        self._label = QLabel(parent=parent)
+
+        # Determine whether to include hours in the time display.
+        if max_time_seconds < 3600:
+            self._include_hours = False
+        else:
+            self._include_hours = True
+
+        self._current_time_text = self._format_time(current_time_seconds)
+        self._max_time_text = self._format_time(max_time_seconds)
+        self._label.setText(f"{self._current_time_text} / {self._max_time_text}")
+
+    def set_current_time(self, current_time_seconds: float) -> None:
+        """Update the current time displayed in the label."""
+        if current_time_seconds > self._max_time_seconds:
+            logger.warning("Current time exceeds maximum time.")
+        self._current_time_text = self._format_time(current_time_seconds)
+        self._label.setText(f"{self._current_time_text} / {self._max_time_text}")
+
+    def set_max_time(self, max_time_seconds: float) -> None:
+        """Update the maximum time displayed in the label.
+
+        Also updates the display format to include or exclude hours based on
+        `max_time_seconds` being more or less than an hour.
+        """
+        if max_time_seconds < self._current_time_seconds:
+            logger.warning("Maximum time is less than current time.")
+        if max_time_seconds < 3600:
+            self._include_hours = False
+        else:
+            self._include_hours = True
+
+        self._max_time_text = self._format_time(max_time_seconds)
+        # Also update the current time text in case display format changed.
+        self._current_time_text = self._format_time(self._current_time_seconds)
+        self._label.setText(f"{self._current_time_text} / {self._max_time_text}")
+
+    def set_current_and_max_time(
+        self, current_time_seconds: float, max_time_seconds: float
+    ) -> None:
+        """Update both current and maximum time displayed in the label.
+
+        Also updates the display format to include or exclude hours based on
+        `max_time_seconds` being more or less than an hour.
+        """
+        if current_time_seconds > max_time_seconds:
+            logger.warning("Current time exceeds maximum time.")
+        self._current_time_seconds = current_time_seconds
+        # This handles also updating the current time text.
+        self.set_max_time(max_time_seconds)
+
+    def add_to_layout(self, layout: QLayout) -> None:
+        """Add the label to the given layout.
+
+        Parameters
+        ----------
+        layout : QLayout
+            The layout to which the label will be added.
+        """
+        layout.addWidget(self._label)
+
+    def _format_time(self, time_seconds: float) -> str:
+        """Format seconds as mm:ss or hh:mm:ss, depending on the include_hours flag."""
+        minutes, seconds = divmod(int(time_seconds), 60)
+        if self._include_hours:
+            hours, minutes = divmod(minutes, 60)
+            return f"{hours}:{minutes:02d}:{seconds:02d}"
+
+        return f"{minutes}:{seconds:02d}"
 
 
 class FrameRateTracker:
