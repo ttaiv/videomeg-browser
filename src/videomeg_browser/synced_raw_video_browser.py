@@ -40,6 +40,9 @@ class SyncedRawVideoBrowser(QObject):
     video_splitter_orientation : Literal["horizontal", "vertical"], optional
         Whether to show multiple videos in a horizontal or vertical layout.
         This has no effect if only one video is provided.
+    video_display_method : Literal["image_item", "image_view"], optional
+        The display method to use for the video browser. By default, "image_item" is
+        used if more than one video is provided, otherwise "image_view".
     max_sync_fps : int, optional
         The maximum frames per second for synchronizing the raw data browser and video
         browser. This determines how often the synchronization updates can happen and
@@ -57,6 +60,7 @@ class SyncedRawVideoBrowser(QObject):
         videos: list[VideoFile],
         aligners: list[RawVideoAligner],
         video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
+        video_display_method: Literal["image_item", "image_view"] | None = None,
         show: bool = True,
         max_sync_fps: int = 10,
         parent: QObject | None = None,
@@ -80,12 +84,16 @@ class SyncedRawVideoBrowser(QObject):
             self._raw_browser_manager.hide_browser()
 
         # Set up the video browser.
+        if video_display_method is None:
+            # Save space in the UI by excluding histogram with multiple videos.
+            display_method = "image_item" if len(videos) > 1 else "image_view"
+        else:
+            display_method = video_display_method
         self._video_browser = VideoBrowser(
             videos,
             show_sync_status=True,
             parent=None,
-            # Save space in the UI excluding histogram with multiple videos.
-            display_method="image_item" if len(videos) > 1 else "image_view",
+            display_method=display_method,
             video_splitter_orientation=video_splitter_orientation,
         )
 
