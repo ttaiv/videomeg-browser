@@ -13,6 +13,8 @@ import imageio.v3 as iio
 import numpy as np
 import numpy.typing as npt
 
+from .helsinki_videomeg_file_utils import UnknownVersionError, read_attrib
+
 logger = logging.getLogger(__name__)
 
 
@@ -209,43 +211,6 @@ class VideoFileCV2(VideoFile):
 
 
 # --- Code below is adapted from PyVideoMEG project ---
-
-
-class UnknownVersionError(Exception):
-    """Error due to unknown file version."""
-
-    pass
-
-
-def _read_attrib(data_file, ver):
-    """Read data block attributes.
-
-    If cannot read the attributes (EOF?), return -1 in ts.
-    """
-    if ver == 0 or ver == 1:
-        attrib = data_file.read(12)
-        if len(attrib) == 12:
-            ts, sz = struct.unpack("QI", attrib)
-        else:
-            ts = -1
-            sz = -1
-        total_sz = sz + 12
-
-    elif ver == 2 or ver == 3:
-        attrib = data_file.read(20)
-        if len(attrib) == 20:
-            ts, block_id, sz = struct.unpack("QQI", attrib)
-        else:
-            ts = -1
-            sz = -1
-        total_sz = sz + 20
-
-    else:
-        raise UnknownVersionError(ver)
-
-    return ts, sz, total_sz
-
-
 class VideoFileHelsinkiVideoMEG(VideoFile):
     """Video file reader for video files in Helsinki VideoMEG project format.
 
@@ -297,7 +262,7 @@ class VideoFileHelsinkiVideoMEG(VideoFile):
         self._frame_ptrs = []  # List of tuples (offset, size) for each frame
 
         while self._file.tell() < end_data:  # we did not reach end of file
-            ts, sz, total_sz = _read_attrib(self._file, self._version)
+            ts, sz, total_sz = read_attrib(self._file, self._version)
             assert ts != -1
             timestamps_list.append(ts)
             self._frame_ptrs.append((self._file.tell(), sz))
