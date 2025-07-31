@@ -35,43 +35,49 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         buf_sz          - buffer size (bytes)
     """
 
-    def __init__(self, file_name):
-        data_file = open(file_name, "rb")
-        assert (
-            data_file.read(len("HELSINKI_VIDEO_MEG_PROJECT_AUDIO_FILE"))
-            == b"HELSINKI_VIDEO_MEG_PROJECT_AUDIO_FILE"
-        )  # make sure the magic string is OK
-        self.ver = struct.unpack("I", data_file.read(4))[0]
+    def __init__(
+        self, fname: str, magic_str: str = "HELSINKI_VIDEO_MEG_PROJECT_AUDIO_FILE"
+    ) -> None:
+        self._file_name = fname
 
-        if self.ver != 0:
-            # Can only read version 0 for the time being
-            raise UnknownVersionError()
+        with open(fname, "rb") as data_file:
+            # Check the magic string
+            if not data_file.read(len(magic_str)) == magic_str.encode("utf8"):
+                raise ValueError(
+                    f"File {fname} does not start with the expected "
+                    f"magic string: {magic_str}."
+                )
+            self.ver = struct.unpack("I", data_file.read(4))[0]
 
-        self.srate, self.nchan = struct.unpack("II", data_file.read(8))
-        self.format_string = data_file.read(2).decode("ascii")
+            if self.ver != 0:
+                # Can only read version 0 for the time being
+                raise UnknownVersionError()
 
-        # get the size of the data part of the file
-        begin_data = data_file.tell()
-        data_file.seek(0, 2)
-        end_data = data_file.tell()
-        data_file.seek(begin_data, 0)
+            self.srate, self.nchan = struct.unpack("II", data_file.read(8))
+            self.format_string = data_file.read(2).decode("ascii")
 
-        ts, self.buf_sz, total_sz = read_attrib(data_file, self.ver)
-        data_file.seek(begin_data, 0)
+            # get the size of the data part of the file
+            begin_data = data_file.tell()
+            data_file.seek(0, 2)
+            end_data = data_file.tell()
+            data_file.seek(begin_data, 0)
 
-        assert (end_data - begin_data) % total_sz == 0
+            ts, self.buf_sz, total_sz = read_attrib(data_file, self.ver)
+            data_file.seek(begin_data, 0)
 
-        n_chunks = (end_data - begin_data) // total_sz
-        self.raw_audio = bytearray(n_chunks * self.buf_sz)
-        self.ts = np.zeros(n_chunks)
+            assert (end_data - begin_data) % total_sz == 0
 
-        for i in range(n_chunks):
-            ts, sz, cur_total_sz = read_attrib(data_file, self.ver)
-            assert cur_total_sz == total_sz
-            self.raw_audio[self.buf_sz * i : self.buf_sz * (i + 1)] = data_file.read(sz)
-            self.ts[i] = ts
+            n_chunks = (end_data - begin_data) // total_sz
+            self.raw_audio = bytearray(n_chunks * self.buf_sz)
+            self.ts = np.zeros(n_chunks)
 
-        data_file.close()
+            for i in range(n_chunks):
+                ts, sz, cur_total_sz = read_attrib(data_file, self.ver)
+                assert cur_total_sz == total_sz
+                self.raw_audio[self.buf_sz * i : self.buf_sz * (i + 1)] = (
+                    data_file.read(sz)
+                )
+                self.ts[i] = ts
 
     def format_audio(self):
         """Return the formatted version or self.raw_audio.
