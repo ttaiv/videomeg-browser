@@ -1,4 +1,4 @@
-"""Contains AudioView and AudioBrowser Qt widgets for displaying audio waveforms."""
+"""Contains AudioView and AudioBrowser Qt widgets for visualizing audio data."""
 
 import logging
 import os.path
@@ -19,6 +19,7 @@ from qtpy.QtWidgets import (
 )
 
 from .audio import AudioFile
+from .time_selector import TimeSelector
 
 logger = logging.getLogger(__name__)
 
@@ -49,23 +50,19 @@ class AudioView(QWidget):
         display_mode: Literal["waveform", "spectrogram"] = "waveform",
         parent: QWidget | None = None,
     ) -> None:
-        """Initialize the audio view."""
         super().__init__(parent=parent)
         self._audio = audio
         self._display_mode = display_mode
         self._current_sample = 0
         self._visible_duration_seconds = 5.0  # Window size in seconds
-        self._channel_selection = "mean"  # "mean" or channel index
-
-        # Auto-call unpack_audio to ensure all data is loaded before visualization
-        if hasattr(self._audio, "unpack_audio"):
-            logger.info("Unpacking audio data...")
-            getattr(self._audio, "unpack_audio")()
+        self._channel_selection: int | None = None  # None shows mean of all channels
 
         self._layout = QVBoxLayout(self)
 
         # Add plot for audio visualization
         self._setup_plot_widget()
+        self._channel_plots = {}  # Store plot items for each channel
+        self._mean_plot = None  # Plot for the mean of all channels
 
         # Add controls for display options
         self._setup_controls()
@@ -79,21 +76,13 @@ class AudioView(QWidget):
         self._plot_widget.setBackground("w")
         self._plot_widget.setLabel("bottom", "Time", "s")
         self._plot_widget.setLabel("left", "Amplitude")
-        self._plot_widget.showGrid(x=True, y=True, alpha=0.5)
+        self._layout.addWidget(self._plot_widget)
+        # self._plot_widget.showGrid(x=True, y=True, alpha=0.5)
 
         # Add a vertical line to indicate the current position
-        self._position_line = pg.InfiniteLine(
-            angle=90, movable=True, pen=pg.mkPen(color="r", width=2)
-        )
-        self._position_line.sigPositionChanged.connect(self._on_position_line_moved)
-        self._plot_widget.addItem(self._position_line)
-
-        # Add the plot to the layout
-        self._layout.addWidget(self._plot_widget)
-
-        # Add plots for each channel and the mean
-        self._channel_plots = {}  # Store plot items for each channel
-        self._mean_plot = None  # Plot for the mean of all channels
+        self._time_selector = TimeSelector(parent=self)
+        self._time_selector.sigSelectedTimeChanged.connect(self._on_time_selector_moved)
+        self._plot_widget.addItem(self._time_selector.get_selector())
 
     def _setup_controls(self) -> None:
         """Set up control panel for audio view options."""
@@ -217,11 +206,11 @@ class AudioView(QWidget):
         self._plot_widget.clear()
 
         # Add the position line back after clearing
-        self._plot_widget.addItem(self._position_line)
+        self._plot_widget.addItem(self._time_selector.get_selector())
 
         # Set the position line to the current sample
         current_time = self._current_sample / self._audio.sampling_rate
-        self._position_line.setValue(current_time)
+        self._time_selector.set_selected_time_no_signal(current_time)
 
         # Calculate visible window
         half_window = self._visible_duration_seconds / 2
@@ -245,7 +234,7 @@ class AudioView(QWidget):
         # Create time vector for x-axis
         times = np.arange(start_sample, end_sample) / self._audio.sampling_rate
 
-        if self._channel_selection == "mean":
+        if self._channel_selection is None:
             # Plot the mean of all channels
             audio_data = self._audio.get_audio_mean(
                 sample_range=(start_sample, end_sample)
@@ -268,7 +257,7 @@ class AudioView(QWidget):
         try:
             import scipy.signal as signal
 
-            if self._channel_selection == "mean":
+            if self._channel_selection is None:
                 audio_data = self._audio.get_audio_mean(
                     sample_range=(start_sample, end_sample)
                 )
@@ -336,22 +325,10 @@ class AudioView(QWidget):
             # Fall back to waveform
             self._plot_waveform(start_sample, end_sample)
 
-    def _on_position_line_moved(self) -> None:
+    def _on_time_selector_moved(self) -> None:
         """Handle when the position line is moved by the user."""
-        # Get the time value (x-coordinate) of the position line
-        try:
-            pos_value = self._position_line.value()
-            # Handle different return types from different pyqtgraph versions
-            if isinstance(pos_value, list | tuple):
-                new_time = float(pos_value[0])
-            else:
-                new_time = float(pos_value)
-            new_sample = int(new_time * self._audio.sampling_rate)
-        except (TypeError, ValueError, IndexError):
-            # If conversion fails, log warning and use current position
-            logger.warning("Failed to get position from position line")
-            new_time = self._current_sample / self._audio.sampling_rate
-            new_sample = self._current_sample
+        new_time = self._time_selector.get_selected_time()
+        new_sample = int(new_time * self._audio.sampling_rate)
 
         # Clamp to valid range
         new_sample = max(0, min(new_sample, self._audio.n_samples - 1))
@@ -366,9 +343,9 @@ class AudioView(QWidget):
     def _on_channel_changed(self, index: int) -> None:
         """Handle when the user changes the selected channel."""
         if index == 0:
-            self._channel_selection = "mean"
+            self._channel_selection = None
         else:
-            self._channel_selection = str(index - 1)  # Convert to 0-based index
+            self._channel_selection = index - 1  # Convert to 0-based index
 
         # Update the visualization
         self._update_plot()
@@ -436,7 +413,7 @@ class AudioView(QWidget):
         return self._display_mode
 
     @property
-    def channel_selection(self) -> str:
+    def channel_selection(self) -> int | None:
         """Get the current channel selection."""
         return self._channel_selection
 
