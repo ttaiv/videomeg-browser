@@ -170,12 +170,13 @@ class AudioView(QWidget):
             return False
 
         self._current_sample = sample_idx
+        current_time = self._current_sample / self._audio.sampling_rate
+        self._time_selector.set_selected_time_no_signal(current_time)
         self._update_x_range()
         self._update_sample_label()
 
         # Emit signal that the position has changed
-        time_seconds = self._current_sample / self._audio.sampling_rate
-        self.sigPositionChanged.emit(self._current_sample, time_seconds)
+        self.sigPositionChanged.emit(self._current_sample, current_time)
 
         return True
 
@@ -198,7 +199,6 @@ class AudioView(QWidget):
     def _update_x_range(self) -> None:
         # Set the position line to the current sample
         current_time = self._current_sample / self._audio.sampling_rate
-        self._time_selector.set_selected_time_no_signal(current_time)
 
         # Calculate visible window
         half_window = self._visible_duration_seconds / 2
