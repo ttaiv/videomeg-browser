@@ -24,6 +24,8 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+import videomeg_browser.gui_utils as gui_utils
+
 from .video import VideoFile
 
 logger = logging.getLogger(__name__)
@@ -483,17 +485,14 @@ class VideoView(QWidget):
 
         # Add info icon that shows video stats when hovered over.
         info_icon = QLabel()
-        info_pixmap = QPixmap()
-        info_icon_resource = files("videomeg_browser.icons").joinpath("info.png")
-        try:
-            with info_icon_resource.open("rb") as f:
-                info_pixmap.loadFromData(f.read())
+        info_pixmap = gui_utils.load_icon_pixmap("info.png")
+        if info_pixmap is not None:
             info_icon.setPixmap(
                 info_pixmap.scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             )
-        except (FileNotFoundError, ModuleNotFoundError) as e:
-            logger.warning(f"Info icon not found, using text-based icon: {e}")
-            info_icon.setText("ℹ️")  # Fallback to a text-based icon
+        else:
+            logger.warning("Info icon not found, using text-based icon")
+            info_icon.setText("ℹ️")
         info_icon.setToolTip(
             f"File: {video.fname}\n"
             f"Duration: {video.duration:.2f} seconds\n"
