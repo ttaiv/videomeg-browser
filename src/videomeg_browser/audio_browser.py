@@ -197,16 +197,31 @@ class AudioView(QWidget):
         return self.display_at_sample(sample_idx)
 
     def _update_x_range(self) -> None:
+        """Update x-axis range of the plot based on current sample and visible duration.
+
+        Either centers the current sample or if the resulting view range would be out of
+        bounds, sets the view to the start or end of the audio.
+        """
         # Set the position line to the current sample
         current_time = self._current_sample / self._audio.sampling_rate
-
-        # Calculate visible window
+        max_time = self._audio.duration
         half_window = self._visible_duration_seconds / 2
-        start_time = max(0, current_time - half_window)
-        end_time = min(self._audio.duration, current_time + half_window)
 
-        # Update x-axis limits
-        self._plot_widget.setXRange(start_time, end_time)
+        # Calculate the new start and end times so that the current sample is centered.
+        new_start_time = current_time - half_window
+        new_end_time = current_time + half_window
+
+        if new_start_time < 0:
+            # New start time out of bounds, set view to start of audio.
+            self._plot_widget.setXRange(0, self._visible_duration_seconds)
+        elif new_end_time > max_time:
+            # New end time out of bounds, set view to end of audio.
+            self._plot_widget.setXRange(
+                max_time - self._visible_duration_seconds, max_time
+            )
+        else:
+            # New range is valid, set it.
+            self._plot_widget.setXRange(new_start_time, new_end_time)
 
     def _plot_selected_channel(self) -> None:
         """Update the plot to show the selected channel or mean of all channels."""
