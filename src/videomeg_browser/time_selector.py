@@ -1,4 +1,9 @@
-"""Contains a class for a movable line that allows selecting time points in raw data."""
+"""A class for a movable line that allows highlighting time points in pyqtgraph plots.
+
+The user can drag the line to select a specific time point, and the class emits a signal
+whenever the selection changes. The selected time can be retrieved or set
+programmatically.
+"""
 
 import logging
 
@@ -8,7 +13,7 @@ from qtpy.QtCore import QObject, Signal, Slot  # type: ignore
 logger = logging.getLogger(__name__)
 
 
-class RawTimeSelector(QObject):
+class TimeSelector(QObject):
     """Represents a vertical line slider that allows the user to select a time point.
 
     Provides getter and setter for the currently selected time in seconds and emits a

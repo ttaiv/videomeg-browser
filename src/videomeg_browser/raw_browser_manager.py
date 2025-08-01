@@ -6,7 +6,7 @@ import numpy as np
 from mne_qt_browser._pg_figure import MNEQtBrowser
 from qtpy.QtCore import QObject, Signal, Slot  # type: ignore
 
-from .time_selector import RawTimeSelector
+from .time_selector import TimeSelector
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ class RawBrowserManager(QObject):
         # Flag to prevent obsolete updates when time range is changed programmatically
         self.programmatic_time_range_change = False
 
-        self.raw_time_selector = RawTimeSelector(parent=self)
+        self.raw_time_selector = TimeSelector(parent=self)
         self.browser.add_item_to_plot(self.raw_time_selector.get_selector())
 
         # The selected time of the raw browser can change in two ways:
