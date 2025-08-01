@@ -6,7 +6,7 @@ from typing import Literal
 
 import numpy as np
 import pyqtgraph as pg
-from qtpy.QtCore import QTimer, Signal, Slot  # type: ignore
+from qtpy.QtCore import Qt, QTimer, Signal, Slot  # type: ignore
 from qtpy.QtGui import QTransform  # type: ignore
 from qtpy.QtWidgets import (
     QComboBox,
@@ -18,6 +18,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from . import gui_utils
 from .audio import AudioFile
 from .time_selector import TimeSelector
 
@@ -32,11 +33,7 @@ class AudioView(QWidget):
     Parameters
     ----------
     audio : AudioFile
-        The audio file to be displayed.
-    display_mode : Literal["waveform", "spectrogram"], optional
-        The method used to display the audio data. If "waveform", displays a
-        time-domain representation. If "spectrogram", displays a time-frequency
-        representation, by default "waveform".
+        The audio file to be displayed..
     parent : QWidget | None, optional
         The parent widget for this view, by default None.
     """
@@ -47,12 +44,10 @@ class AudioView(QWidget):
     def __init__(
         self,
         audio: AudioFile,
-        display_mode: Literal["waveform", "spectrogram"] = "waveform",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
         self._audio = audio
-        self._display_mode = display_mode
         self._current_sample = 0
         self._visible_duration_seconds = 5.0  # Window size in seconds
         self._channel_selection: int | None = None  # None shows mean of all channels
@@ -65,10 +60,11 @@ class AudioView(QWidget):
         self._mean_plot = None  # Plot for the mean of all channels
 
         # Add controls for display options
-        self._setup_controls()
+        self._setup_toolbar()
 
         # Initial visualization
-        self._update_plot()
+        self._plot_waveform(start_sample=0, end_sample=self._audio.n_samples)
+        self.display_at_time(self._visible_duration_seconds / 2)
 
     def _setup_plot_widget(self) -> None:
         """Set up the plot widget for audio visualization."""
@@ -84,8 +80,8 @@ class AudioView(QWidget):
         self._time_selector.sigSelectedTimeChanged.connect(self._on_time_selector_moved)
         self._plot_widget.addItem(self._time_selector.get_selector())
 
-    def _setup_controls(self) -> None:
-        """Set up control panel for audio view options."""
+    def _setup_toolbar(self) -> None:
+        """Set up toolbar that contains controls and information about the audio."""
         controls_layout = QHBoxLayout()
 
         # Add name of the audio file as a label
@@ -114,7 +110,6 @@ class AudioView(QWidget):
             f"Samples: {self._audio.n_samples}"
         )
         controls_layout.addWidget(info_icon)
-
         # Add the same hover info to the audio label
         audio_label.setToolTip(info_icon.toolTip())
 
@@ -142,23 +137,11 @@ class AudioView(QWidget):
         controls_layout.addWidget(channel_label)
 
         self._channel_selector = QComboBox()
-        self._channel_selector.addItem("Mean (all channels)")
+        self._channel_selector.addItem("All (show mean)")
         for i in range(self._audio.n_channels):
             self._channel_selector.addItem(f"Channel {i + 1}")
         self._channel_selector.currentIndexChanged.connect(self._on_channel_changed)
         controls_layout.addWidget(self._channel_selector)
-
-        # Add display mode selector
-        display_label = QLabel("Display:")
-        controls_layout.addWidget(display_label)
-
-        self._display_mode_selector = QComboBox()
-        self._display_mode_selector.addItem("Waveform")
-        self._display_mode_selector.addItem("Spectrogram")
-        self._display_mode_selector.currentIndexChanged.connect(
-            self._on_display_mode_changed
-        )
-        controls_layout.addWidget(self._display_mode_selector)
 
         # Add sample/position label
         self._sample_label = QLabel()
@@ -181,11 +164,13 @@ class AudioView(QWidget):
             True if the visualization was updated, False if the index is out of bounds.
         """
         if sample_idx < 0 or sample_idx >= self._audio.n_samples:
-            logger.info(f"Cannot display at sample index {sample_idx} (out of bounds)")
+            logger.warning(
+                f"Cannot display audio at sample index {sample_idx} (out of bounds)"
+            )
             return False
 
         self._current_sample = sample_idx
-        self._update_plot()
+        self._update_x_range()
         self._update_sample_label()
 
         # Emit signal that the position has changed
@@ -210,13 +195,7 @@ class AudioView(QWidget):
         sample_idx = int(time_seconds * self._audio.sampling_rate)
         return self.display_at_sample(sample_idx)
 
-    def _update_plot(self) -> None:
-        """Update the audio plot based on current settings."""
-        self._plot_widget.clear()
-
-        # Add the position line back after clearing
-        self._plot_widget.addItem(self._time_selector.get_selector())
-
+    def _update_x_range(self) -> None:
         # Set the position line to the current sample
         current_time = self._current_sample / self._audio.sampling_rate
         self._time_selector.set_selected_time_no_signal(current_time)
@@ -226,17 +205,8 @@ class AudioView(QWidget):
         start_time = max(0, current_time - half_window)
         end_time = min(self._audio.duration, current_time + half_window)
 
-        # Convert times to samples
-        start_sample = int(start_time * self._audio.sampling_rate)
-        end_sample = int(end_time * self._audio.sampling_rate)
-
         # Update x-axis limits
         self._plot_widget.setXRange(start_time, end_time)
-
-        if self._display_mode == "waveform":
-            self._plot_waveform(start_sample, end_sample)
-        else:  # spectrogram
-            self._plot_spectrogram(start_sample, end_sample)
 
     def _plot_waveform(self, start_sample: int, end_sample: int) -> None:
         """Plot the audio waveform."""
@@ -261,79 +231,6 @@ class AudioView(QWidget):
                 times, audio_data[channel_idx], pen=pg.mkPen(color="g", width=1)
             )
 
-    def _plot_spectrogram(self, start_sample: int, end_sample: int) -> None:
-        """Plot the audio spectrogram."""
-        try:
-            import scipy.signal as signal
-
-            if self._channel_selection is None:
-                audio_data = self._audio.get_audio_mean(
-                    sample_range=(start_sample, end_sample)
-                )
-            else:
-                channel_idx = int(self._channel_selection)
-                audio_data = self._audio.get_audio_all_channels(
-                    sample_range=(start_sample, end_sample)
-                )
-                audio_data = audio_data[channel_idx]
-
-            # Calculate spectrogram
-            f, t, Sxx = signal.spectrogram(
-                audio_data,
-                fs=self._audio.sampling_rate,
-                nperseg=min(1024, len(audio_data) // 8),
-                noverlap=min(512, len(audio_data) // 16),
-            )
-
-            # Convert to dB scale for better visualization
-            Sxx = 10 * np.log10(Sxx + 1e-10)
-
-            # Create the image item
-            img = pg.ImageItem()
-            img.setImage(Sxx)
-
-            # Position the image correctly (using pyqtgraph positioning methods)
-            # The exact method depends on the version of pyqtgraph
-            try:
-                # Set the scale and position the image
-                x_scale = (
-                    (end_sample - start_sample)
-                    / self._audio.sampling_rate
-                    / Sxx.shape[1]
-                )
-                y_scale = f[-1] / Sxx.shape[0]
-                # Handle different PyQtGraph versions
-                try:
-                    # Try setting transform directly
-                    tr = QTransform()
-                    tr.scale(x_scale, y_scale)
-                    tr.translate(start_sample / self._audio.sampling_rate, 0)
-                    img.setTransform(tr)
-                except Exception:
-                    # Fallback method
-                    logger.warning("Could not set spectrogram transform properly.")
-
-                # Set transform to position correctly
-                img.setPos(start_sample / self._audio.sampling_rate, 0)
-            except Exception as e:
-                logger.warning(f"Error positioning spectrogram: {e}")
-
-            # Add a color map
-            cmap = pg.colormap.get("viridis")
-            img.setColorMap(cmap)
-
-            # Add the image to the plot
-            self._plot_widget.addItem(img)
-
-            # Update axes
-            self._plot_widget.setLabel("left", "Frequency", "Hz")
-            self._plot_widget.setLabel("bottom", "Time", "s")
-
-        except ImportError:
-            logger.warning("scipy not available. Cannot display spectrogram.")
-            # Fall back to waveform
-            self._plot_waveform(start_sample, end_sample)
-
     def _on_time_selector_moved(self) -> None:
         """Handle when the position line is moved by the user."""
         new_time = self._time_selector.get_selected_time()
@@ -357,17 +254,7 @@ class AudioView(QWidget):
             self._channel_selection = index - 1  # Convert to 0-based index
 
         # Update the visualization
-        self._update_plot()
-
-    def _on_display_mode_changed(self, index: int) -> None:
-        """Handle when the user changes the display mode."""
-        if index == 0:
-            self._display_mode = "waveform"
-        else:
-            self._display_mode = "spectrogram"
-
-        # Update the visualization
-        self._update_plot()
+        self._update_x_range()
 
     def _zoom_in(self) -> None:
         """Zoom in on the waveform."""
@@ -375,7 +262,7 @@ class AudioView(QWidget):
         self._visible_duration_seconds = max(1.0, self._visible_duration_seconds / 2)
 
         # Update the visualization
-        self._update_plot()
+        self._update_x_range()
 
     def _zoom_out(self) -> None:
         """Zoom out on the waveform."""
@@ -385,7 +272,7 @@ class AudioView(QWidget):
         )
 
         # Update the visualization
-        self._update_plot()
+        self._update_x_range()
 
     def center_audio(self) -> None:
         """Reset the view to center around the current position with default zoom."""
@@ -393,7 +280,7 @@ class AudioView(QWidget):
         self._visible_duration_seconds = 5.0
 
         # Update the visualization
-        self._update_plot()
+        self._update_x_range()
 
     def _update_sample_label(self) -> None:
         """Update the sample label to show the current position."""
@@ -415,11 +302,6 @@ class AudioView(QWidget):
     def current_time(self) -> float:
         """Get the current position in seconds."""
         return self._current_sample / self._audio.sampling_rate
-
-    @property
-    def display_mode(self) -> str:
-        """Get the current display mode."""
-        return self._display_mode
 
     @property
     def channel_selection(self) -> int | None:
@@ -470,9 +352,7 @@ class AudioBrowser(QWidget):
         self.setLayout(self._layout)
 
         # Create the audio view
-        self._audio_view = AudioView(
-            audio=audio, display_mode=display_mode, parent=self
-        )
+        self._audio_view = AudioView(audio=audio, parent=self)
         self._audio_view.sigPositionChanged.connect(self._on_position_changed)
         self._layout.addWidget(self._audio_view)
 
