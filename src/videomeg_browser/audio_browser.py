@@ -26,14 +26,17 @@ logger = logging.getLogger(__name__)
 
 
 class AudioView(QWidget):
-    """A widget for displaying audio waveforms or spectrograms.
+    """A widget for displaying audio waveform.
 
-    Includes controls for channel selection and visualization options.
+    Includes controls for channel selection and view options.
 
     Parameters
     ----------
     audio : AudioFile
         The audio file to be displayed..
+    time_selector_padding : float, optional
+        Padding (in seconds) to apply when clamping the time selector to the
+        current view range of the audio browser, by default 0.1
     parent : QWidget | None, optional
         The parent widget for this view, by default None.
     """
@@ -44,26 +47,33 @@ class AudioView(QWidget):
     def __init__(
         self,
         audio: AudioFile,
+        time_selector_padding: float = 0.1,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
         self._audio = audio
+        self._time_selector_padding = time_selector_padding
+        # The index of the currently highlighted/selected sample
+        # View is adjusted based on this sample.
         self._current_sample = 0
         self._visible_duration_seconds = 5.0  # Window size in seconds
         self._channel_selection: int | None = None  # None shows mean of all channels
 
         self._layout = QVBoxLayout(self)
 
-        # Add plot for audio visualization
+        # Add the plot that visualizes the audio data
         self._setup_plot_widget()
-        self._channel_plots = {}  # Store plot items for each channel
-        self._mean_plot = None  # Plot for the mean of all channels
 
-        # Add controls for display options
+        # Add a vertical line that indicates the current sample.
+        self._time_selector = TimeSelector(parent=self)
+        self._time_selector.sigSelectedTimeChanged.connect(self._on_time_selector_moved)
+        self._plot_widget.addItem(self._time_selector.get_selector())
+
+        # Add controls and information about the audio.
         self._setup_toolbar()
 
         # Initial visualization
-        self._plot_waveform(start_sample=0, end_sample=self._audio.n_samples)
+        self._plot_selected_channel()
         self.display_at_time(self._visible_duration_seconds / 2)
 
     def _setup_plot_widget(self) -> None:
@@ -72,13 +82,8 @@ class AudioView(QWidget):
         self._plot_widget.setBackground("w")
         self._plot_widget.setLabel("bottom", "Time", "s")
         self._plot_widget.setLabel("left", "Amplitude")
+        self._plot_widget.setMouseEnabled(x=True, y=False)
         self._layout.addWidget(self._plot_widget)
-        # self._plot_widget.showGrid(x=True, y=True, alpha=0.5)
-
-        # Add a vertical line to indicate the current position
-        self._time_selector = TimeSelector(parent=self)
-        self._time_selector.sigSelectedTimeChanged.connect(self._on_time_selector_moved)
-        self._plot_widget.addItem(self._time_selector.get_selector())
 
     def _setup_toolbar(self) -> None:
         """Set up toolbar that contains controls and information about the audio."""
@@ -170,12 +175,13 @@ class AudioView(QWidget):
             return False
 
         self._current_sample = sample_idx
+        current_time = self._current_sample / self._audio.sampling_rate
+        self._time_selector.set_selected_time_no_signal(current_time)
         self._update_x_range()
         self._update_sample_label()
 
         # Emit signal that the position has changed
-        time_seconds = self._current_sample / self._audio.sampling_rate
-        self.sigPositionChanged.emit(self._current_sample, time_seconds)
+        self.sigPositionChanged.emit(self._current_sample, current_time)
 
         return True
 
@@ -196,46 +202,68 @@ class AudioView(QWidget):
         return self.display_at_sample(sample_idx)
 
     def _update_x_range(self) -> None:
+        """Update x-axis range of the plot based on current sample and visible duration.
+
+        Either centers the current sample or if the resulting view range would be out of
+        bounds, sets the view to the start or end of the audio.
+        """
         # Set the position line to the current sample
         current_time = self._current_sample / self._audio.sampling_rate
-        self._time_selector.set_selected_time_no_signal(current_time)
-
-        # Calculate visible window
+        max_time = self._audio.duration
         half_window = self._visible_duration_seconds / 2
-        start_time = max(0, current_time - half_window)
-        end_time = min(self._audio.duration, current_time + half_window)
 
-        # Update x-axis limits
-        self._plot_widget.setXRange(start_time, end_time)
+        # Calculate the new start and end times so that the current sample is centered.
+        new_start_time = current_time - half_window
+        new_end_time = current_time + half_window
 
-    def _plot_waveform(self, start_sample: int, end_sample: int) -> None:
-        """Plot the audio waveform."""
+        if new_start_time < 0:
+            # New start time out of bounds, set view to start of audio.
+            self._plot_widget.setXRange(0, self._visible_duration_seconds)
+        elif new_end_time > max_time:
+            # New end time out of bounds, set view to end of audio.
+            self._plot_widget.setXRange(
+                max_time - self._visible_duration_seconds, max_time
+            )
+        else:
+            # New range is valid, set it.
+            self._plot_widget.setXRange(new_start_time, new_end_time)
+
+    def _plot_selected_channel(self) -> None:
+        """Update the plot to show the selected channel or mean of all channels."""
+        # Clear previous plots
+        self._plot_widget.clear()
+        # Re-add the time selector after clearing
+        self._plot_widget.addItem(self._time_selector.get_selector())
+
         # Create time vector for x-axis
-        times = np.arange(start_sample, end_sample) / self._audio.sampling_rate
+        times = np.arange(self._audio.n_samples) / self._audio.sampling_rate
 
         if self._channel_selection is None:
             # Plot the mean of all channels
-            audio_data = self._audio.get_audio_mean(
-                sample_range=(start_sample, end_sample)
-            )
-            self._mean_plot = self._plot_widget.plot(
-                times, audio_data, pen=pg.mkPen(color="b", width=1)
-            )
+            audio_data = self._audio.get_audio_mean()
+            self._plot_widget.plot(times, audio_data, pen=pg.mkPen(color="b", width=1))
         else:
             # Plot the selected channel
-            channel_idx = int(self._channel_selection)
-            audio_data = self._audio.get_audio_all_channels(
-                sample_range=(start_sample, end_sample)
-            )
-            self._channel_plots[channel_idx] = self._plot_widget.plot(
-                times, audio_data[channel_idx], pen=pg.mkPen(color="g", width=1)
+            channel_idx = self._channel_selection
+            audio_data = self._audio.get_audio_all_channels()
+            self._plot_widget.plot(
+                times, audio_data[channel_idx, :], pen=pg.mkPen(color="g", width=1)
             )
 
     def _on_time_selector_moved(self) -> None:
-        """Handle when the position line is moved by the user."""
+        """Handle when the selector line is moved by the user."""
         new_time = self._time_selector.get_selected_time()
-        new_sample = int(new_time * self._audio.sampling_rate)
+        # Clamp the new time to the current view range to make it impossible to
+        # move the selector outside the visible range.
+        view_min, view_max = self._plot_widget.viewRange()[0]
+        new_time = np.clip(
+            new_time,
+            view_min + self._time_selector_padding,
+            view_max - self._time_selector_padding,
+        )
+        self._time_selector.set_selected_time_no_signal(new_time)
 
+        new_sample = int(new_time * self._audio.sampling_rate)
         # Clamp to valid range
         new_sample = max(0, min(new_sample, self._audio.n_samples - 1))
 
@@ -249,11 +277,13 @@ class AudioView(QWidget):
     def _on_channel_changed(self, index: int) -> None:
         """Handle when the user changes the selected channel."""
         if index == 0:
+            # If "All (show mean)" is selected, set channel selection to None
             self._channel_selection = None
         else:
             self._channel_selection = index - 1  # Convert to 0-based index
 
         # Update the visualization
+        self._plot_selected_channel()
         self._update_x_range()
 
     def _zoom_in(self) -> None:
