@@ -34,6 +34,9 @@ class AudioView(QWidget):
     ----------
     audio : AudioFile
         The audio file to be displayed..
+    time_selector_padding : float, optional
+        Padding (in seconds) to apply when clamping the time selector to the
+        current view range of the audio browser, by default 0.1
     parent : QWidget | None, optional
         The parent widget for this view, by default None.
     """
@@ -44,10 +47,12 @@ class AudioView(QWidget):
     def __init__(
         self,
         audio: AudioFile,
+        time_selector_padding: float = 0.1,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
         self._audio = audio
+        self._time_selector_padding = time_selector_padding
         # The index of the currently highlighted/selected sample
         # View is adjusted based on this sample.
         self._current_sample = 0
@@ -248,8 +253,17 @@ class AudioView(QWidget):
     def _on_time_selector_moved(self) -> None:
         """Handle when the selector line is moved by the user."""
         new_time = self._time_selector.get_selected_time()
-        new_sample = int(new_time * self._audio.sampling_rate)
+        # Clamp the new time to the current view range to make it impossible to
+        # move the selector outside the visible range.
+        view_min, view_max = self._plot_widget.viewRange()[0]
+        new_time = np.clip(
+            new_time,
+            view_min + self._time_selector_padding,
+            view_max - self._time_selector_padding,
+        )
+        self._time_selector.set_selected_time_no_signal(new_time)
 
+        new_sample = int(new_time * self._audio.sampling_rate)
         # Clamp to valid range
         new_sample = max(0, min(new_sample, self._audio.n_samples - 1))
 
