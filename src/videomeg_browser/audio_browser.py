@@ -95,7 +95,16 @@ class AudioView(QWidget):
         controls_layout.addWidget(audio_label)
 
         # Add info label that shows audio stats when hovered over
-        info_icon = QLabel("ℹ️")
+        info_icon = QLabel()
+        info_pixmap = gui_utils.load_icon_pixmap("info.png")
+        if info_pixmap is not None:
+            info_icon.setPixmap(
+                info_pixmap.scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+        else:
+            logger.warning("Info icon not found, using text-based icon")
+            info_icon.setText("ℹ️")
+
         info_icon.setToolTip(
             f"File: {self._audio.fname}\n"
             f"Sampling rate: {self._audio.sampling_rate} Hz\n"
