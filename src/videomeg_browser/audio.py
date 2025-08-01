@@ -274,7 +274,7 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         it is recommended to once call it manually before using the getters to avoid
         surprisingly heavy get operations.
 
-        NOTE: this methos consumes a lot of memory!
+        NOTE: this method consumes a lot of memory!
         """
         # ------------------------------------------------------------------
         # Compute timestamps for all the audio samples
