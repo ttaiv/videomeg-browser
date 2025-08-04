@@ -87,13 +87,13 @@ class AudioView(QWidget):
 
     def _setup_toolbar(self) -> None:
         """Set up toolbar that contains controls and information about the audio."""
-        controls_layout = QHBoxLayout()
+        toolbar_layout = QHBoxLayout()
 
         # Add name of the audio file as a label
         audio_name = os.path.basename(self._audio.fname)
         audio_label = QLabel(f"{audio_name}")
         audio_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
-        controls_layout.addWidget(audio_label)
+        toolbar_layout.addWidget(audio_label)
 
         # Add info label that shows audio stats when hovered over
         info_icon = QLabel()
@@ -114,46 +114,50 @@ class AudioView(QWidget):
             f"Duration: {self._audio.duration:.2f} s\n"
             f"Samples: {self._audio.n_samples}"
         )
-        controls_layout.addWidget(info_icon)
+        toolbar_layout.addWidget(info_icon)
         # Add the same hover info to the audio label
         audio_label.setToolTip(info_icon.toolTip())
 
         # Add zoom controls
         zoom_label = QLabel("Zoom:")
-        controls_layout.addWidget(zoom_label)
+        toolbar_layout.addWidget(zoom_label)
 
         self._zoom_in_button = QPushButton("+")
         self._zoom_in_button.clicked.connect(self._zoom_in)
-        controls_layout.addWidget(self._zoom_in_button)
+        toolbar_layout.addWidget(self._zoom_in_button)
 
         self._zoom_out_button = QPushButton("-")
         self._zoom_out_button.clicked.connect(self._zoom_out)
-        controls_layout.addWidget(self._zoom_out_button)
+        toolbar_layout.addWidget(self._zoom_out_button)
 
         # Add center button
-        self._center_button = QPushButton("Center View")
-        self._center_button.clicked.connect(self.center_audio)
-        controls_layout.addWidget(self._center_button)
+        self._center_button = QPushButton("Reset")
+        self._center_button.clicked.connect(self._reset_zoom)
+        toolbar_layout.addWidget(self._center_button)
 
-        controls_layout.addStretch()
+        toolbar_layout.addStretch()
 
         # Add channel selector
         channel_label = QLabel("Channel:")
-        controls_layout.addWidget(channel_label)
+        toolbar_layout.addWidget(channel_label)
 
         self._channel_selector = QComboBox()
         self._channel_selector.addItem("All (show mean)")
         for i in range(self._audio.n_channels):
             self._channel_selector.addItem(f"Channel {i + 1}")
         self._channel_selector.currentIndexChanged.connect(self._on_channel_changed)
-        controls_layout.addWidget(self._channel_selector)
+        toolbar_layout.addWidget(self._channel_selector)
 
         # Add sample/position label
-        self._sample_label = QLabel()
-        controls_layout.addWidget(self._sample_label)
-        self._update_sample_label()
+        self._time_label = gui_utils.ElapsedTimeLabel(
+            current_time_seconds=self._current_sample / self._audio.sampling_rate,
+            max_time_seconds=self._audio.duration,
+            parent=self,
+        )
+        self._time_label.add_to_layout(toolbar_layout)
+        self._update_time_label()
 
-        self._layout.addLayout(controls_layout)
+        self._layout.addLayout(toolbar_layout)
 
     def display_at_sample(self, sample_idx: int) -> bool:
         """Display the audio visualization centered at the specified sample index.
@@ -178,7 +182,7 @@ class AudioView(QWidget):
         current_time = self._current_sample / self._audio.sampling_rate
         self._time_selector.set_selected_time_no_signal(current_time)
         self._update_x_range()
-        self._update_sample_label()
+        self._update_time_label()
 
         # Emit signal that the position has changed
         self.sigPositionChanged.emit(self._current_sample, current_time)
@@ -269,7 +273,7 @@ class AudioView(QWidget):
 
         # Update current position
         self._current_sample = new_sample
-        self._update_sample_label()
+        self._update_time_label()
 
         # Emit signal for position change
         self.sigPositionChanged.emit(new_sample, new_time)
@@ -304,7 +308,7 @@ class AudioView(QWidget):
         # Update the visualization
         self._update_x_range()
 
-    def center_audio(self) -> None:
+    def _reset_zoom(self) -> None:
         """Reset the view to center around the current position with default zoom."""
         # Reset to default zoom level
         self._visible_duration_seconds = 5.0
@@ -312,16 +316,10 @@ class AudioView(QWidget):
         # Update the visualization
         self._update_x_range()
 
-    def _update_sample_label(self) -> None:
+    def _update_time_label(self) -> None:
         """Update the sample label to show the current position."""
         current_time = self._current_sample / self._audio.sampling_rate
-        current_min, current_sec = divmod(current_time, 60)
-
-        # Format as MM:SS.mmm and include sample index
-        self._sample_label.setText(
-            f"Position: {int(current_min):02}:{current_sec:06.3f} "
-            f"(Sample {self._current_sample:,}/{self._audio.n_samples:,})"
-        )
+        self._time_label.set_current_time(current_time)
 
     @property
     def current_sample(self) -> int:
