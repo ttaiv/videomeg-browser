@@ -67,7 +67,7 @@ class AudioView(QWidget):
         # Add a vertical line that indicates the current sample.
         self._time_selector = TimeSelector(parent=self)
         self._time_selector.sigSelectedTimeChanged.connect(self._on_time_selector_moved)
-        self._plot_widget.addItem(self._time_selector.get_selector())
+        self._time_selector.add_to_plot(self._plot_widget)
 
         # Add controls and information about the audio.
         self._setup_toolbar()

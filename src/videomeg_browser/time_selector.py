@@ -79,6 +79,10 @@ class RawTimeSelector(QObject):
         if clamped_value != current_time:
             self.set_selected_time_no_signal(clamped_value)
 
+    def add_to_plot(self, plot_widget: pg.PlotWidget) -> None:
+        """Add the selector to a given plot widget."""
+        plot_widget.addItem(self._selector)
+
     @Slot()
     def _signal_user_selected_time_change(self) -> None:
         """Emit the signal if the change was made by user interaction."""
