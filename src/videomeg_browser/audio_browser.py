@@ -43,8 +43,8 @@ class AudioView(QWidget):
         The parent widget for this view, by default None.
     """
 
-    # Emits a signal with the sample index and time in seconds when position changes
-    sigPositionChanged = Signal(int, float)  # sample index, time in seconds
+    # Emits a signal with the sample index when the position changes
+    sigSampleIndexChanged = Signal(int)  # sample index,
 
     def __init__(
         self,
@@ -122,7 +122,7 @@ class AudioView(QWidget):
 
         # Emit signal that the position has changed
         if signal:
-            self.sigPositionChanged.emit(self._current_sample, current_time)
+            self.sigSampleIndexChanged.emit(self._current_sample)
 
         return True
 
@@ -300,7 +300,7 @@ class AudioView(QWidget):
         self._time_label.set_current_time(self.current_time)
 
         # Emit signal for position change
-        self.sigPositionChanged.emit(new_sample, new_time)
+        self.sigSampleIndexChanged.emit(new_sample)
 
     def _on_channel_changed(self, index: int) -> None:
         """Handle when the user changes the selected channel."""
@@ -377,7 +377,7 @@ class AudioBrowser(QWidget):
 
         # Create the audio view
         self._audio_view = AudioView(audio=audio, parent=self)
-        self._audio_view.sigPositionChanged.connect(self._on_position_changed)
+        self._audio_view.sigSampleIndexChanged.connect(self._on_position_changed)
         self._layout.addWidget(self._audio_view)
 
         # Add playback controls
