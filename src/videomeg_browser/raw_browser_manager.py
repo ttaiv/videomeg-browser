@@ -322,5 +322,9 @@ class RawBrowserManager(QObject):
             f"seconds to include time selector {selected_time:.3f} seconds."
         )
         self._programmatic_time_range_change = True
-        self._browser.set_view_time_range(new_window_min, new_window_max)
-        self._programmatic_time_range_change = False
+        try:
+            self._browser.set_view_time_range(new_window_min, new_window_max)
+        finally:
+            # Ensure that the flag is reset even if an exception occurs
+            # during setting the view range.
+            self._programmatic_time_range_change = False
