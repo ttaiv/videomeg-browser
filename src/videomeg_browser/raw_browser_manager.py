@@ -1,6 +1,7 @@
 """Contains a class for managing the MNE Qt raw data browser in sync with video data."""
 
 import logging
+from typing import Literal
 
 import numpy as np
 from mne_qt_browser._pg_figure import MNEQtBrowser
@@ -154,14 +155,15 @@ class RawBrowserManager(QObject):
         self._raw_time_selector.set_selected_time_no_signal(self._raw_max_time)
 
     def set_selected_time_no_signal(self, time_seconds: float) -> None:
-        """Set the raw time selector to a specific time point in seconds.
+        """Set the raw time selector to a specific time point (in seconds).
 
-        This will also update the view of the raw data browser accordingly.
+        Also moves the raw data browser's view if it is required to keep the
+        time selector in the visible range.
         Does NOT emit a signal for the selected time change.
         """
         logger.debug(f"Setting raw time selector to {time_seconds:.3f} seconds.")
         self._raw_time_selector.set_selected_time_no_signal(time_seconds)
-        self._update_view_based_on_time_selector()
+        self._move_view_to_time_selector()
 
     def get_selected_time(self) -> float:
         """Get the current position of the raw time selector in seconds."""
@@ -289,52 +291,29 @@ class RawBrowserManager(QObject):
 
         return selector_time
 
-    def _update_view_based_on_time_selector(self) -> None:
-        """Set raw view based on the raw time selector.
+    def _move_view_to_time_selector(self) -> None:
+        """Ensure that the raw data browser's view contains the time selector.
 
-        The raw time selector will stay at the same relative position in the view,
-        expect when the view is at the boundaries of the raw data.
+        If the time selector is outside the current view range, move the view
+        as many window lengths as needed to bring the time selector into view.
         """
-        window_len = self._browser.get_visible_duration()
+        selected_time = self._raw_time_selector.get_selected_time()
+        window_min, window_max = self._browser.get_view_time_range()
+        window_len = window_max - window_min
 
-        time_selector_pos = self._raw_time_selector.get_selected_time()
-        logger.debug(
-            f"Time selector position for raw view updating: {time_selector_pos:.3f} "
-            "seconds."
-        )
+        if window_min <= selected_time <= window_max:
+            # The time selector is already in the view range, no need to change it.
+            return
 
-        # Calculate new xmin and xmax for the raw data browser's view
-        min_time = time_selector_pos - window_len * self._time_selector_fraction
-        max_time = time_selector_pos + window_len * (1 - self._time_selector_fraction)
+        if selected_time < window_min:
+            moves_needed = int(np.ceil((window_min - selected_time) / window_len))
+            new_window_min = window_min - moves_needed * window_len
+            new_window_max = window_max - moves_needed * window_len
+        else:  # selected_time > window_max
+            moves_needed = int(np.ceil((selected_time - window_max) / window_len))
+            new_window_min = window_min + moves_needed * window_len
+            new_window_max = window_max + moves_needed * window_len
 
-        # Prevent the update from re-updating time selector position and emitting
-        # a signal.
         self._programmatic_time_range_change = True
-
-        if min_time < self._raw_min_time:
-            logger.debug(
-                f"Raw view xmin {min_time:.3f} is less than the minimum view time "
-                f"{self._raw_min_time:.3f}. Setting view to range "
-                f"[{self._raw_min_time:.3f}, {self._raw_min_time + window_len}] seconds."
-            )
-            self._browser.set_view_time_range(
-                self._raw_min_time, self._raw_min_time + window_len
-            )
-        elif max_time > self._raw_max_time:
-            logger.debug(
-                f"Raw view xmax {max_time:.3f} is greater than the maximum view time "
-                f"{self._raw_max_time:.3f}. Setting view to range "
-                f"[{self._raw_max_time - window_len:.3f}, {self._raw_max_time:.3f}] "
-                "seconds."
-            )
-            self._browser.set_view_time_range(
-                self._raw_max_time - window_len, self._raw_max_time
-            )
-        else:
-            logger.debug(
-                f"Setting raw view to show video marker at {time_selector_pos:.3f} "
-                f"seconds with range [{min_time:.3f}, {max_time:.3f}] seconds."
-            )
-            self._browser.set_view_time_range(min_time, max_time)
-
+        self._browser.set_view_time_range(new_window_min, new_window_max)
         self._programmatic_time_range_change = False
