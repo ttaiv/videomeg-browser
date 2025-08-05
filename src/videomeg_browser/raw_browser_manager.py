@@ -303,6 +303,10 @@ class RawBrowserManager(QObject):
 
         if window_min <= selected_time <= window_max:
             # The time selector is already in the view range, no need to change it.
+            logger.debug(
+                f"Time selector {selected_time:.3f} seconds is already in the view "
+                f"range [{window_min:.3f}, {window_max:.3f}] seconds. No change needed."
+            )
             return
 
         if selected_time < window_min:
@@ -314,6 +318,10 @@ class RawBrowserManager(QObject):
             new_window_min = window_min + moves_needed * window_len
             new_window_max = window_max + moves_needed * window_len
 
+        logger.debug(
+            f"Moving raw view to range [{new_window_min:.3f}, {new_window_max:.3f}] "
+            f"seconds to include time selector {selected_time:.3f} seconds."
+        )
         self._programmatic_time_range_change = True
         self._browser.set_view_time_range(new_window_min, new_window_max)
         self._programmatic_time_range_change = False
