@@ -1,7 +1,6 @@
 """Contains a class for managing the MNE Qt raw data browser in sync with video data."""
 
 import logging
-from typing import Literal
 
 import numpy as np
 from mne_qt_browser._pg_figure import MNEQtBrowser
