@@ -71,7 +71,6 @@ class RawTimeSelector(QObject):
             Padding to apply to the range, default is 0.0 seconds.
         """
         current_time = self.selected_time
-        # Clamp the new value to the current view range
         clamped_value = np.clip(
             current_time, time_range[0] + padding, time_range[1] - padding
         )
