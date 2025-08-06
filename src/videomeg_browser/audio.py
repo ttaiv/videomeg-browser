@@ -251,14 +251,14 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         return self._unpacked_mean_audio[start_sample:end_sample]
 
     def get_audio_timestamps(self) -> npt.NDArray[np.float64]:
-        """Get timestamps for all audio samples.
+        """Get timestamps for all audio samples in milliseconds.
 
         Triggers unpacking of audio data if it has not been done yet.
 
         Returns
         -------
         npt.NDArray[np.float64]
-            A 1D array containing timestamps for all audio samples.
+            A 1D array containing timestamps for all audio samples in milliseconds.
         """
         self._ensure_unpacked_audio()
         assert self._audio_timestamps_ms is not None, (
