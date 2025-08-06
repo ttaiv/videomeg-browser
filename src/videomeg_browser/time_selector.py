@@ -33,12 +33,6 @@ class RawTimeSelector(QObject):
         )
         self.suppress_change_signal = False
 
-    @Slot()
-    def _signal_user_selected_time_change(self) -> None:
-        """Emit the signal if the change was made by user interaction."""
-        if not self.suppress_change_signal:
-            self.sigSelectedTimeChanged.emit(self.get_selected_time())
-
     def get_selected_time(self) -> float:
         """Get the currently selected time in seconds."""
         time = self._selector.value()
@@ -57,3 +51,9 @@ class RawTimeSelector(QObject):
     def get_selector(self) -> pg.InfiniteLine:
         """Get the InfiniteLine selector."""
         return self._selector
+
+    @Slot()
+    def _signal_user_selected_time_change(self) -> None:
+        """Emit the signal if the change was made by user interaction."""
+        if not self.suppress_change_signal:
+            self.sigSelectedTimeChanged.emit(self.get_selected_time())
