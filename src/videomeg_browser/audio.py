@@ -1,4 +1,4 @@
-"""Contains AudioFile interface and its implemmentations for reading audio files."""
+"""Contains AudioFile interface and its implementations for reading audio files."""
 
 # License: BSD-3-Clause
 # Copyright (c) 2014 BioMag Laboratory, Helsinki University Central Hospital
@@ -40,7 +40,7 @@ class AudioFile(ABC):
         Returns
         -------
         npt.NDArray[np.float32]
-            A 2D array of shape (n_channes, n_samples) containing the audio data.
+            A 2D array of shape (n_channels, n_samples) containing the audio data.
         """
         pass
 
@@ -204,7 +204,7 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         Returns
         -------
         npt.NDArray[np.float32]
-            A 2D array of shape (n_channes, n_samples) containing the audio data.
+            A 2D array of shape (n_channels, n_samples) containing the audio data.
         """
         self._ensure_unpacked_audio()
         assert self._unpacked_audio is not None, (
