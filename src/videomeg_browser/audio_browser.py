@@ -33,12 +33,12 @@ class AudioView(QWidget):
     ----------
     audio : AudioFile
         The audio file to be displayed..
+    default_view_len : float, optional
+        The duration to show in the audio view with default zoom level,
+        by default 10.0 seconds.
     time_selector_padding : float, optional
-        Padding (in seconds) to apply when clamping the time selector to the
-        current view range of the audio browser, by default 0.1 seconds.
-    default_window_seconds : float, optional
-        The window duration to show in the audio view with default zoom level,
-        by default 5.0 seconds.
+        Padding (in seconds) to apply when making sure that the user does not drag the
+        selector too close to the edges of the view, by default 0.1 seconds.
     parent : QWidget | None, optional
         The parent widget for this view, by default None.
     """
@@ -49,18 +49,17 @@ class AudioView(QWidget):
     def __init__(
         self,
         audio: AudioFile,
-        default_window_seconds: float = 5.0,
+        default_view_len: float = 10.0,
         time_selector_padding: float = 0.1,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
         self._audio = audio
         self._time_selector_padding = time_selector_padding
-        self._default_window_seconds = default_window_seconds
+        self._default_view_len = default_view_len
         # The index of the currently highlighted/selected sample
-        # View is adjusted based on this sample.
         self._current_sample = 0
-        self._visible_duration_seconds = default_window_seconds
+        self._visible_duration_seconds = default_view_len  # this is changed by zooming
         self._channel_selection: int | None = None  # None shows mean of all channels
 
         self._layout = QVBoxLayout()
@@ -69,7 +68,7 @@ class AudioView(QWidget):
         # Add the plot that visualizes the audio data
         self._setup_plot_widget()
 
-        # Add a vertical line that indicates the current sample.
+        # Add a vertical line that indicates the current sample and is movable
         self._time_selector = TimeSelector(parent=self)
         self._time_selector.sigSelectedTimeChanged.connect(self._on_time_selector_moved)
         self._time_selector.add_to_plot(self._plot_widget)
@@ -79,7 +78,8 @@ class AudioView(QWidget):
 
         # Initial visualization
         self._plot_selected_channel()
-        self.display_at_time(self._visible_duration_seconds / 2)
+        self._set_clamped_time_range(0, self._visible_duration_seconds)
+        self.display_at_sample(0, signal=False)
 
     @property
     def current_sample(self) -> int:
@@ -92,12 +92,12 @@ class AudioView(QWidget):
         return self._current_sample / self._audio.sampling_rate
 
     def display_at_sample(self, sample_idx: int, signal: bool = True) -> bool:
-        """Set the currently visualized audio window based on a sample index.
+        """Set the currently highlighted sample index and update the view if necessary.
 
         Parameters
         ----------
         sample_idx : int
-            The sample index to center the visualization on.
+            The sample index to highlight in the audio view.
         signal : bool, optional
             Whether to emit the position changed signal, by default True.
 
@@ -114,25 +114,26 @@ class AudioView(QWidget):
 
         self._current_sample = sample_idx
         # Current time gets updated based on the sample index.
-        current_time = self.current_time
 
-        self._time_selector.set_selected_time_no_signal(current_time)
-        self._update_x_range()
-        self._time_label.set_current_time(current_time)
+        self._time_selector.set_selected_time_no_signal(self.current_time)
+        self._move_view_to_current_time()
+        self._time_label.set_current_time(self.current_time)
 
-        # Emit signal that the position has changed
         if signal:
             self.sigSampleIndexChanged.emit(self._current_sample)
 
         return True
 
     def display_at_time(self, time_seconds: float, signal: bool = True) -> bool:
-        """Set the currently visualized audio window based on a time in seconds.
+        """Set the currently highlighted time and update the view if necessary.
+
+        This is just a wrapper around `display_at_sample` that converts time to
+        sample index.
 
         Parameters
         ----------
         time_seconds : float
-            The time in seconds to center the visualization on.
+            The time in seconds to highlight in the audio view.
         signal : bool, optional
             Whether to emit the position changed signal, by default True.
 
@@ -213,7 +214,9 @@ class AudioView(QWidget):
         self._channel_selector.addItem("All (show mean)")
         for i in range(self._audio.n_channels):
             self._channel_selector.addItem(f"Channel {i + 1}")
-        self._channel_selector.currentIndexChanged.connect(self._on_channel_changed)
+        self._channel_selector.currentIndexChanged.connect(
+            self._update_selected_channel
+        )
         toolbar_layout.addWidget(self._channel_selector)
 
         # Add label that shows the current time and max time.
@@ -224,32 +227,67 @@ class AudioView(QWidget):
         )
         self._time_label.add_to_layout(toolbar_layout)
 
-    def _update_x_range(self) -> None:
-        """Update x-axis range of the plot based on current sample zoom level.
+    def _move_view_to_current_time(self) -> None:
+        """Ensure that the view contains the currently highlighted/selected sample.
 
-        Either centers the current sample or if the resulting view range would be out of
-        bounds, sets the view to the start or end of the audio.
+        If the current sample is outside the current view range, move the view
+        as many window lengths as needed to bring the current sample into view.
         """
-        # Set the position line to the current sample
         current_time = self.current_time
+        window_min, window_max = self._plot_widget.viewRange()[0]
+        window_len = window_max - window_min
+
+        if window_min <= current_time <= window_max:
+            # The time selector is already in the view range, no need to change it.
+            logger.debug(
+                f"Selected time {current_time:.3f} s is already in the audio view "
+                f"range [{window_min:.3f}, {window_max:.3f}] seconds. No change needed."
+            )
+            return
+
+        if current_time < window_min:
+            moves_needed = int(np.ceil((window_min - current_time) / window_len))
+            new_window_min = window_min - moves_needed * window_len
+            new_window_max = window_max - moves_needed * window_len
+        else:  # selected_time > window_max
+            moves_needed = int(np.ceil((current_time - window_max) / window_len))
+            new_window_min = window_min + moves_needed * window_len
+            new_window_max = window_max + moves_needed * window_len
+
+        logger.debug(
+            f"Moving audio view to include selected time {current_time:.3f} seconds."
+        )
+        self._set_clamped_time_range(new_window_min, new_window_max)
+
+    def _set_clamped_time_range(self, new_min: float, new_max: float) -> None:
+        """Set x-axis range of the plot ensuring it does not exceed audio duration."""
+        min_time = 0.0
         max_time = self._audio.duration
-        half_window = self._visible_duration_seconds / 2
 
-        # Calculate the new start and end times so that the current sample is centered.
-        new_start_time = current_time - half_window
-        new_end_time = current_time + half_window
-
-        if new_start_time < 0:
-            # New start time out of bounds, set view to start of audio.
-            self._plot_widget.setXRange(0, self._visible_duration_seconds)
-        elif new_end_time > max_time:
-            # New end time out of bounds, set view to end of audio.
+        if new_min < min_time:
+            logger.debug(
+                "Setting audio time range to start: "
+                f"[{min_time}, {self._visible_duration_seconds}] with visible duration "
+                f"{self._visible_duration_seconds} seconds."
+            )
             self._plot_widget.setXRange(
-                max_time - self._visible_duration_seconds, max_time
+                min_time, self._visible_duration_seconds, padding=0
+            )
+        elif new_max > max_time:
+            logger.debug(
+                "Setting audio time range to end: "
+                f"[{max_time - self._visible_duration_seconds}, {max_time}] with "
+                f"visible duration {self._visible_duration_seconds} seconds."
+            )
+            self._plot_widget.setXRange(
+                max_time - self._visible_duration_seconds, max_time, padding=0
             )
         else:
-            # New range is valid, set it.
-            self._plot_widget.setXRange(new_start_time, new_end_time)
+            logger.debug(
+                f"Setting audio time range to: [{new_min}, {new_max}] seconds "
+                f"with visible duration {self._visible_duration_seconds} seconds."
+            )
+            self._plot_widget.setXRange(new_min, new_max, padding=0)
 
     def _plot_selected_channel(self) -> None:
         """Update the plot to show the selected channel or mean of all channels."""
@@ -273,36 +311,31 @@ class AudioView(QWidget):
                 times, audio_data[channel_idx, :], pen=pg.mkPen(color="g", width=1)
             )
 
+    @Slot()
     def _on_time_selector_moved(self) -> None:
         """Handle when the selector line is moved by the user.
 
         Updates the current sample based on the new position of the selector
-        and emits a signal for the position change. Does not change the visible window
-        (call _update_x_range).
+        and emits a signal for the position change. Does not change the visible window.
         """
-        new_time = self._time_selector.get_selected_time()
         # Clamp the new time to the current view range to make it impossible to
         # move the selector outside the visible range.
-        view_min, view_max = self._plot_widget.viewRange()[0]
-        new_time = np.clip(
-            new_time,
-            view_min + self._time_selector_padding,
-            view_max - self._time_selector_padding,
+        current_range = self._plot_widget.viewRange()[0]
+        self._time_selector.clamp_selected_time_to_range(
+            current_range, padding=self._time_selector_padding
         )
-        self._time_selector.set_selected_time_no_signal(new_time)
+        clamped_time = self._time_selector.selected_time
+        new_sample = int(clamped_time * self._audio.sampling_rate)
 
-        new_sample = int(new_time * self._audio.sampling_rate)
-        # Clamp to valid range
-        new_sample = max(0, min(new_sample, self._audio.n_samples - 1))
-
-        # Update current position
-        self._current_sample = new_sample
+        # Update currently selected sample and time label.
+        self._current_sample = new_sample  # Updates self.current_time automatically
         self._time_label.set_current_time(self.current_time)
 
         # Emit signal for position change
         self.sigSampleIndexChanged.emit(new_sample)
 
-    def _on_channel_changed(self, index: int) -> None:
+    @Slot(int)
+    def _update_selected_channel(self, index: int) -> None:
         """Handle when the user changes the selected channel."""
         if index == 0:
             # If "All (show mean)" is selected, set channel selection to None
@@ -312,25 +345,39 @@ class AudioView(QWidget):
 
         self._plot_selected_channel()
 
+    @Slot()
     def _zoom_in(self) -> None:
         """Zoom in on the waveform."""
         # Halve the visible duration
         self._visible_duration_seconds = max(1.0, self._visible_duration_seconds / 2)
-        self._update_x_range()
+        self._center_view_on_current_sample()
 
+    @Slot()
     def _zoom_out(self) -> None:
         """Zoom out on the waveform."""
         # Double the visible duration
         self._visible_duration_seconds = min(
             self._audio.duration, self._visible_duration_seconds * 2
         )
-        self._update_x_range()
+        self._center_view_on_current_sample()
 
+    @Slot()
     def _reset_zoom(self) -> None:
-        """Reset the view to center around the current position with default zoom."""
+        """Reset the view to center around the current sample with default zoom."""
         # Reset to default zoom level
-        self._visible_duration_seconds = self._default_window_seconds
-        self._update_x_range()
+        self._visible_duration_seconds = self._default_view_len
+        self._center_view_on_current_sample()
+
+    def _center_view_on_current_sample(self) -> None:
+        """Try to center the view around the current sample with correct window size.
+
+        Centering wil not be perfect if the current sample is too close to the edges
+        of the audio data.
+        """
+        half_window = self._visible_duration_seconds / 2
+        self._set_clamped_time_range(
+            self.current_time - half_window, self.current_time + half_window
+        )
 
 
 class AudioBrowser(QWidget):
