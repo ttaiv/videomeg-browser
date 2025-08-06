@@ -40,7 +40,8 @@ class RawTimeSelector(QObject):
         time = self._selector.value()
         if not isinstance(time, int | float):
             raise TypeError(
-                "The value of vertical line selector is not a single number."
+                "The value of vertical line selector is not a single number. "
+                f"Got {type(time)} instead."
             )
 
         return float(time)
