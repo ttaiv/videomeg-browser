@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class RawTimeSelector(QObject):
-    """Represents a vertical line slider that allows the user to select a time point.
+    """Vertical line slider that allows the user to select a time point from a plot.
 
     Provides getter and setter for the currently selected time in seconds and emits a
     signal carrying the new selected time whenever the user changes the selection
@@ -27,10 +27,10 @@ class RawTimeSelector(QObject):
         self._selector = pg.InfiniteLine(
             pos=0, angle=90, movable=True, pen=pg.mkPen("r", width=3)
         )
-
         self._selector.sigPositionChanged.connect(
             lambda: self._signal_user_selected_time_change()
         )
+        # Flag to suppress the signal when setting the position programmatically.
         self.suppress_change_signal = False
 
     @property
