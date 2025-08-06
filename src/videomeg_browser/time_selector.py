@@ -33,14 +33,21 @@ class RawTimeSelector(QObject):
         )
         self.suppress_change_signal = False
 
-    def get_selected_time(self) -> float:
+    @property
+    def selected_time(self) -> float:
         """Get the currently selected time in seconds."""
         time = self._selector.value()
-
         if not isinstance(time, int | float):
-            raise TypeError(f"Expected time to be a number, got {type(time)} instead.")
+            raise TypeError(
+                "The value of vertical line selector is not a single number."
+            )
 
         return float(time)
+
+    @property
+    def selector(self) -> pg.InfiniteLine:
+        """Get the InfiniteLine selector."""
+        return self._selector
 
     def set_selected_time_no_signal(self, time_seconds: float) -> None:
         """Set the position of the selector in seconds WITHOUT emitting a signal."""
@@ -48,12 +55,8 @@ class RawTimeSelector(QObject):
         self._selector.setValue(time_seconds)
         self.suppress_change_signal = False
 
-    def get_selector(self) -> pg.InfiniteLine:
-        """Get the InfiniteLine selector."""
-        return self._selector
-
     @Slot()
     def _signal_user_selected_time_change(self) -> None:
         """Emit the signal if the change was made by user interaction."""
         if not self.suppress_change_signal:
-            self.sigSelectedTimeChanged.emit(self.get_selected_time())
+            self.sigSelectedTimeChanged.emit(self.selected_time)

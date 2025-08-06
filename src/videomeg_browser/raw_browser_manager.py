@@ -112,7 +112,7 @@ class RawBrowserManager(QObject):
         self._programmatic_time_range_change = False
 
         self._raw_time_selector = RawTimeSelector(parent=self)
-        self._browser.add_item_to_plot(self._raw_time_selector.get_selector())
+        self._browser.add_item_to_plot(self._raw_time_selector.selector)
 
         # The selected time of the raw browser can change in two ways:
         # 1. When user modifies the raw browser view (e.g., zooms in/out or scrolls)
@@ -166,7 +166,7 @@ class RawBrowserManager(QObject):
 
     def get_selected_time(self) -> float:
         """Get the current position of the raw time selector in seconds."""
-        return self._raw_time_selector.get_selected_time()
+        return self._raw_time_selector.selected_time
 
     def show_browser(self) -> None:
         """Show the raw data browser."""
@@ -182,7 +182,7 @@ class RawBrowserManager(QObject):
         # Clamp the raw time selector to the current view range so that user cannot drag
         # it outside the visible range of the raw data browser.
         clamped_time = self._clamp_time_selector_to_current_view(
-            self._raw_time_selector.get_selected_time(), padding=self._selector_padding
+            self._raw_time_selector.selected_time, padding=self._selector_padding
         )
         self._raw_time_selector.set_selected_time_no_signal(clamped_time)
         logger.debug(
@@ -296,7 +296,7 @@ class RawBrowserManager(QObject):
         If the time selector is outside the current view range, move the view
         as many window lengths as needed to bring the time selector into view.
         """
-        selected_time = self._raw_time_selector.get_selected_time()
+        selected_time = self._raw_time_selector.selected_time
         window_min, window_max = self._browser.get_view_time_range()
         window_len = window_max - window_min
 
