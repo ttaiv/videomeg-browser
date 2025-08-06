@@ -181,10 +181,10 @@ class RawBrowserManager(QObject):
         """Update the default position and emit signal when user drags time selector."""
         # Clamp the raw time selector to the current view range so that user cannot drag
         # it outside the visible range of the raw data browser.
-        clamped_time = self._clamp_time_selector_to_current_view(
-            self._raw_time_selector.selected_time, padding=self._selector_padding
+        self._raw_time_selector.clamp_selected_time_to_range(
+            self._browser.get_view_time_range(), padding=self._selector_padding
         )
-        self._raw_time_selector.set_selected_time_no_signal(clamped_time)
+        clamped_time = self._raw_time_selector.selected_time
         logger.debug(
             "Detected change in raw time selector, setting new default position."
         )
@@ -218,35 +218,6 @@ class RawBrowserManager(QObject):
         )
         logger.debug("Emitting signal for selected time change in raw data browser.")
         self.sigSelectedTimeChanged.emit(raw_time_seconds)
-
-    def _clamp_time_selector_to_current_view(
-        self, new_value: float, padding: float
-    ) -> float:
-        """Set raw time selector value, clamped to current raw view range.
-
-        Used to ensure that user cannot drag the time selector outside
-        the current view range of the raw data browser.
-
-        Parameters
-        ----------
-        new_value : float
-            The value to set the raw time selector to, in seconds.
-        padding : float
-            Padding to apply to the view range when clamping the value.
-            This is useful to ensure that the time selector does not
-            get too close to the edges of the view range.
-
-        Returns
-        -------
-        float
-            The clamped value of the raw time selector, in seconds.
-        """
-        # Get the current view range of the raw data browser
-        min_time, max_time = self._browser.get_view_time_range()
-        # Clamp the new value to the current view range
-        clamped_value = np.clip(new_value, min_time + padding, max_time - padding)
-
-        return clamped_value
 
     def _update_default_time_selector_position(self, new_selector_value: float) -> None:
         """Update the default position of the time selector based on current view."""

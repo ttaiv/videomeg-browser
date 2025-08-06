@@ -2,6 +2,7 @@
 
 import logging
 
+import numpy as np
 import pyqtgraph as pg
 from qtpy.QtCore import QObject, Signal, Slot  # type: ignore
 
@@ -54,6 +55,29 @@ class RawTimeSelector(QObject):
         self.suppress_change_signal = True
         self._selector.setValue(time_seconds)
         self.suppress_change_signal = False
+
+    def clamp_selected_time_to_range(
+        self, time_range: tuple[float, float], padding: float = 0.0
+    ) -> None:
+        """Clamp the selected time to a given range, optionally applying padding.
+
+        Does not emit a signal even if the value of the selector changes.
+
+        Parameters
+        ----------
+        time_range : tuple[float, float]
+            The range to clamp the selected time to, as (min_time, max_time).
+        padding : float, optional
+            Padding to apply to the range, default is 0.0 seconds.
+        """
+        current_time = self.selected_time
+        # Clamp the new value to the current view range
+        clamped_value = np.clip(
+            current_time, time_range[0] + padding, time_range[1] - padding
+        )
+
+        if clamped_value != current_time:
+            self.set_selected_time_no_signal(clamped_value)
 
     @Slot()
     def _signal_user_selected_time_change(self) -> None:
