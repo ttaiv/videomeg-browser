@@ -9,7 +9,7 @@ from qtpy.QtCore import QObject, Signal, Slot  # type: ignore
 logger = logging.getLogger(__name__)
 
 
-class RawTimeSelector(QObject):
+class TimeSelector(QObject):
     """Vertical line slider that allows the user to select a time point from a plot.
 
     Provides getter and setter for the currently selected time in seconds and emits a
@@ -78,6 +78,10 @@ class RawTimeSelector(QObject):
 
         if clamped_value != current_time:
             self.set_selected_time_no_signal(clamped_value)
+
+    def add_to_plot(self, plot_widget: pg.PlotWidget) -> None:
+        """Add the selector to a given plot widget."""
+        plot_widget.addItem(self._selector)
 
     @Slot()
     def _signal_user_selected_time_change(self) -> None:

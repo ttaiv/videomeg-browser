@@ -5,12 +5,10 @@ import logging
 import os
 import time
 from enum import Enum, auto
-from importlib.resources import files
 from typing import Literal
 
 import pyqtgraph as pg
 from qtpy.QtCore import QObject, Qt, QTimer, Signal, Slot  # type: ignore
-from qtpy.QtGui import QPixmap
 from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -23,6 +21,8 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+import videomeg_browser.gui_utils as gui_utils
 
 from .video import VideoFile
 
@@ -118,7 +118,7 @@ class VideoBrowser(QWidget):
         self._layout.addLayout(slider_layout)
 
         # Label that shows the current time of the selected video.
-        self._time_label = ElapsedTimeLabel(
+        self._time_label = gui_utils.ElapsedTimeLabel(
             current_time_seconds=0.0,
             max_time_seconds=self._selected_video.duration,
             parent=self,
@@ -483,17 +483,14 @@ class VideoView(QWidget):
 
         # Add info icon that shows video stats when hovered over.
         info_icon = QLabel()
-        info_pixmap = QPixmap()
-        info_icon_resource = files("videomeg_browser.icons").joinpath("info.png")
-        try:
-            with info_icon_resource.open("rb") as f:
-                info_pixmap.loadFromData(f.read())
+        info_pixmap = gui_utils.load_icon_pixmap("info.png")
+        if info_pixmap is not None:
             info_icon.setPixmap(
                 info_pixmap.scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             )
-        except (FileNotFoundError, ModuleNotFoundError) as e:
-            logger.warning(f"Info icon not found, using text-based icon: {e}")
-            info_icon.setText("ℹ️")  # Fallback to a text-based icon
+        else:
+            logger.warning("Info icon not found, using text-based icon")
+            info_icon.setText("ℹ️")
         info_icon.setToolTip(
             f"File: {video.fname}\n"
             f"Duration: {video.duration:.2f} seconds\n"
@@ -698,103 +695,6 @@ class IndexSlider(QObject):
             The layout to which the slider will be added.
         """
         layout.addWidget(self._slider)
-
-
-class ElapsedTimeLabel:
-    """A label for displaying time in a format [current_time] / [max_time].
-
-    The format is either mm:ss or hh:mm:ss, depending on whether the
-    maximum time is less than or greater than one hour.
-
-    Parameters
-    ----------
-    current_time_seconds : float
-        The current time in seconds to display.
-    max_time_seconds : float
-        The maximum time in seconds to display.
-    parent : QWidget, optional
-        The parent widget for this label, by default None
-    """
-
-    def __init__(
-        self,
-        current_time_seconds: float,
-        max_time_seconds: float,
-        parent: QWidget | None = None,
-    ) -> None:
-        if current_time_seconds > max_time_seconds:
-            logger.warning("Current time exceeds maximum time.")
-        self._current_time_seconds = current_time_seconds
-        self._max_time_seconds = max_time_seconds
-        self._label = QLabel(parent=parent)
-
-        # Determine whether to include hours in the time display.
-        if max_time_seconds < 3600:
-            self._include_hours = False
-        else:
-            self._include_hours = True
-
-        self._current_time_text = self._format_time(current_time_seconds)
-        self._max_time_text = self._format_time(max_time_seconds)
-        self._label.setText(f"{self._current_time_text} / {self._max_time_text}")
-
-    def set_current_time(self, current_time_seconds: float) -> None:
-        """Update the current time displayed in the label."""
-        if current_time_seconds > self._max_time_seconds:
-            logger.warning("Current time exceeds maximum time.")
-        self._current_time_text = self._format_time(current_time_seconds)
-        self._label.setText(f"{self._current_time_text} / {self._max_time_text}")
-
-    def set_max_time(self, max_time_seconds: float) -> None:
-        """Update the maximum time displayed in the label.
-
-        Also updates the display format to include or exclude hours based on
-        `max_time_seconds` being more or less than an hour.
-        """
-        if max_time_seconds < self._current_time_seconds:
-            logger.warning("Maximum time is less than current time.")
-        if max_time_seconds < 3600:
-            self._include_hours = False
-        else:
-            self._include_hours = True
-
-        self._max_time_text = self._format_time(max_time_seconds)
-        # Also update the current time text in case display format changed.
-        self._current_time_text = self._format_time(self._current_time_seconds)
-        self._label.setText(f"{self._current_time_text} / {self._max_time_text}")
-
-    def set_current_and_max_time(
-        self, current_time_seconds: float, max_time_seconds: float
-    ) -> None:
-        """Update both current and maximum time displayed in the label.
-
-        Also updates the display format to include or exclude hours based on
-        `max_time_seconds` being more or less than an hour.
-        """
-        if current_time_seconds > max_time_seconds:
-            logger.warning("Current time exceeds maximum time.")
-        self._current_time_seconds = current_time_seconds
-        # This handles also updating the current time text.
-        self.set_max_time(max_time_seconds)
-
-    def add_to_layout(self, layout: QLayout) -> None:
-        """Add the label to the given layout.
-
-        Parameters
-        ----------
-        layout : QLayout
-            The layout to which the label will be added.
-        """
-        layout.addWidget(self._label)
-
-    def _format_time(self, time_seconds: float) -> str:
-        """Format seconds as mm:ss or hh:mm:ss, depending on the include_hours flag."""
-        minutes, seconds = divmod(int(time_seconds), 60)
-        if self._include_hours:
-            hours, minutes = divmod(minutes, 60)
-            return f"{hours}:{minutes:02d}:{seconds:02d}"
-
-        return f"{minutes}:{seconds:02d}"
 
 
 class FrameRateTracker:

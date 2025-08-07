@@ -24,7 +24,7 @@ def main() -> None:
 
     audio.print_stats()
 
-    audio_ts = audio.get_audio_timestamps()
+    audio_ts = audio.get_audio_timestamps_ms()
     print(f"Got audio timestamps with shape: {audio_ts.shape}")
 
     audio_samples = audio.get_audio_all_channels()
