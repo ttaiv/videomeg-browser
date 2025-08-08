@@ -411,7 +411,9 @@ class AudioBrowser(QWidget):
 
         # Create an audio view that handles the visualization.
         self._audio_view = AudioView(audio, parent=self)
-        # self._audio_view.sigSampleIndexChanged.connect(self._on_position_changed)
+        self._audio_view.sigSampleIndexChanged.connect(
+            self._on_audio_view_sample_change
+        )
         self._layout.addWidget(self._audio_view)
 
         # Create controls.
@@ -432,6 +434,8 @@ class AudioBrowser(QWidget):
         self._navigation_bar.sigNextClicked.connect(self._jump_forward)
         self._navigation_bar.sigPreviousClicked.connect(self._jump_backwards)
 
+        self._update_browser_to_current_sample()
+
     @property
     def current_sample(self) -> int:
         return self._audio_view.current_sample
@@ -450,10 +454,22 @@ class AudioBrowser(QWidget):
                 "Keeping current position."
             )
             return
-        self._slider.set_value(sample_idx, signal=False)
-        self._update_buttons_enabled()
+        self._update_browser_to_current_sample()
         if signal:
             self.sigPositionChanged.emit(sample_idx)
+
+    def _update_browser_to_current_sample(self) -> None:
+        """Update the audio browser UI to reflect the currently selected sample."""
+        self._slider.set_value(self.current_sample, signal=False)
+        self._update_buttons_enabled()
+
+    @Slot(int)
+    def _on_audio_view_sample_change(self, sample_idx: int) -> None:
+        """Handle when the user dragged the time selector in the audio view."""
+        # The updated sample index is fetched from the audio view using
+        # self.current_sample.
+        self._update_browser_to_current_sample()
+        self.sigPositionChanged.emit(sample_idx)
 
     @Slot()
     def _toggle_play_pause(self) -> None:
