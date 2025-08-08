@@ -3,9 +3,9 @@
 import logging
 from importlib.resources import files
 
-from qtpy.QtCore import QObject, Qt, Signal  # type: ignore
+from qtpy.QtCore import Qt, Signal  # type: ignore
 from qtpy.QtGui import QPixmap
-from qtpy.QtWidgets import QLabel, QLayout, QSlider, QWidget
+from qtpy.QtWidgets import QHBoxLayout, QLabel, QLayout, QSlider, QWidget
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +133,7 @@ class ElapsedTimeLabel:
         return f"{minutes}:{seconds:02d}"
 
 
-class IndexSlider(QObject):
+class IndexSlider(QWidget):
     """A slider for navigating indices, such as video frames.
 
     Emits a signal when the index changes and provides methods to manipulate the slider,
@@ -167,8 +167,11 @@ class IndexSlider(QObject):
         self._max_value = max_value
 
         super().__init__(parent=parent)
-        self._slider = QSlider(Qt.Horizontal, parent=parent)
+        self._layout = QHBoxLayout()
+        self.setLayout(self._layout)
 
+        self._slider = QSlider(Qt.Horizontal, parent=self)
+        self._layout.addWidget(self._slider)
         self._slider.setMinimum(min_value)
         self._slider.setMaximum(max_value)
         self._slider.setValue(value)
@@ -222,13 +225,3 @@ class IndexSlider(QObject):
             self._slider.blockSignals(True)
             self._slider.setValue(value)
             self._slider.blockSignals(False)
-
-    def add_to_layout(self, layout: QLayout) -> None:
-        """Add the slider to the given layout.
-
-        Parameters
-        ----------
-        layout : QLayout
-            The layout to which the slider will be added.
-        """
-        layout.addWidget(self._slider)

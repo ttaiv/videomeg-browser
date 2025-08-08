@@ -133,7 +133,7 @@ class VideoBrowser(QWidget):
         self._frame_slider.sigIndexChanged.connect(
             self.display_frame_for_selected_video
         )
-        self._frame_slider.add_to_layout(slider_layout)
+        slider_layout.addWidget(self._frame_slider)
 
         # Navigation bar with buttons: previous frame, play/pause, next frame
         # and possibly a video selector if multiple videos are shown.
