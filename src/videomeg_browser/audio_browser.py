@@ -317,11 +317,12 @@ class AudioView(QWidget):
         Updates the current sample based on the new position of the selector
         and emits a signal for the position change. Does not change the visible window.
         """
-        # Clamp the new time to the current view range to make it impossible to
-        # move the selector outside the visible range.
-        current_range = self._plot_widget.viewRange()[0]
+        # Clamp the new time both to the current view range to make it impossible to
+        # move the selector outside the visible range and to audio duration.
+        view_min, view_max = self._plot_widget.viewRange()[0]
+        clamp_range = (max(0.0, view_min), min(self._audio.duration, view_max))
         self._time_selector.clamp_selected_time_to_range(
-            current_range, padding=self._time_selector_padding
+            clamp_range, padding=self._time_selector_padding
         )
         clamped_time = self._time_selector.selected_time
         new_sample = int(clamped_time * self._audio.sampling_rate)
