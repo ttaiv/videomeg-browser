@@ -158,6 +158,8 @@ class IndexSlider(QWidget):
 
         super().__init__(parent=parent)
         self._layout = QHBoxLayout()
+        # Remove margins so that the slider does not have extra space around it.
+        self._layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(self._layout)
 
         self._slider = QSlider(Qt.Horizontal, parent=self)
@@ -259,6 +261,8 @@ class NavigationBar(QWidget):
         self._is_playing = False
 
         self._layout = QHBoxLayout()
+        # Remove margins so that the buttons do not have extra space around them.
+        self._layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(self._layout)
 
         self._prev_button = QPushButton(prev_button_text)
