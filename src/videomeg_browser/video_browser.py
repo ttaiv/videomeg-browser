@@ -272,6 +272,7 @@ class VideoBrowser(QWidget):
             return
         logger.debug("Playing video.")
         self._is_playing = True
+        self._navigation_bar.set_playing()
         # Start the timer that controls automatic frame updates
         self._play_timer.start()
 
@@ -286,6 +287,7 @@ class VideoBrowser(QWidget):
         logger.debug("Pausing video.")
         self._is_playing = False
         self._play_timer.stop()
+        self._navigation_bar.set_paused()
         self._fps_label.setText("Playing FPS: -")
         # Reset the frame tracker to start fresh with the next play.
         self._frame_rate_tracker.reset()

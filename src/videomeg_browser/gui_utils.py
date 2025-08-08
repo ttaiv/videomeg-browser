@@ -258,7 +258,6 @@ class NavigationBar(QWidget):
         # Save the play and pause texts for toggling later.
         self._play_text = play_text
         self._pause_text = pause_text
-        self._is_playing = False
 
         self._layout = QHBoxLayout()
         # Remove margins so that the buttons do not have extra space around them.
@@ -292,12 +291,10 @@ class NavigationBar(QWidget):
         """Enable/disable the Next button."""
         self._next_button.setEnabled(enabled)
 
-    @Slot()
-    def _toggle_play_pause(self) -> None:
-        """Toggle the play/pause state of the button."""
-        if self._is_playing:
-            self._play_pause_button.setText(self._play_text)
-        else:
-            self._play_pause_button.setText(self._pause_text)
-        self._is_playing = not self._is_playing
-        self.sigPlayPauseClicked.emit()
+    def set_paused(self) -> None:
+        """Set the button text to play text to indicate paused state."""
+        self._play_pause_button.setText(self._play_text)
+
+    def set_playing(self) -> None:
+        """Set the button text to pause text to indicate playing state."""
+        self._play_pause_button.setText(self._pause_text)
