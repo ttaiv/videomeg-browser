@@ -140,24 +140,19 @@ class VideoBrowser(QWidget):
         navigation_layout = QHBoxLayout()
         self._layout.addLayout(navigation_layout)
 
-        nav_button_min_width = 100
-
-        self._prev_button = QPushButton("Previous Frame")
-        self._prev_button.clicked.connect(
+        self._navigation_bar = gui_utils.NavigationBar(
+            prev_button_text="Previous Frame",
+            next_button_text="Next Frame",
+            parent=self,
+        )
+        self._navigation_bar.sigPreviousClicked.connect(
             self.display_previous_frame_for_selected_video
         )
-        self._prev_button.setMinimumWidth(nav_button_min_width)
-        navigation_layout.addWidget(self._prev_button)
-
-        self._play_pause_button = QPushButton("Play")
-        self._play_pause_button.clicked.connect(self.toggle_play_pause)
-        self._play_pause_button.setMinimumWidth(nav_button_min_width)
-        navigation_layout.addWidget(self._play_pause_button)
-
-        self._next_button = QPushButton("Next Frame")
-        self._next_button.clicked.connect(self.display_next_frame_for_selected_video)
-        self._next_button.setMinimumWidth(nav_button_min_width)
-        navigation_layout.addWidget(self._next_button)
+        self._navigation_bar.sigNextClicked.connect(
+            self.display_next_frame_for_selected_video
+        )
+        self._navigation_bar.sigPlayPauseClicked.connect(self.toggle_play_pause)
+        navigation_layout.addWidget(self._navigation_bar)
 
         # Add drop-down menu for selecting which video to control.
         if self._multiple_videos:
@@ -279,7 +274,6 @@ class VideoBrowser(QWidget):
         self._is_playing = True
         # Start the timer that controls automatic frame updates
         self._play_timer.start()
-        self._play_pause_button.setText("Pause")  # Change play button to pause button
 
     @Slot()
     def pause_video(self) -> None:
@@ -292,7 +286,6 @@ class VideoBrowser(QWidget):
         logger.debug("Pausing video.")
         self._is_playing = False
         self._play_timer.stop()
-        self._play_pause_button.setText("Play")
         self._fps_label.setText("Playing FPS: -")
         # Reset the frame tracker to start fresh with the next play.
         self._frame_rate_tracker.reset()
@@ -347,9 +340,9 @@ class VideoBrowser(QWidget):
         current_frame_idx = self._get_current_frame_index_of_selected_video()
         max_frame_idx = self._selected_video.frame_count - 1
 
-        self._prev_button.setEnabled(current_frame_idx > 0)
-        self._next_button.setEnabled(current_frame_idx < max_frame_idx)
-        self._play_pause_button.setEnabled(current_frame_idx < max_frame_idx)
+        self._navigation_bar.set_prev_enabled(current_frame_idx > 0)
+        self._navigation_bar.set_next_enabled(current_frame_idx < max_frame_idx)
+        self._navigation_bar.set_play_pause_enabled(current_frame_idx < max_frame_idx)
 
     def _get_current_frame_index_of_selected_video(self) -> int:
         """Get the current index for the currently selected video."""

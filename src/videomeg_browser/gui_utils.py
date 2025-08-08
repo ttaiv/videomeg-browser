@@ -3,9 +3,9 @@
 import logging
 from importlib.resources import files
 
-from qtpy.QtCore import Qt, Signal  # type: ignore
+from qtpy.QtCore import Qt, Signal, Slot  # type: ignore
 from qtpy.QtGui import QPixmap
-from qtpy.QtWidgets import QHBoxLayout, QLabel, QSlider, QWidget
+from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSlider, QWidget
 
 logger = logging.getLogger(__name__)
 
@@ -215,3 +215,85 @@ class IndexSlider(QWidget):
             self._slider.blockSignals(True)
             self._slider.setValue(value)
             self._slider.blockSignals(False)
+
+
+class NavigationBar(QWidget):
+    """A navigation bar with Previous, Play/Pause, and Next buttons.
+
+    Emits signals when the buttons are clicked and provides methods to enable/disable
+    the buttons. Handles toggling the Play/Pause button text when the button is clicked.
+
+    Parameters
+    ----------
+    prev_button_text : str
+        The text for the Previous button.
+    next_button_text : str
+        The text for the Next button.
+    play_text : str, optional
+        The text for the play/pause button when in play state, by default "Play".
+    pause_text : str, optional
+        The text for the play/pause button when in pause state, by default "Pause".
+    button_min_width : int, optional
+        The minimum width for the buttons, by default 100.
+    parent : QWidget, optional
+        The parent widget for this navigation bar, by default None
+    """
+
+    sigNextClicked = Signal()
+    sigPreviousClicked = Signal()
+    sigPlayPauseClicked = Signal()
+
+    def __init__(
+        self,
+        prev_button_text: str,
+        next_button_text: str,
+        play_text: str = "Play",
+        pause_text: str = "Pause",
+        button_min_width: int = 100,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent=parent)
+        # Save the play and pause texts for toggling later.
+        self._play_text = play_text
+        self._pause_text = pause_text
+        self._is_playing = False
+
+        self._layout = QHBoxLayout()
+        self.setLayout(self._layout)
+
+        self._prev_button = QPushButton(prev_button_text)
+        self._prev_button.clicked.connect(lambda: self.sigPreviousClicked.emit())
+        self._prev_button.setMinimumWidth(button_min_width)
+        self._layout.addWidget(self._prev_button)
+
+        self._play_pause_button = QPushButton(play_text)  # Assuming we start paused
+        self._play_pause_button.clicked.connect(lambda: self.sigPlayPauseClicked.emit())
+        self._play_pause_button.setMinimumWidth(button_min_width)
+        self._layout.addWidget(self._play_pause_button)
+
+        self._next_button = QPushButton(next_button_text)
+        self._next_button.clicked.connect(lambda: self.sigNextClicked.emit())
+        self._next_button.setMinimumWidth(button_min_width)
+        self._layout.addWidget(self._next_button)
+
+    def set_prev_enabled(self, enabled: bool) -> None:
+        """Enable/disable the Previous button."""
+        self._prev_button.setEnabled(enabled)
+
+    def set_play_pause_enabled(self, enabled: bool) -> None:
+        """Enable/disable the Play/Pause button."""
+        self._play_pause_button.setEnabled(enabled)
+
+    def set_next_enabled(self, enabled: bool) -> None:
+        """Enable/disable the Next button."""
+        self._next_button.setEnabled(enabled)
+
+    @Slot()
+    def _toggle_play_pause(self) -> None:
+        """Toggle the play/pause state of the button."""
+        if self._is_playing:
+            self._play_pause_button.setText(self._play_text)
+        else:
+            self._play_pause_button.setText(self._pause_text)
+        self._is_playing = not self._is_playing
+        self.sigPlayPauseClicked.emit()
