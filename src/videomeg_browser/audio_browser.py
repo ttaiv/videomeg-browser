@@ -451,6 +451,7 @@ class AudioBrowser(QWidget):
             )
             return
         self._slider.set_value(sample_idx, signal=False)
+        self._update_buttons_enabled()
         if signal:
             self.sigPositionChanged.emit(sample_idx)
 
@@ -472,3 +473,13 @@ class AudioBrowser(QWidget):
         samples_to_rewind = int(self._audio.sampling_rate)
         new_sample = self.current_sample - samples_to_rewind
         self.set_position_sample(new_sample, signal=False)
+
+    def _update_buttons_enabled(self) -> None:
+        """Enable or disable buttons based on the current position."""
+        # Buttons advance or rewind one second, so we need to check
+        # if that is possible.
+        max_time = self._audio.duration - 1.0  # seconds
+        min_time = 1.0
+
+        self._navigation_bar.set_prev_enabled(self.current_time >= min_time)
+        self._navigation_bar.set_next_enabled(self.current_time <= max_time)
