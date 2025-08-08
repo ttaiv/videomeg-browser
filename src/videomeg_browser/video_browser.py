@@ -8,15 +8,13 @@ from enum import Enum, auto
 from typing import Literal
 
 import pyqtgraph as pg
-from qtpy.QtCore import QObject, Qt, QTimer, Signal, Slot  # type: ignore
+from qtpy.QtCore import Qt, QTimer, Signal, Slot  # type: ignore
 from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
-    QLayout,
     QPushButton,
     QSizePolicy,
-    QSlider,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -126,7 +124,7 @@ class VideoBrowser(QWidget):
         self._time_label.add_to_layout(slider_layout)
 
         # Slider for navigating to a specific frame
-        self._frame_slider = IndexSlider(
+        self._frame_slider = gui_utils.IndexSlider(
             min_value=0,
             max_value=self._selected_video.frame_count - 1,
             value=0,
@@ -594,107 +592,6 @@ class VideoView(QWidget):
         self._frame_label.setText(
             f"Frame {self._current_frame_idx + 1}/{self._video.frame_count}"
         )
-
-
-class IndexSlider(QObject):
-    """A slider for navigating indices, such as video frames.
-
-    Emits a signal when the index changes and provides methods to manipulate the slider,
-    optionally without emitting the signal.
-
-    Parameters
-    ----------
-    min_value : int
-        The minimum value of the slider.
-    max_value : int
-        The maximum value of the slider.
-    value : int
-        The initial value of the slider.
-    parent : QWidget, optional
-        The parent widget for this slider, by default None
-    """
-
-    sigIndexChanged = Signal(int)
-
-    def __init__(
-        self, min_value: int, max_value: int, value: int, parent: QWidget | None = None
-    ) -> None:
-        if max_value < min_value:
-            raise ValueError("Maximum value must be greater than or equal to minimum.")
-        if value < min_value or value > max_value:
-            raise ValueError(
-                f"Value must be between {min_value} and {max_value}, inclusive. "
-                f"Got {value}."
-            )
-        self._min_value = min_value
-        self._max_value = max_value
-
-        super().__init__(parent=parent)
-        self._slider = QSlider(Qt.Horizontal, parent=parent)
-
-        self._slider.setMinimum(min_value)
-        self._slider.setMaximum(max_value)
-        self._slider.setValue(value)
-
-        self._slider.valueChanged.connect(
-            lambda value: self.sigIndexChanged.emit(value)
-        )
-
-    def set_max_value(self, max_value: int, signal: bool) -> None:
-        """Set the maximum value of the slider.
-
-        Parameters
-        ----------
-        max_value : int
-            The maximum value to set for the slider.
-        signal : bool
-            Whether to emit the `sigIndexChanged` if the value of the slider changes.
-        """
-        if max_value < self._min_value:
-            raise ValueError(
-                f"Maximum value must be greater than or equal to minimum value "
-                f"{self._min_value}. Got {max_value}."
-            )
-        self._max_value = max_value
-        if signal:
-            self._slider.setMaximum(max_value)
-        else:
-            self._slider.blockSignals(True)
-            self._slider.setMaximum(max_value)
-            self._slider.blockSignals(False)
-
-    def set_value(self, value: int, signal: bool) -> None:
-        """Set the slider value and optionally emit the valueChanged signal.
-
-        Parameters
-        ----------
-        value : int
-            The value to set for the slider.
-        signal : bool, optional
-            Whether to emit the `sigIndexChanged` signal if the value of the slider
-            changes.
-        """
-        if value < self._min_value or value > self._max_value:
-            raise ValueError(
-                f"Value must be between {self._min_value} and {self._max_value}, "
-                f"inclusive. Got {value}."
-            )
-        if signal:
-            self._slider.setValue(value)
-        else:
-            self._slider.blockSignals(True)
-            self._slider.setValue(value)
-            self._slider.blockSignals(False)
-
-    def add_to_layout(self, layout: QLayout) -> None:
-        """Add the slider to the given layout.
-
-        Parameters
-        ----------
-        layout : QLayout
-            The layout to which the slider will be added.
-        """
-        layout.addWidget(self._slider)
 
 
 class FrameRateTracker:
