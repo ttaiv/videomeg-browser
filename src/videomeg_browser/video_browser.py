@@ -8,15 +8,13 @@ from enum import Enum, auto
 from typing import Literal
 
 import pyqtgraph as pg
-from qtpy.QtCore import QObject, Qt, QTimer, Signal, Slot  # type: ignore
+from qtpy.QtCore import Qt, QTimer, Signal, Slot  # type: ignore
 from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
-    QLayout,
     QPushButton,
     QSizePolicy,
-    QSlider,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -123,10 +121,10 @@ class VideoBrowser(QWidget):
             max_time_seconds=self._selected_video.duration,
             parent=self,
         )
-        self._time_label.add_to_layout(slider_layout)
+        slider_layout.addWidget(self._time_label)
 
         # Slider for navigating to a specific frame
-        self._frame_slider = IndexSlider(
+        self._frame_slider = gui_utils.IndexSlider(
             min_value=0,
             max_value=self._selected_video.frame_count - 1,
             value=0,
@@ -135,31 +133,26 @@ class VideoBrowser(QWidget):
         self._frame_slider.sigIndexChanged.connect(
             self.display_frame_for_selected_video
         )
-        self._frame_slider.add_to_layout(slider_layout)
+        slider_layout.addWidget(self._frame_slider)
 
         # Navigation bar with buttons: previous frame, play/pause, next frame
         # and possibly a video selector if multiple videos are shown.
         navigation_layout = QHBoxLayout()
         self._layout.addLayout(navigation_layout)
 
-        nav_button_min_width = 100
-
-        self._prev_button = QPushButton("Previous Frame")
-        self._prev_button.clicked.connect(
+        self._navigation_bar = gui_utils.NavigationBar(
+            prev_button_text="Previous Frame",
+            next_button_text="Next Frame",
+            parent=self,
+        )
+        self._navigation_bar.sigPreviousClicked.connect(
             self.display_previous_frame_for_selected_video
         )
-        self._prev_button.setMinimumWidth(nav_button_min_width)
-        navigation_layout.addWidget(self._prev_button)
-
-        self._play_pause_button = QPushButton("Play")
-        self._play_pause_button.clicked.connect(self.toggle_play_pause)
-        self._play_pause_button.setMinimumWidth(nav_button_min_width)
-        navigation_layout.addWidget(self._play_pause_button)
-
-        self._next_button = QPushButton("Next Frame")
-        self._next_button.clicked.connect(self.display_next_frame_for_selected_video)
-        self._next_button.setMinimumWidth(nav_button_min_width)
-        navigation_layout.addWidget(self._next_button)
+        self._navigation_bar.sigNextClicked.connect(
+            self.display_next_frame_for_selected_video
+        )
+        self._navigation_bar.sigPlayPauseClicked.connect(self.toggle_play_pause)
+        navigation_layout.addWidget(self._navigation_bar)
 
         # Add drop-down menu for selecting which video to control.
         if self._multiple_videos:
@@ -279,9 +272,9 @@ class VideoBrowser(QWidget):
             return
         logger.debug("Playing video.")
         self._is_playing = True
+        self._navigation_bar.set_playing()
         # Start the timer that controls automatic frame updates
         self._play_timer.start()
-        self._play_pause_button.setText("Pause")  # Change play button to pause button
 
     @Slot()
     def pause_video(self) -> None:
@@ -294,7 +287,7 @@ class VideoBrowser(QWidget):
         logger.debug("Pausing video.")
         self._is_playing = False
         self._play_timer.stop()
-        self._play_pause_button.setText("Play")
+        self._navigation_bar.set_paused()
         self._fps_label.setText("Playing FPS: -")
         # Reset the frame tracker to start fresh with the next play.
         self._frame_rate_tracker.reset()
@@ -349,9 +342,9 @@ class VideoBrowser(QWidget):
         current_frame_idx = self._get_current_frame_index_of_selected_video()
         max_frame_idx = self._selected_video.frame_count - 1
 
-        self._prev_button.setEnabled(current_frame_idx > 0)
-        self._next_button.setEnabled(current_frame_idx < max_frame_idx)
-        self._play_pause_button.setEnabled(current_frame_idx < max_frame_idx)
+        self._navigation_bar.set_prev_enabled(current_frame_idx > 0)
+        self._navigation_bar.set_next_enabled(current_frame_idx < max_frame_idx)
+        self._navigation_bar.set_play_pause_enabled(current_frame_idx < max_frame_idx)
 
     def _get_current_frame_index_of_selected_video(self) -> int:
         """Get the current index for the currently selected video."""
@@ -594,107 +587,6 @@ class VideoView(QWidget):
         self._frame_label.setText(
             f"Frame {self._current_frame_idx + 1}/{self._video.frame_count}"
         )
-
-
-class IndexSlider(QObject):
-    """A slider for navigating indices, such as video frames.
-
-    Emits a signal when the index changes and provides methods to manipulate the slider,
-    optionally without emitting the signal.
-
-    Parameters
-    ----------
-    min_value : int
-        The minimum value of the slider.
-    max_value : int
-        The maximum value of the slider.
-    value : int
-        The initial value of the slider.
-    parent : QWidget, optional
-        The parent widget for this slider, by default None
-    """
-
-    sigIndexChanged = Signal(int)
-
-    def __init__(
-        self, min_value: int, max_value: int, value: int, parent: QWidget | None = None
-    ) -> None:
-        if max_value < min_value:
-            raise ValueError("Maximum value must be greater than or equal to minimum.")
-        if value < min_value or value > max_value:
-            raise ValueError(
-                f"Value must be between {min_value} and {max_value}, inclusive. "
-                f"Got {value}."
-            )
-        self._min_value = min_value
-        self._max_value = max_value
-
-        super().__init__(parent=parent)
-        self._slider = QSlider(Qt.Horizontal, parent=parent)
-
-        self._slider.setMinimum(min_value)
-        self._slider.setMaximum(max_value)
-        self._slider.setValue(value)
-
-        self._slider.valueChanged.connect(
-            lambda value: self.sigIndexChanged.emit(value)
-        )
-
-    def set_max_value(self, max_value: int, signal: bool) -> None:
-        """Set the maximum value of the slider.
-
-        Parameters
-        ----------
-        max_value : int
-            The maximum value to set for the slider.
-        signal : bool
-            Whether to emit the `sigIndexChanged` if the value of the slider changes.
-        """
-        if max_value < self._min_value:
-            raise ValueError(
-                f"Maximum value must be greater than or equal to minimum value "
-                f"{self._min_value}. Got {max_value}."
-            )
-        self._max_value = max_value
-        if signal:
-            self._slider.setMaximum(max_value)
-        else:
-            self._slider.blockSignals(True)
-            self._slider.setMaximum(max_value)
-            self._slider.blockSignals(False)
-
-    def set_value(self, value: int, signal: bool) -> None:
-        """Set the slider value and optionally emit the valueChanged signal.
-
-        Parameters
-        ----------
-        value : int
-            The value to set for the slider.
-        signal : bool, optional
-            Whether to emit the `sigIndexChanged` signal if the value of the slider
-            changes.
-        """
-        if value < self._min_value or value > self._max_value:
-            raise ValueError(
-                f"Value must be between {self._min_value} and {self._max_value}, "
-                f"inclusive. Got {value}."
-            )
-        if signal:
-            self._slider.setValue(value)
-        else:
-            self._slider.blockSignals(True)
-            self._slider.setValue(value)
-            self._slider.blockSignals(False)
-
-    def add_to_layout(self, layout: QLayout) -> None:
-        """Add the slider to the given layout.
-
-        Parameters
-        ----------
-        layout : QLayout
-            The layout to which the slider will be added.
-        """
-        layout.addWidget(self._slider)
 
 
 class FrameRateTracker:

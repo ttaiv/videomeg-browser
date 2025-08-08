@@ -2,11 +2,10 @@
 
 import logging
 import os.path
-from typing import Literal
 
 import numpy as np
 import pyqtgraph as pg
-from qtpy.QtCore import Qt, QTimer, Signal, Slot  # type: ignore
+from qtpy.QtCore import Qt, Signal, Slot  # type: ignore
 from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -225,7 +224,7 @@ class AudioView(QWidget):
             max_time_seconds=self._audio.duration,
             parent=self,
         )
-        self._time_label.add_to_layout(toolbar_layout)
+        toolbar_layout.addWidget(self._time_label)
 
     def _move_view_to_current_time(self) -> None:
         """Ensure that the view contains the currently highlighted/selected sample.
@@ -318,11 +317,12 @@ class AudioView(QWidget):
         Updates the current sample based on the new position of the selector
         and emits a signal for the position change. Does not change the visible window.
         """
-        # Clamp the new time to the current view range to make it impossible to
-        # move the selector outside the visible range.
-        current_range = self._plot_widget.viewRange()[0]
+        # Clamp the new time both to the current view range to make it impossible to
+        # move the selector outside the visible range and to audio duration.
+        view_min, view_max = self._plot_widget.viewRange()[0]
+        clamp_range = (max(0.0, view_min), min(self._audio.duration, view_max))
         self._time_selector.clamp_selected_time_to_range(
-            current_range, padding=self._time_selector_padding
+            clamp_range, padding=self._time_selector_padding
         )
         clamped_time = self._time_selector.selected_time
         new_sample = int(clamped_time * self._audio.sampling_rate)
@@ -383,38 +383,26 @@ class AudioView(QWidget):
 class AudioBrowser(QWidget):
     """Qt widget for browsing audio with playback controls.
 
-    This browser allows visualization of audio data from AudioFile objects.
-    It provides controls to navigate through the audio, play/pause the audio,
-    and interact with the audio visualization.
+    This browser allows interactive visualization of audio data from AudioFile objects.
 
     Parameters
     ----------
     audio : AudioFile
         The audio file to visualize.
-    display_mode : Literal["waveform", "spectrogram"], optional
-        The initial display mode, either "waveform" or "spectrogram",
-        by default "waveform".
     parent : QWidget | None, optional
         The parent widget, by default None.
     """
 
-    sigPlaybackPositionChanged = Signal(float)  # position in seconds
+    sigPositionChanged = Signal(int)  # sample index
 
     def __init__(
         self,
         audio: AudioFile,
-        display_mode: Literal["waveform", "spectrogram"] = "waveform",
         parent: QWidget | None = None,
     ) -> None:
         """Initialize the audio browser."""
         super().__init__(parent=parent)
         self._audio = audio
-        self._is_playing = False
-
-        # Set up timer for playing the audio
-        self._play_timer = QTimer(parent=self)
-        self._play_timer.timeout.connect(self._advance_playback)
-        self._play_timer.setInterval(50)  # Update every 50ms for smooth playback
 
         self.setWindowTitle("Audio Browser")
 
@@ -422,164 +410,93 @@ class AudioBrowser(QWidget):
         self._layout = QVBoxLayout()
         self.setLayout(self._layout)
 
-        # Create the audio view
-        self._audio_view = AudioView(audio=audio, parent=self)
-        self._audio_view.sigSampleIndexChanged.connect(self._on_position_changed)
+        # Create an audio view that handles the visualization.
+        self._audio_view = AudioView(audio, parent=self)
+        self._audio_view.sigSampleIndexChanged.connect(
+            self._on_audio_view_sample_change
+        )
         self._layout.addWidget(self._audio_view)
 
-        # Add playback controls
-        self._setup_playback_controls()
+        # Create controls.
 
-        # Add info panel
-        self._setup_info_panel()
-
-    def _setup_playback_controls(self) -> None:
-        """Set up playback control buttons and timeline slider."""
-        controls_layout = QHBoxLayout()
-
-        # Navigation buttons
-        self._prev_button = QPushButton("<<")
-        self._prev_button.clicked.connect(self._jump_backward)
-        controls_layout.addWidget(self._prev_button)
-
-        self._play_pause_button = QPushButton("Play")
-        self._play_pause_button.clicked.connect(self.toggle_play_pause)
-        controls_layout.addWidget(self._play_pause_button)
-
-        self._next_button = QPushButton(">>")
-        self._next_button.clicked.connect(self._jump_forward)
-        controls_layout.addWidget(self._next_button)
-
-        # Time display
-        self._time_label = QLabel("00:00 / 00:00")
-        self._update_time_label()
-        controls_layout.addWidget(self._time_label)
-
-        self._layout.addLayout(controls_layout)
-
-    def _setup_info_panel(self) -> None:
-        """Set up the information panel showing audio metadata."""
-        info_layout = QHBoxLayout()
-
-        # Audio properties
-        self._info_label = QLabel()
-        info_text = (
-            f"Sampling rate: {self._audio.sampling_rate} Hz | "
-            f"Channels: {self._audio.n_channels} | "
-            f"Bit depth: {self._audio.bit_depth} bits | "
-            f"Duration: {self._audio.duration:.2f} s"
+        self._slider = gui_utils.IndexSlider(
+            min_value=0, max_value=audio.n_samples - 1, value=0, parent=self
         )
-        self._info_label.setText(info_text)
-        info_layout.addWidget(self._info_label)
+        self._slider.sigIndexChanged.connect(self.set_position_sample)
+        self._layout.addWidget(self._slider)
 
-        self._layout.addLayout(info_layout)
-
-    def _update_time_label(self) -> None:
-        """Update the time label to show current position and total duration."""
-        current_time = self._audio_view.current_time
-        total_time = self._audio.duration
-
-        # Format as MM:SS
-        current_min, current_sec = divmod(current_time, 60)
-        total_min, total_sec = divmod(total_time, 60)
-
-        # Format time display
-        time_text = (
-            f"{int(current_min):02}:{int(current_sec):02} / "
-            f"{int(total_min):02}:{int(total_sec):02}"
+        self._navigation_bar = gui_utils.NavigationBar(
+            prev_button_text="Backwards",
+            next_button_text="Forward",
+            parent=self,
         )
-        self._time_label.setText(time_text)
+        self._layout.addWidget(self._navigation_bar)
+        self._navigation_bar.sigPlayPauseClicked.connect(self._toggle_play_pause)
+        self._navigation_bar.sigNextClicked.connect(self._jump_forward)
+        self._navigation_bar.sigPreviousClicked.connect(self._jump_backwards)
 
-    def _advance_playback(self) -> None:
-        """Advance the playback position."""
-        # Calculate how many samples to advance based on timer interval
-        interval_ms = self._play_timer.interval()
-        samples_to_advance = int(self._audio.sampling_rate * interval_ms / 1000)
-
-        # Get current sample position
-        current_sample = self._audio_view.current_sample
-
-        # Calculate new position
-        new_sample = current_sample + samples_to_advance
-
-        # Check if we've reached the end
-        if new_sample >= self._audio.n_samples:
-            new_sample = self._audio.n_samples - 1
-            self.pause()
-
-        # Update the view
-        self._audio_view.display_at_sample(new_sample)
-        self._update_time_label()
-
-        # Emit signal for current position
-        self.sigPlaybackPositionChanged.emit(self._audio_view.current_time)
-
-    def _on_position_changed(self, sample: int, time_seconds: float) -> None:
-        """Handle position change events from the audio view."""
-        self._update_time_label()
-        self.sigPlaybackPositionChanged.emit(time_seconds)
-
-    def _jump_backward(self) -> None:
-        """Jump backward by a set amount."""
-        # Jump back 1 second
-        jump_samples = int(self._audio.sampling_rate * 1.0)
-        new_sample = max(0, self._audio_view.current_sample - jump_samples)
-
-        # Update the visualization
-        self._audio_view.display_at_sample(new_sample)
-        self._update_time_label()
-
-    def _jump_forward(self) -> None:
-        """Jump forward by a set amount."""
-        # Jump forward 1 second
-        jump_samples = int(self._audio.sampling_rate * 1.0)
-        new_sample = min(
-            self._audio.n_samples - 1, self._audio_view.current_sample + jump_samples
-        )
-
-        # Update the visualization
-        self._audio_view.display_at_sample(new_sample)
-        self._update_time_label()
-
-    @Slot()
-    def play(self) -> None:
-        """Start playback of the audio."""
-        if not self._is_playing:
-            self._is_playing = True
-            self._play_timer.start()
-            self._play_pause_button.setText("Pause")
-
-    @Slot()
-    def pause(self) -> None:
-        """Pause playback of the audio."""
-        if self._is_playing:
-            self._is_playing = False
-            self._play_timer.stop()
-            self._play_pause_button.setText("Play")
-
-    @Slot()
-    def toggle_play_pause(self) -> None:
-        """Toggle between play and pause states."""
-        if self._is_playing:
-            self.pause()
-        else:
-            self.play()
-
-    @Slot(int)
-    def set_position_sample(self, sample: int) -> None:
-        """Set the current position to the given sample index."""
-        self._audio_view.display_at_sample(sample)
-
-    @Slot(float)
-    def set_position_time(self, time_seconds: float) -> None:
-        """Set the current position to the given time in seconds."""
-        self._audio_view.display_at_time(time_seconds)
-
-    def get_current_position(self) -> float:
-        """Get the current playback position in seconds."""
-        return self._audio_view.current_time
+        self._update_browser_to_current_sample()
 
     @property
-    def audio(self) -> AudioFile:
-        """Get the audio file being visualized."""
-        return self._audio
+    def current_sample(self) -> int:
+        return self._audio_view.current_sample
+
+    @property
+    def current_time(self) -> float:
+        """Get the current position in seconds."""
+        return self._audio_view.current_time
+
+    def set_position_sample(self, sample_idx: int, signal: bool = True) -> None:
+        """Set the current position to the given sample index."""
+        success = self._audio_view.display_at_sample(sample_idx, signal=False)
+        if not success:
+            logger.debug(
+                f"Cannot set position to sample index {sample_idx} (out of bounds). "
+                "Keeping current position."
+            )
+            return
+        self._update_browser_to_current_sample()
+        if signal:
+            self.sigPositionChanged.emit(sample_idx)
+
+    def _update_browser_to_current_sample(self) -> None:
+        """Update the audio browser UI to reflect the currently selected sample."""
+        self._slider.set_value(self.current_sample, signal=False)
+        self._update_buttons_enabled()
+
+    @Slot(int)
+    def _on_audio_view_sample_change(self, sample_idx: int) -> None:
+        """Handle when the user dragged the time selector in the audio view."""
+        # The updated sample index is fetched from the audio view using
+        # self.current_sample.
+        self._update_browser_to_current_sample()
+        self.sigPositionChanged.emit(sample_idx)
+
+    @Slot()
+    def _toggle_play_pause(self) -> None:
+        """Advance the playback position."""
+        print("Should play/pause audio now.")
+
+    @Slot()
+    def _jump_forward(self) -> None:
+        """Advance one second in the audio."""
+        samples_to_advance = int(self._audio.sampling_rate)
+        new_sample = self.current_sample + samples_to_advance
+        self.set_position_sample(new_sample, signal=False)
+
+    @Slot()
+    def _jump_backwards(self) -> None:
+        """Go back one second in the audio."""
+        samples_to_rewind = int(self._audio.sampling_rate)
+        new_sample = self.current_sample - samples_to_rewind
+        self.set_position_sample(new_sample, signal=False)
+
+    def _update_buttons_enabled(self) -> None:
+        """Enable or disable buttons based on the current position."""
+        # Buttons advance or rewind one second, so we need to check
+        # if that is possible.
+        max_time = self._audio.duration - 1.0  # seconds
+        min_time = 1.0
+
+        self._navigation_bar.set_prev_enabled(self.current_time >= min_time)
+        self._navigation_bar.set_next_enabled(self.current_time <= max_time)
