@@ -121,7 +121,7 @@ class VideoBrowser(QWidget):
             max_time_seconds=self._selected_video.duration,
             parent=self,
         )
-        self._time_label.add_to_layout(slider_layout)
+        slider_layout.addWidget(self._time_label)
 
         # Slider for navigating to a specific frame
         self._frame_slider = gui_utils.IndexSlider(

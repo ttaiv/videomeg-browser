@@ -225,7 +225,7 @@ class AudioView(QWidget):
             max_time_seconds=self._audio.duration,
             parent=self,
         )
-        self._time_label.add_to_layout(toolbar_layout)
+        toolbar_layout.addWidget(self._time_label)
 
     def _move_view_to_current_time(self) -> None:
         """Ensure that the view contains the currently highlighted/selected sample.
