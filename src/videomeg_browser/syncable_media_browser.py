@@ -46,6 +46,34 @@ class SyncableMediaBrowser(QWidget):
             "set_position method must be implemented by subclasses."
         )
 
+    def jump_to_end(self, media_idx: int, signal: bool = True) -> None:
+        """Display the last frame/sample of the specified media.
+
+        Parameters
+        ----------
+        media_idx : int
+            Index of the media to jump to the end.
+        signal : bool, optional
+            Whether to emit sigPositionChanged signal, by default True.
+        """
+        raise NotImplementedError(
+            "jump_to_end method must be implemented by subclasses."
+        )
+
+    def jump_to_start(self, media_idx: int, signal: bool = True) -> None:
+        """Display the first frame/sample of the specified media.
+
+        Parameters
+        ----------
+        media_idx : int
+            Index of the media to jump to the start.
+        signal : bool, optional
+            Whether to emit sigPositionChanged signal, by default True.
+        """
+        raise NotImplementedError(
+            "jump_to_start method must be implemented by subclasses."
+        )
+
     def set_sync_status(self, status: SyncStatus, media_idx: int) -> None:
         """Set the synchronization status for the specified media.
 
