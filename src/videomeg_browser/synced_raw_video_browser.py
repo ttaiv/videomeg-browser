@@ -4,52 +4,47 @@ import logging
 from typing import Literal
 
 from mne_qt_browser.figure import MNEQtBrowser
-from qtpy import QtWidgets
 from qtpy.QtCore import QElapsedTimer, QObject, Qt, QTimer, Signal, Slot  # type: ignore
+from qtpy.QtWidgets import QDockWidget
 
 from .raw_browser_manager import RawBrowserInterface, RawBrowserManager
-from .raw_video_aligner import (
+from .raw_media_aligner import (
     MapFailureReason,
     MappingFailure,
     MappingResult,
     MappingSuccess,
-    RawVideoAligner,
+    RawMediaAligner,
 )
+from .syncable_media_browser import SyncableMediaBrowser, SyncStatus
 from .video import VideoFile
-from .video_browser import SyncStatus, VideoBrowser
+from .video_browser import VideoBrowser
 
 logger = logging.getLogger(__name__)
 
 
-class SyncedRawVideoBrowser(QObject):
-    """Instantiates MNE raw data browser and video browser, and synchronizes them.
+class SyncedRawMediaBrowser(QObject):
+    """Synchronize MNE raw data browser with a media browser.
 
     Parameters
     ----------
     raw_browser : mne_qt_browser.figure.MNEQtBrowser
-        The MNE raw data browser object to be synchronized with the video browser.
+        The MNE raw data browser object to be synchronized with the media browser.
         This can be created with 'plot' method of MNE raw data object when using qt
         backend.
-    videos : list[VideoFile]
-        The video file object(s) to be displayed in the video browser.
-    aligners : list[RawVideoAligner]
-        A list of `RawVideoAligner` instances, one for each video file.
-        Each aligner provides the mapping between raw data time points and video frames
-        for the corresponding video file. The order of the aligners must match the order
-        of the video files in the `videos` parameter.
-    video_splitter_orientation : Literal["horizontal", "vertical"], optional
-        Whether to show multiple videos in a horizontal or vertical layout.
-        This has no effect if only one video is provided.
-    video_display_method : Literal["image_item", "image_view"], optional
-        The display method to use for the video browser. By default, "image_item" is
-        used if more than one video is provided, otherwise "image_view".
+    media_browser : SyncableMediaBrowser
+        The media browser object to be synchronized with the raw data browser.
+    aligners : list[RawMediaAligner]
+        A list of `RawMediaAligner` instances, one for each media file.
+        Each aligner provides the mapping between raw data time points and media samples
+        for the corresponding media file.
+    media_browser_title : str
+        The title of the media browser dock widget.
     max_sync_fps : int, optional
-        The maximum frames per second for synchronizing the raw data browser and video
+        The maximum frames per second for synchronizing the raw data browser and media
         browser. This determines how often the synchronization updates can happen and
         has an effect on the performance.
     show : bool, optional
-        Whether to show the raw data browser immediately upon instantiation,
-        by default True.
+        Whether to show the browsers immediately, by default True.
     parent : QObject, optional
         The parent QObject for this synchronized browser, by default None.
     """
@@ -57,16 +52,15 @@ class SyncedRawVideoBrowser(QObject):
     def __init__(
         self,
         raw_browser: MNEQtBrowser,
-        videos: list[VideoFile],
-        aligners: list[RawVideoAligner],
-        video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
-        video_display_method: Literal["image_item", "image_view"] | None = None,
+        media_browser: SyncableMediaBrowser,
+        aligners: list[RawMediaAligner],
+        media_browser_title: str,
         show: bool = True,
         max_sync_fps: int = 10,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent=parent)
-        self._video = videos
+        self._media_browser = media_browser
         self._aligners = aligners
         self._raw_update_max_fps = max_sync_fps
 
@@ -83,23 +77,9 @@ class SyncedRawVideoBrowser(QObject):
         else:
             self._raw_browser_manager.hide_browser()
 
-        # Set up the video browser.
-        if video_display_method is None:
-            # Save space in the UI by excluding histogram with multiple videos.
-            display_method = "image_item" if len(videos) > 1 else "image_view"
-        else:
-            display_method = video_display_method
-        self._video_browser = VideoBrowser(
-            videos,
-            show_sync_status=True,
-            parent=None,
-            display_method=display_method,
-            video_splitter_orientation=video_splitter_orientation,
-        )
-
-        # Dock the video browser to the raw data browser with Qt magic
-        self._dock = QtWidgets.QDockWidget("Video Browser", raw_browser)
-        self._dock.setWidget(self._video_browser)
+        # Dock the media browser to the raw data browser with Qt magic.
+        self._dock = QDockWidget(media_browser_title, raw_browser)
+        self._dock.setWidget(self._media_browser)
         self._dock.setFloating(True)
         raw_browser.addDockWidget(Qt.RightDockWidgetArea, self._dock)
         self._dock.resize(1000, 800)  # Set initial size of the video browser
@@ -108,26 +88,26 @@ class SyncedRawVideoBrowser(QObject):
 
         # Set up synchronization
 
-        # Create a throttler that limits the updates of both raw and other videos
-        # due to fast change of one video (playback).
+        # Create a throttler that limits the updates of both raw and other media
+        # due to fast change of one media.
         self._min_sync_interval_ms = int(1000 / max_sync_fps)
         self._throttler = BufferedThrottler(self._min_sync_interval_ms, parent=self)
 
-        # When the current frame of a video changes,
-        # update the raw browser and other videos through throttler.
-        self._video_browser.sigFrameChanged.connect(self._throttler.trigger)
-        self._throttler.triggered.connect(self._sync_all_to_video)
+        # When the position in a media changes
+        # update the raw browser and other media through throttler.
+        self._media_browser.sigPositionChanged.connect(self._throttler.trigger)
+        self._throttler.triggered.connect(self._sync_all_to_media)
 
         # When selected time of raw browser changes,
-        # update the videos (no throttling needed here).
+        # update the media (no throttling needed here).
         self._raw_browser_manager.sigSelectedTimeChanged.connect(
-            self._sync_videos_to_raw
+            self._sync_media_to_raw
         )
 
         # Consider raw data browser to be the main browser and start by
-        # synchronizing the videos to the raw data browser's view
+        # synchronizing the media browser to the initial raw time.
         initial_raw_time = self._raw_browser_manager.get_selected_time()
-        self._sync_videos_to_raw(initial_raw_time)
+        self._sync_media_to_raw(initial_raw_time)
 
     def show(self) -> None:
         """Show the synchronized raw and video browsers."""
@@ -135,113 +115,80 @@ class SyncedRawVideoBrowser(QObject):
         self._dock.show()
 
     @Slot(float)
-    def _sync_videos_to_raw(self, raw_time_seconds: float) -> None:
-        """Update the displayed video frame(s) when raw view changes."""
-        logger.debug("")  # Clear debug log for clarity
+    def _sync_media_to_raw(self, raw_time_seconds: float) -> None:
+        """Update the media browser's view based on the selected raw time."""
         logger.debug(
-            "Detected change in raw data browser's selected time, syncing video(s)."
+            "Detected change in raw data browser's selected time, syncing media."
         )
-        for video_idx, aligner in enumerate(self._aligners):
+        for media_idx, aligner in enumerate(self._aligners):
             logger.debug(
-                f"Syncing video {video_idx + 1}/{len(self._aligners)} to raw time: "
+                f"Syncing media {media_idx + 1}/{len(self._aligners)} to raw time: "
                 f"{raw_time_seconds:.3f} seconds."
             )
-            mapping_to_video = aligner.raw_time_to_video_frame_index(raw_time_seconds)
-            self._update_video(video_idx, mapping_to_video)
+            mapping_to_media = aligner.raw_time_to_video_frame_index(raw_time_seconds)
+            self._update_media(media_idx, mapping_to_media)
 
-    def _update_video(self, video_idx: int, mapping: MappingResult) -> None:
-        """Update a video view based on mapping from a raw time to video frame index.
-
-        Either shows the video frame that corresponds to the raw time point,
-        or shows the first or last frame of the video if the raw time point
-        is out of bounds of the video data. Also updates the sync status of the video.
-
-        Parameters
-        ----------
-        video_idx : int
-            The index of the video to update.
-        mapping : MappingResult
-            The result of mapping the raw time point to a video frame index.
-        """
-        # NOTE: The signal=False is used to prevent the video browser from
-        # emitting the frame changed signal, which would trigger update of the
+    def _update_media(self, media_idx: int, mapping: MappingResult) -> None:
+        """Update media browser view based on mapping from raw time to frame/sample."""
+        # NOTE: The signal=False is used to prevent the media browser from
+        # emitting the sigPositionChanged signal, which would trigger update of the
         # raw browser and cause an infinite loop of updates.
         match mapping:
-            case MappingSuccess(result=frame_idx):
-                # Raw time point has a corresponding video frame index
-                logger.debug(
-                    f"Setting video on index {video_idx} to show frame: {frame_idx}"
-                )
-                self._video_browser.display_frame_for_video_with_idx(
-                    frame_idx, video_idx, signal=False
-                )
-                self._video_browser.set_sync_status_for_video_with_idx(
-                    video_idx, SyncStatus.SYNCHRONIZED
-                )
+            case MappingSuccess(result=position_idx):
+                # Raw time point has a corresponding media frame/sample.
+                self._media_browser.set_position(position_idx, media_idx, signal=False)
+                self._media_browser.set_sync_status(SyncStatus.SYNCHRONIZED, media_idx)
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
-                # Raw time stamp is smaller than the first video frame timestamp
+                # Raw time stamp is smaller than the first media timestamp.
                 logger.debug(
-                    f"Video on index {video_idx} has no data for this small raw time "
-                    "point, showing first frame."
+                    f"Media on index {media_idx} has no data for this small raw time "
+                    "point, moving media to start."
                 )
-                self._video_browser.display_frame_for_video_with_idx(
-                    0, video_idx, signal=False
-                )
-                self._video_browser.set_sync_status_for_video_with_idx(
-                    video_idx, SyncStatus.NO_VIDEO_DATA
-                )
+                self._media_browser.jump_to_start(media_idx, signal=False)
+                self._media_browser.set_sync_status(SyncStatus.NO_MEDIA_DATA, media_idx)
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
-                # Raw time stamp is larger than the last video frame timestamp
+                # Raw time stamp is larger than the last media frame timestamp
                 logger.debug(
-                    f"Video on index {video_idx} has no data for this large raw time "
+                    f"Media on index {media_idx} has no data for this large raw time "
                     "point, showing last frame."
                 )
-                self._video_browser.display_frame_for_video_with_idx(
-                    self._video[video_idx].frame_count - 1, video_idx, signal=False
-                )
-                self._video_browser.set_sync_status_for_video_with_idx(
-                    video_idx, SyncStatus.NO_VIDEO_DATA
-                )
+                self._media_browser.jump_to_end(media_idx, signal=False)
+                self._media_browser.set_sync_status(SyncStatus.NO_MEDIA_DATA, media_idx)
 
             case _:
                 raise ValueError(f"Unexpected mapping result: {mapping}. ")
 
     @Slot(int, int)
-    def _sync_all_to_video(self, video_idx: int, frame_idx: int) -> None:
-        """Update raw data browser's view and other videos when video frame changes."""
-        logger.debug("")  # Clear debug log for clarity
+    def _sync_all_to_media(self, media_idx: int, position_idx: int) -> None:
+        """Update raw data browser's view and other media when media changes."""
         logger.debug(
-            f"Detected change in video {video_idx + 1} to frame index: {frame_idx}. "
-            "Syncing raw data browser."
+            f"Detected change in media {media_idx + 1} to position "
+            f"index: {position_idx}. Syncing raw data browser and other media."
         )
-        # Update the raw browser view based on the selected video frame index.
-        mapping_to_raw = self._aligners[video_idx].video_frame_index_to_raw_time(
-            frame_idx
+        # Update the raw browser view based on the media.
+        mapping_to_raw = self._aligners[media_idx].video_frame_index_to_raw_time(
+            position_idx
         )
         mapping_success = self._update_raw(mapping_to_raw)
         if mapping_success:
-            self._video_browser.set_sync_status_for_video_with_idx(
-                video_idx, SyncStatus.SYNCHRONIZED
-            )
+            self._media_browser.set_sync_status(SyncStatus.SYNCHRONIZED, media_idx)
         else:
             # Signal that there is no raw data for this video frame index.
-            self._video_browser.set_sync_status_for_video_with_idx(
-                video_idx, SyncStatus.NO_RAW_DATA
-            )
+            self._media_browser.set_sync_status(SyncStatus.NO_RAW_DATA, media_idx)
         # Get the resulting raw time by asking it from the browser and use
-        # it to update other videos (if any).
+        # it to update other media (if any).
         raw_time_seconds = self._raw_browser_manager.get_selected_time()
         for idx, aligner in enumerate(self._aligners):
-            if idx == video_idx:
-                # Skip the video that triggered the change
+            if idx == media_idx:
+                # Skip the media that triggered the change.
                 continue
             logger.debug(
-                f"Syncing video {idx + 1}/{len(self._aligners)} to raw time: "
+                f"Syncing media {idx + 1}/{len(self._aligners)} to raw time: "
                 f"{raw_time_seconds:.3f} seconds."
             )
-            mapping_to_video = aligner.raw_time_to_video_frame_index(raw_time_seconds)
-            self._update_video(idx, mapping_to_video)
+            mapping_to_media = aligner.raw_time_to_video_frame_index(raw_time_seconds)
+            self._update_media(idx, mapping_to_media)
 
     def _update_raw(self, mapping: MappingResult) -> bool:
         """Update raw browser view based on mapping from video frame index to raw time.
@@ -344,3 +291,74 @@ class BufferedThrottler(QObject):
         assert self._latest_payload is not None, "No payload to emit."
         logger.debug(f"Emitting latest payload: {self._latest_payload}")
         self.triggered.emit(self._latest_payload[0], self._latest_payload[1])
+
+
+def browse_raw_with_video(
+    raw_browser: MNEQtBrowser,
+    videos: list[VideoFile],
+    aligners: list[RawMediaAligner],
+    video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
+    video_display_method: Literal["image_item", "image_view"] | None = None,
+    show: bool = True,
+    max_sync_fps: int = 10,
+    parent: QObject | None = None,
+) -> SyncedRawMediaBrowser:
+    """Synchronize MNE raw data browser with a video browser.
+
+    Parameters
+    ----------
+    raw_browser : mne_qt_browser.figure.MNEQtBrowser
+        The MNE raw data browser object to be synchronized with the video browser.
+        This can be created with 'plot' method of MNE raw data object when using qt
+        backend.
+    videos : list[VideoFile]
+        The video file object(s) to be displayed in the video browser.
+    aligners : list[RawMediaAligner]
+        A list of `RawMediaAligner` instances, one for each video file.
+        Each aligner provides the mapping between raw data time points and video frames
+        for the corresponding video file. The order of the aligners must match the order
+        of the video files in the `videos` parameter.
+    video_splitter_orientation : Literal["horizontal", "vertical"], optional
+        Whether to show multiple videos in a horizontal or vertical layout.
+        This has no effect if only one video is provided.
+    video_display_method : Literal["image_item", "image_view"], optional
+        The display method to use for the video browser. By default, "image_item" is
+        used if more than one video is provided, otherwise "image_view".
+    max_sync_fps : int, optional
+        The maximum frames per second for synchronizing the raw data browser and video
+        browser. This determines how often the synchronization updates can happen and
+        has an effect on the performance.
+    show : bool, optional
+        Whether to show the raw data browser immediately upon instantiation,
+        by default True.
+    parent : QObject, optional
+        The parent QObject for this synchronized browser, by default None.
+
+    Returns
+    -------
+    SyncedRawMediaBrowser
+        An instance of `SyncedRawMediaBrowser`, a Qt controller object that handles
+        synchronization between the raw data browser and the video browser.
+    """
+    # Set up the video browser.
+    if video_display_method is None:
+        # Save space in the UI by excluding histogram with multiple videos.
+        display_method = "image_item" if len(videos) > 1 else "image_view"
+    else:
+        display_method = video_display_method
+    video_browser = VideoBrowser(
+        videos,
+        show_sync_status=True,
+        parent=None,
+        display_method=display_method,
+        video_splitter_orientation=video_splitter_orientation,
+    )
+    return SyncedRawMediaBrowser(
+        raw_browser,
+        video_browser,
+        aligners,
+        media_browser_title="Video Browser",
+        show=show,
+        max_sync_fps=max_sync_fps,
+        parent=parent,
+    )
