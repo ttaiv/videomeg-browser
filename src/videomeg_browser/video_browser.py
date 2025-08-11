@@ -220,6 +220,31 @@ class VideoBrowser(SyncableMediaBrowser):
 
         return True
 
+    def jump_to_end(self, media_idx: int, signal: bool = True) -> None:
+        """Display the last frame of the specified video.
+
+        Parameters
+        ----------
+        media_idx : int
+            Index of the video to jump to the end.
+        signal : bool, optional
+            Whether to emit sigPositionChanged signal, by default True.
+        """
+        last_frame_idx = self._videos[media_idx].frame_count - 1
+        self.set_position(last_frame_idx, media_idx, signal=signal)
+
+    def jump_to_start(self, media_idx: int, signal: bool = True) -> None:
+        """Display the first frame of the specified video.
+
+        Parameters
+        ----------
+        media_idx : int
+            Index of the video to jump to the start.
+        signal : bool, optional
+            Whether to emit sigPositionChanged signal, by default True.
+        """
+        self.set_position(0, media_idx, signal=signal)
+
     @Slot()
     def display_next_frame_for_selected_video(self) -> bool:
         """Display the next frame for the currently selected video.
