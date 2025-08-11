@@ -60,14 +60,14 @@ def main() -> None:
     # Create a separate aligner for both videos
     aligner1 = RawMediaAligner(
         raw_timestamps=raw_timestamps_ms,
-        video_timestamps=video1.timestamps_ms,
+        media_timestamps=video1.timestamps_ms,
         raw_times=raw.times,
         raw_time_to_index=raw_time_to_index,
         timestamp_unit="milliseconds",
     )
     aligner2 = RawMediaAligner(
         raw_timestamps=raw_timestamps_ms,
-        video_timestamps=video2.timestamps_ms,
+        media_timestamps=video2.timestamps_ms,
         raw_times=raw.times,
         raw_time_to_index=raw_time_to_index,
         timestamp_unit="milliseconds",

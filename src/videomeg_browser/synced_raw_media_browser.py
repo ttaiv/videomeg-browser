@@ -125,7 +125,7 @@ class SyncedRawMediaBrowser(QObject):
                 f"Syncing media {media_idx + 1}/{len(self._aligners)} to raw time: "
                 f"{raw_time_seconds:.3f} seconds."
             )
-            mapping_to_media = aligner.raw_time_to_video_frame_index(raw_time_seconds)
+            mapping_to_media = aligner.raw_time_to_media_sample_index(raw_time_seconds)
             self._update_media(media_idx, mapping_to_media)
 
     def _update_media(self, media_idx: int, mapping: MappingResult) -> None:
@@ -167,7 +167,7 @@ class SyncedRawMediaBrowser(QObject):
             f"index: {position_idx}. Syncing raw data browser and other media."
         )
         # Update the raw browser view based on the media.
-        mapping_to_raw = self._aligners[media_idx].video_frame_index_to_raw_time(
+        mapping_to_raw = self._aligners[media_idx].media_sample_index_to_raw_time(
             position_idx
         )
         mapping_success = self._update_raw(mapping_to_raw)
@@ -187,25 +187,25 @@ class SyncedRawMediaBrowser(QObject):
                 f"Syncing media {idx + 1}/{len(self._aligners)} to raw time: "
                 f"{raw_time_seconds:.3f} seconds."
             )
-            mapping_to_media = aligner.raw_time_to_video_frame_index(raw_time_seconds)
+            mapping_to_media = aligner.raw_time_to_media_sample_index(raw_time_seconds)
             self._update_media(idx, mapping_to_media)
 
     def _update_raw(self, mapping: MappingResult) -> bool:
-        """Update raw browser view based on mapping from video frame index to raw time.
+        """Update raw browser view based on mapping from media frame index to raw time.
 
-        If the video frame index is out of bounds of the raw data, moves the raw view
+        If the media frame index is out of bounds of the raw data, moves the raw view
         to the start or end of the raw data.
 
         Parameters
         ----------
         mapping : MappingResult
-            The result of mapping the video frame index to a raw time point.
+            The result of mapping the media frame index to a raw time point.
 
         Returns
         -------
         bool
             True if the mapping was successful and yielded a valid raw time point,
-            False if the video frame index was out of bounds of the raw data.
+            False if the media frame index was out of bounds of the raw data.
         """
         match mapping:
             case MappingSuccess(result=raw_time):

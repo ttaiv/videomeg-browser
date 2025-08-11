@@ -129,7 +129,7 @@ class RawMediaAligner:
             header="Mapping results from media frame indices to raw times:",
         )
 
-    def raw_time_to_media_frame_index(self, raw_time_seconds: float) -> MappingResult:
+    def raw_time_to_media_sample_index(self, raw_time_seconds: float) -> MappingResult:
         """Convert a time point from raw data (in seconds) to media index."""
         # Find the raw index that corresponds to the given time point.
         # We cannot use the given time directly, as it may not match exactly with raw
@@ -137,8 +137,12 @@ class RawMediaAligner:
         raw_idx = self._raw_time_to_index(raw_time_seconds)
         return self._raw_idx_to_media_frame_idx[raw_idx]
 
-    def media_frame_index_to_raw_time(self, media_frame_idx: int) -> MappingResult:
-        """Convert a media frame index to a raw data time point (in seconds)."""
+    def media_sample_index_to_raw_time(self, media_frame_idx: int) -> MappingResult:
+        """Convert a media index sample index to a raw data time point (in seconds).
+
+        Media sample index can be the index of a frame in a video or the index of an
+        audio sample.
+        """
         return self._media_frame_idx_to_raw_time[media_frame_idx]
 
     def _validate_input_times(self) -> None:

@@ -104,7 +104,7 @@ def main() -> None:
     # directly as synchronization timestamps.
     aligner = RawMediaAligner(
         raw_timestamps=raw.times,
-        video_timestamps=video_times,
+        media_timestamps=video_times,
         raw_times=raw.times,
         raw_time_to_index=raw_time_to_index,
         timestamp_unit="seconds",
