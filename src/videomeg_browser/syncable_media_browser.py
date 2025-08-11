@@ -21,6 +21,15 @@ class SyncableMediaBrowser(QWidget):
     # Emits a signal when the displayed frame of any shown video changes.
     sigPositionChanged = Signal(int, int)  # media index, sample index
 
+    def __init_subclass__(cls) -> None:
+        """Ensure that subclasses implement required methods."""
+        if cls.set_position is SyncableMediaBrowser.set_position:
+            raise TypeError(f"{cls.__name__} must implement set_position method.")
+        if cls.jump_to_end is SyncableMediaBrowser.jump_to_end:
+            raise TypeError(f"{cls.__name__} must implement jump_to_end method.")
+        if cls.jump_to_start is SyncableMediaBrowser.jump_to_start:
+            raise TypeError(f"{cls.__name__} must implement jump_to_start method.")
+
     def set_position(
         self, position_idx: int, media_idx: int, signal: bool = True
     ) -> bool:
