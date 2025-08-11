@@ -1,4 +1,4 @@
-"""Contains the main class for synchronizing MNE raw data browser and video browser."""
+"""Code for syncing MNE raw data browser with video or audio browser."""
 
 import logging
 from typing import Literal

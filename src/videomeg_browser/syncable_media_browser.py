@@ -1,3 +1,5 @@
+"""Contains the base class for syncable media browser widgets."""
+
 from enum import Enum
 
 from qtpy.QtCore import Signal  # type: ignore
