@@ -12,7 +12,7 @@ from mne.datasets import sample
 from qtpy.QtWidgets import QApplication
 
 from videomeg_browser.raw_media_aligner import RawMediaAligner
-from videomeg_browser.synced_raw_video_browser import browse_raw_with_video
+from videomeg_browser.synced_raw_media_browser import browse_raw_with_video
 from videomeg_browser.test_utils import create_fake_video_with_markers
 
 
