@@ -5,12 +5,12 @@ import numpy as np
 import numpy.typing as npt
 import pytest
 
-from videomeg_browser.raw_video_aligner import (
+from videomeg_browser.raw_media_aligner import (
     MapFailureReason,
     MappingFailure,
     MappingResult,
     MappingSuccess,
-    RawVideoAligner,
+    RawMediaAligner,
 )
 
 
@@ -45,7 +45,7 @@ def test_with_matching_timestamps(
     raw_times = np.arange(len(raw_timestamps_ms), dtype=np.float64)
     raw_time_to_index = _make_simple_raw_time_to_index_function(raw_times)
 
-    aligner = RawVideoAligner(
+    aligner = RawMediaAligner(
         raw_timestamps_ms,
         video_timestamps_ms,
         raw_times=raw_times,
@@ -220,7 +220,7 @@ def _run_alignment_test(
     raw_time_to_index = _make_simple_raw_time_to_index_function(raw_times)
 
     # Create the aligner to test.
-    aligner = RawVideoAligner(
+    aligner = RawMediaAligner(
         raw_timestamps_ms,
         video_timestamps_ms,
         raw_times=raw_times,
