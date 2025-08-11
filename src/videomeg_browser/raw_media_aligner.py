@@ -43,7 +43,7 @@ class MappingFailure(MappingResult):
     failure_reason: MapFailureReason
 
 
-class RawVideoAligner:
+class RawMediaAligner:
     """Maps time points from raw data to video frames and vice versa.
 
     Uses the provided timestamps to simply find the closest matching time.
