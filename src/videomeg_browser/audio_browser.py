@@ -509,14 +509,14 @@ class AudioBrowser(SyncableMediaBrowser):
         """Advance one second in the audio."""
         samples_to_advance = int(self._audio.sampling_rate)
         new_sample = self.current_sample + samples_to_advance
-        self.set_position(new_sample, 0, signal=False)
+        self.set_position(new_sample, 0, signal=True)
 
     @Slot()
     def _jump_backwards(self) -> None:
         """Go back one second in the audio."""
         samples_to_rewind = int(self._audio.sampling_rate)
         new_sample = self.current_sample - samples_to_rewind
-        self.set_position(new_sample, 0, signal=False)
+        self.set_position(new_sample, 0, signal=True)
 
     def _update_buttons_enabled(self) -> None:
         """Enable or disable buttons based on the current position."""
