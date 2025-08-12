@@ -50,7 +50,7 @@ class SyncableMediaBrowser(QWidget):
         Returns
         -------
         bool
-            True if the position was set successfully, False if the index
+            True if the position was set successfully, False if the position index
             is out of bounds.
         """
         raise NotImplementedError(
