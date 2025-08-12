@@ -13,8 +13,8 @@ from numpy.typing import NDArray
 from qtpy.QtWidgets import QApplication
 
 from videomeg_browser.comp_tstamps import comp_tstamps
-from videomeg_browser.raw_video_aligner import RawVideoAligner
-from videomeg_browser.synced_raw_video_browser import SyncedRawVideoBrowser
+from videomeg_browser.raw_media_aligner import RawMediaAligner
+from videomeg_browser.synced_raw_media_browser import browse_raw_with_video
 from videomeg_browser.video import VideoFileHelsinkiVideoMEG
 
 
@@ -61,7 +61,7 @@ def main() -> None:
         return raw.time_as_index(time, use_rounding=True)[0]
 
     # Set up mapping between raw data points and video frames
-    aligner = RawVideoAligner(
+    aligner = RawMediaAligner(
         raw_timestamps_ms,
         video_timestamps_ms,
         raw_times=raw.times,
@@ -73,7 +73,11 @@ def main() -> None:
     # Instantiate raw browser
     raw_browser = raw.plot(block=False, show=False)
 
-    browser = SyncedRawVideoBrowser(raw_browser, [video_file], [aligner])
+    browser = browse_raw_with_video(
+        raw_browser,
+        [video_file],
+        [aligner],
+    )
 
     app.exec_()  # Start the Qt event loop
     video_file.close()

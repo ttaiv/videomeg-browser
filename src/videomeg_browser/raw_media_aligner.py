@@ -1,4 +1,4 @@
-"""Contains a class for mapping between time points of raw data and video frames."""
+"""Contains a class for mapping between time points of raw data and media indices."""
 
 import logging
 from abc import ABC
@@ -15,23 +15,23 @@ logger = logging.getLogger(__name__)
 
 
 class MapFailureReason(Enum):
-    """Enum telling why mapping from frame index to raw time or vice versa failed."""
+    """Enum telling why mapping from media index to raw time or vice versa failed."""
 
-    # Index to map is too small compared to the first frame or raw time point
+    # Index to map is too small
     INDEX_TOO_SMALL = "index_too_small"
-    # Index to map is too large compared to the last frame or raw time point
+    # Index to map is too large
     INDEX_TOO_LARGE = "index_too_large"
 
 
 class MappingResult(ABC):
-    """Represents the result of mapping raw time to video frame index or vice versa."""
+    """Represents the result of mapping raw time to media frame index or vice versa."""
 
     pass
 
 
 @dataclass(frozen=True)
 class MappingSuccess(MappingResult):
-    """Represents a successful mapping that yielded a raw time or video frame index."""
+    """Represents a successful mapping that yielded a raw time or media frame index."""
 
     result: int | float
 
@@ -43,8 +43,8 @@ class MappingFailure(MappingResult):
     failure_reason: MapFailureReason
 
 
-class RawVideoAligner:
-    """Maps time points from raw data to video frames and vice versa.
+class RawMediaAligner:
+    """Maps time points from raw data to media frames and vice versa.
 
     Uses the provided timestamps to simply find the closest matching time.
 
@@ -53,8 +53,8 @@ class RawVideoAligner:
     raw_timestamps : NDArray[np.floating]
         1-D sorted array of raw timestamps used for synchronization.
         In Helsinki VideoMEG project these are unix times in milliseconds.
-    video_timestamps : NDArray[np.floating]
-        1-D sorted array of video timestamps used for synchronization.
+    media_timestamps : NDArray[np.floating]
+        1-D sorted array of media timestamps used for synchronization.
         In Helsinki VideoMEG project these are unix times in milliseconds.
     raw_times : NDArray[np.floating]
         1-D array of raw data times in seconds, used for converting raw indices
@@ -64,11 +64,11 @@ class RawVideoAligner:
         index in the raw data. Required for converting arbitrary raw time
         to a discrete index in the raw data.
     timestamp_unit : Literal["milliseconds", "seconds"], optional
-        The unit of the timestamps in `raw_timestamps` and `video_timestamps`.
+        The unit of the timestamps in `raw_timestamps` and `media_timestamps`.
         By default "milliseconds".
     select_on_tie : Literal["left", "right"], optional
         How to select the result when a source timestamp is exactly between two target
-        timestamps. If "left", the raw time or video frame index corresponding
+        timestamps. If "left", the raw time or media frame index corresponding
         to the left target timestamp is selected. If "right", the one corresponding
         to the right target timestamp is selected. By default "left".
     """
@@ -76,7 +76,7 @@ class RawVideoAligner:
     def __init__(
         self,
         raw_timestamps: NDArray[np.floating],
-        video_timestamps: NDArray[np.floating],
+        media_timestamps: NDArray[np.floating],
         raw_times: NDArray[np.floating],
         raw_time_to_index: Callable[[float], int],
         timestamp_unit: Literal["milliseconds", "seconds"] = "milliseconds",
@@ -87,61 +87,63 @@ class RawVideoAligner:
         self._timestamp_unit = timestamp_unit
         self._select_on_tie = select_on_tie
         # Internally store timestamps in milliseconds.
-        # Set _timestamp unit before calling _get_timestamps_in_milliseconds!
         self._raw_timestamps_ms = self._get_timestamps_in_milliseconds(raw_timestamps)
-        self._video_timestamps_ms = self._get_timestamps_in_milliseconds(
-            video_timestamps
+        self._media_timestamps_ms = self._get_timestamps_in_milliseconds(
+            media_timestamps
         )
 
         self._validate_input_times()
         self._diagnose_timestamps()
 
-        # Precompute mappings from raw indices to video frame indices
-        # and from video frame indices to raw times.
+        # Precompute mappings from raw indices to media frame indices
+        # and from media frame indices to raw times.
 
-        # NOTE: Video frame indices can be mapped straight to their corresponding
-        # raw times as they are a dicrete set of values. But raw times are continuous,
-        # so instead of precomputing mapping raw times --> video frame indices, we
-        # precompute mapping raw indices --> video frame indices. And when asked to
-        # convert a raw time to a video frame index, we do
-        # raw time --> raw index --> video frame index.
+        # NOTE: Media indices can be mapped straight to their corresponding
+        # raw times as they are a discrete set of values. But raw times are continuous,
+        # so instead of precomputing mapping raw times --> media frame indices, we
+        # precompute mapping raw indices --> media frame indices. And when asked to
+        # convert a raw time to a media frame index, we do
+        # raw time --> raw index --> media frame index.
 
-        logger.info("Building mapping from raw indices to video frame indices.")
-        self._raw_idx_to_video_frame_idx: dict[int, MappingResult] = (
+        logger.info("Building mapping from raw indices to media frame indices.")
+        self._raw_idx_to_media_frame_idx: dict[int, MappingResult] = (
             self._build_mapping(
                 source_timestamps_ms=self._raw_timestamps_ms,
-                target_timestamps_ms=self._video_timestamps_ms,
+                target_timestamps_ms=self._media_timestamps_ms,
             )
         )
-
-        logger.info("Building mapping from video frame indices to raw times.")
-        self._video_frame_idx_to_raw_time: dict[int, MappingResult] = (
+        logger.info("Building mapping from media frame indices to raw times.")
+        self._media_frame_idx_to_raw_time: dict[int, MappingResult] = (
             self._build_mapping(
-                source_timestamps_ms=self._video_timestamps_ms,
+                source_timestamps_ms=self._media_timestamps_ms,
                 target_timestamps_ms=self._raw_timestamps_ms,
                 convert_raw_results_to_seconds=True,
             )
         )
         self._log_mapping_results(
-            mapping_results=self._raw_idx_to_video_frame_idx,
-            header="Mapping results from raw indices to video frame indices:",
+            mapping_results=self._raw_idx_to_media_frame_idx,
+            header="Mapping results from raw indices to media frame indices:",
         )
         self._log_mapping_results(
-            mapping_results=self._video_frame_idx_to_raw_time,
-            header="Mapping results from video frame indices to raw times:",
+            mapping_results=self._media_frame_idx_to_raw_time,
+            header="Mapping results from media frame indices to raw times:",
         )
 
-    def raw_time_to_video_frame_index(self, raw_time_seconds: float) -> MappingResult:
-        """Convert a time point from raw data (in seconds) to video frame index."""
+    def raw_time_to_media_sample_index(self, raw_time_seconds: float) -> MappingResult:
+        """Convert a time point from raw data (in seconds) to media index."""
         # Find the raw index that corresponds to the given time point.
         # We cannot use the given time directly, as it may not match exactly with raw
         # times.
         raw_idx = self._raw_time_to_index(raw_time_seconds)
-        return self._raw_idx_to_video_frame_idx[raw_idx]
+        return self._raw_idx_to_media_frame_idx[raw_idx]
 
-    def video_frame_index_to_raw_time(self, video_frame_idx: int) -> MappingResult:
-        """Convert a video frame index to a raw data time point (in seconds)."""
-        return self._video_frame_idx_to_raw_time[video_frame_idx]
+    def media_sample_index_to_raw_time(self, media_frame_idx: int) -> MappingResult:
+        """Convert a media sample index to a raw data time point (in seconds).
+
+        Media sample index can be the index of a frame in a video or the index of an
+        audio sample.
+        """
+        return self._media_frame_idx_to_raw_time[media_frame_idx]
 
     def _validate_input_times(self) -> None:
         if not np.all(np.diff(self._raw_timestamps_ms) >= 0):
@@ -149,9 +151,9 @@ class RawVideoAligner:
                 "Raw timestamps are not strictly increasing. "
                 "This is required for the mapping to work correctly."
             )
-        if not np.all(np.diff(self._video_timestamps_ms) >= 0):
+        if not np.all(np.diff(self._media_timestamps_ms) >= 0):
             raise ValueError(
-                "Video timestamps are not strictly increasing. "
+                "Media timestamps are not strictly increasing. "
                 "This is required for the mapping to work correctly."
             )
         if not len(self._raw_timestamps_ms) == len(self._raw_times):
@@ -161,19 +163,19 @@ class RawVideoAligner:
             )
 
     def _diagnose_timestamps(self) -> None:
-        """Log some statistics about the raw and video timestamps."""
+        """Log some statistics about the raw and media timestamps."""
         # Convert to seconds for easier readability
         raw_timestamps_seconds = self._raw_timestamps_ms / 1000.0
-        video_timestamps_seconds = self._video_timestamps_ms / 1000.0
+        media_timestamps_seconds = self._media_timestamps_ms / 1000.0
         logger.info(
             f"Raw timestamps: {raw_timestamps_seconds[0]:.1f} s to "
             f"{raw_timestamps_seconds[-1]:.1f} s, "
             f"total {len(raw_timestamps_seconds)} timestamps."
         )
         logger.info(
-            f"Video timestamps: {video_timestamps_seconds[0]:.1f} s to "
-            f"{video_timestamps_seconds[-1]:.1f} s, "
-            f"total {len(video_timestamps_seconds)} timestamps."
+            f"Media timestamps: {media_timestamps_seconds[0]:.1f} s to "
+            f"{media_timestamps_seconds[-1]:.1f} s, "
+            f"total {len(media_timestamps_seconds)} timestamps."
         )
 
         # Check the interval between timesamps
@@ -184,67 +186,65 @@ class RawVideoAligner:
             f"mean={np.mean(raw_intervals_ms):.3f} ms, "
             f"std={np.std(raw_intervals_ms):.3f} ms"
         )
-        video_intervals_ms = np.diff(self._video_timestamps_ms)
+        media_intervals_ms = np.diff(self._media_timestamps_ms)
         logger.info(
-            f"Video timestamps intervals: min={np.min(video_intervals_ms):.3f} ms, "
-            f"max={np.max(video_intervals_ms):.3f} ms, "
-            f"mean={np.mean(video_intervals_ms):.3f} ms, "
-            f"std={np.std(video_intervals_ms):.3f} ms"
+            f"Media timestamps intervals: min={np.min(media_intervals_ms):.3f} ms, "
+            f"max={np.max(media_intervals_ms):.3f} ms, "
+            f"mean={np.mean(media_intervals_ms):.3f} ms, "
+            f"std={np.std(media_intervals_ms):.3f} ms"
         )
-
-        # Count timestamps that are out of bounds
-        video_too_small_count = np.sum(
-            self._video_timestamps_ms < self._raw_timestamps_ms[0]
+        media_too_small_count = np.sum(
+            self._media_timestamps_ms < self._raw_timestamps_ms[0]
         )
-        video_too_large_count = np.sum(
-            self._video_timestamps_ms > self._raw_timestamps_ms[-1]
+        media_too_large_count = np.sum(
+            self._media_timestamps_ms > self._raw_timestamps_ms[-1]
         )
         logger.info(
-            "Video timestamps smaller/larger than first/last raw timestamp: "
-            f"{video_too_small_count}/{video_too_large_count}"
+            "Media timestamps smaller/larger than first/last raw timestamp: "
+            f"{media_too_small_count}/{media_too_large_count}"
         )
         raw_too_small_count = np.sum(
-            self._raw_timestamps_ms < self._video_timestamps_ms[0]
+            self._raw_timestamps_ms < self._media_timestamps_ms[0]
         )
         raw_too_large_count = np.sum(
-            self._raw_timestamps_ms > self._video_timestamps_ms[-1]
+            self._raw_timestamps_ms > self._media_timestamps_ms[-1]
         )
         logger.info(
-            "Raw timestamps smaller/larger than first/last video timestamp: "
+            "Raw timestamps smaller/larger than first/last media timestamp: "
             f"{raw_too_small_count}/{raw_too_large_count}"
         )
         first_timestamp_diff_ms = (
-            self._raw_timestamps_ms[0] - self._video_timestamps_ms[0]
+            self._raw_timestamps_ms[0] - self._media_timestamps_ms[0]
         )
         logger.info(
-            "Difference between first raw and video timestamps: "
+            "Difference between first raw and media timestamps: "
             f"{first_timestamp_diff_ms:.3f} ms"
         )
         if first_timestamp_diff_ms > 1000:
             logger.warning(
-                "The raw data timestamps start over a second later than the video "
+                "The raw data timestamps start over a second later than the media "
                 "timestamps."
             )
         elif first_timestamp_diff_ms < -1000:
             logger.warning(
-                "Video timestamps start over a second later than the raw data "
+                "Media timestamps start over a second later than the raw data "
                 "timestamps."
             )
         last_timestamp_diff_ms = (
-            self._raw_timestamps_ms[-1] - self._video_timestamps_ms[-1]
+            self._raw_timestamps_ms[-1] - self._media_timestamps_ms[-1]
         )
         logger.info(
-            "Difference between last raw and video timestamps: "
+            "Difference between last raw and media timestamps: "
             f"{last_timestamp_diff_ms:.3f} ms"
         )
         if last_timestamp_diff_ms > 1000:
             logger.warning(
-                "The video timestamps end over a second earlier than the raw data "
+                "The media timestamps end over a second earlier than the raw data "
                 "timestamps."
             )
         elif last_timestamp_diff_ms < -1000:
             logger.warning(
-                "Raw data timestamps end over a second earlier than the video "
+                "Raw data timestamps end over a second earlier than the media "
                 "timestamps."
             )
 
@@ -329,18 +329,18 @@ class RawVideoAligner:
         target_timestamps_ms: NDArray[np.floating],
         convert_raw_results_to_seconds: bool = False,
     ) -> dict[int, MappingResult]:
-        """Build a mapping from raw indices to video frame indices or vice versa.
+        """Build a mapping from raw indices to media frame indices or vice versa.
 
         Parameters
         ----------
         source_timestamps_ms : NDArray[np.floating]
             I-D sorted array of source timestamps in milliseconds for which to
             compute the mapping.
-        target_timestamps : NDArray[np.floating]
+        target_timestamps_ms : NDArray[np.floating]
             I-D sorted array of target timestamps in milliseconds to which
             the source timestamps should be mapped.
         convert_raw_results_to_seconds : bool, optional
-            If true, assume that the mapping is from video frame indices to raw indices,
+            If true, assume that the mapping is from media frame indices to raw indices,
             and convert the resulting raw indices to seconds.
 
         Returns

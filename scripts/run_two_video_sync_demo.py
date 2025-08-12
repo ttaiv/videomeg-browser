@@ -15,8 +15,8 @@ import numpy as np
 from mne.datasets import sample
 from qtpy.QtWidgets import QApplication
 
-from videomeg_browser.raw_video_aligner import RawVideoAligner
-from videomeg_browser.synced_raw_video_browser import SyncedRawVideoBrowser
+from videomeg_browser.raw_media_aligner import RawMediaAligner
+from videomeg_browser.synced_raw_media_browser import browse_raw_with_video
 from videomeg_browser.video import VideoFileHelsinkiVideoMEG
 
 
@@ -58,16 +58,16 @@ def main() -> None:
         return raw.time_as_index(time, use_rounding=True)[0]
 
     # Create a separate aligner for both videos
-    aligner1 = RawVideoAligner(
+    aligner1 = RawMediaAligner(
         raw_timestamps=raw_timestamps_ms,
-        video_timestamps=video1.timestamps_ms,
+        media_timestamps=video1.timestamps_ms,
         raw_times=raw.times,
         raw_time_to_index=raw_time_to_index,
         timestamp_unit="milliseconds",
     )
-    aligner2 = RawVideoAligner(
+    aligner2 = RawMediaAligner(
         raw_timestamps=raw_timestamps_ms,
-        video_timestamps=video2.timestamps_ms,
+        media_timestamps=video2.timestamps_ms,
         raw_times=raw.times,
         raw_time_to_index=raw_time_to_index,
         timestamp_unit="milliseconds",
@@ -77,7 +77,7 @@ def main() -> None:
 
     app = QApplication([])
     raw_browser = raw.plot(block=False, show=False)
-    browser = SyncedRawVideoBrowser(
+    browser = browse_raw_with_video(
         raw_browser,
         [video1, video2],
         [aligner1, aligner2],

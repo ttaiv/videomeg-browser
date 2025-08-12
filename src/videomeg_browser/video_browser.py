@@ -4,7 +4,6 @@ import collections
 import logging
 import os
 import time
-from enum import Enum, auto
 from typing import Literal
 
 import pyqtgraph as pg
@@ -22,6 +21,7 @@ from qtpy.QtWidgets import (
 
 import videomeg_browser.gui_utils as gui_utils
 
+from .syncable_media_browser import SyncableMediaBrowser, SyncStatus
 from .video import VideoFile
 
 logger = logging.getLogger(__name__)
@@ -29,15 +29,7 @@ logger = logging.getLogger(__name__)
 pg.setConfigOptions(imageAxisOrder="row-major")
 
 
-class SyncStatus(Enum):
-    """Tells the sync status of the video and raw data."""
-
-    SYNCHRONIZED = auto()  # Video and raw data are synchronized
-    NO_RAW_DATA = auto()  # No raw data available for the current frame
-    NO_VIDEO_DATA = auto()  # No video data available for the current raw data
-
-
-class VideoBrowser(QWidget):
+class VideoBrowser(SyncableMediaBrowser):
     """A browser for viewing video frames from one or more video files.
 
     Parameters
@@ -57,9 +49,6 @@ class VideoBrowser(QWidget):
     parent : QWidget, optional
         The parent widget for this browser, by default None
     """
-
-    # Emits a signal when the displayed frame of any shown video changes.
-    sigFrameChanged = Signal(int, int)  # video index, frame index
 
     def __init__(
         self,
@@ -188,13 +177,10 @@ class VideoBrowser(QWidget):
         bool
             True if the frame was displayed, False if the index is out of bounds.
         """
-        return self.display_frame_for_video_with_idx(
-            frame_idx, self._selected_video_idx
-        )
+        return self.set_position(frame_idx, self._selected_video_idx)
 
-    @Slot(int)
-    def display_frame_for_video_with_idx(
-        self, frame_idx: int, video_idx: int, signal: bool = True
+    def set_position(
+        self, position_idx: int, media_idx: int, signal: bool = True
     ) -> bool:
         """Display the frame at the specified index for a specific video view.
 
@@ -215,10 +201,11 @@ class VideoBrowser(QWidget):
         bool
             True if the frame was displayed, False if the index is out of bounds.
         """
-        frame_shown = self._video_views[video_idx].display_frame_at(frame_idx)
+        frame_shown = self._video_views[media_idx].display_frame_at(position_idx)
         if not frame_shown:
             logger.debug(
-                f"Could not display frame at index {frame_idx} for video {video_idx}."
+                f"Could not display frame at index {position_idx} for video "
+                f"{media_idx}."
             )
             return False
 
@@ -229,9 +216,34 @@ class VideoBrowser(QWidget):
         self._update_buttons_enabled()
 
         if signal:
-            self.sigFrameChanged.emit(video_idx, frame_idx)
+            self.sigPositionChanged.emit(media_idx, position_idx)
 
         return True
+
+    def jump_to_end(self, media_idx: int, signal: bool = True) -> None:
+        """Display the last frame of the specified video.
+
+        Parameters
+        ----------
+        media_idx : int
+            Index of the video to jump to the end.
+        signal : bool, optional
+            Whether to emit sigPositionChanged signal, by default True.
+        """
+        last_frame_idx = self._videos[media_idx].frame_count - 1
+        self.set_position(last_frame_idx, media_idx, signal=signal)
+
+    def jump_to_start(self, media_idx: int, signal: bool = True) -> None:
+        """Display the first frame of the specified video.
+
+        Parameters
+        ----------
+        media_idx : int
+            Index of the video to jump to the start.
+        signal : bool, optional
+            Whether to emit sigPositionChanged signal, by default True.
+        """
+        self.set_position(0, media_idx, signal=signal)
 
     @Slot()
     def display_next_frame_for_selected_video(self) -> bool:
@@ -300,19 +312,18 @@ class VideoBrowser(QWidget):
         else:
             self.play_video()
 
-    def set_sync_status_for_video_with_idx(
-        self, video_idx: int, status: SyncStatus
-    ) -> None:
+    # Overrides the empty implementation of parent class
+    def set_sync_status(self, status: SyncStatus, media_idx: int) -> None:
         """Set the sync status for a specific video view.
 
         Parameters
         ----------
-        video_idx : int
-            The index of the video view to update.
         status : SyncStatus
             The synchronization status to set.
+        media_idx : int
+            Index of the video view to update.
         """
-        self._video_views[video_idx].set_sync_status(status)
+        self._video_views[media_idx].set_sync_status(status)
 
     @Slot()
     def _play_next_frame(self) -> None:
@@ -561,7 +572,7 @@ class VideoView(QWidget):
         elif status == SyncStatus.NO_RAW_DATA:
             self._sync_status_label.setText("No raw data for this frame")
             self._sync_status_label.setStyleSheet("color: red; font-weight: bold;")
-        elif status == SyncStatus.NO_VIDEO_DATA:
+        elif status == SyncStatus.NO_MEDIA_DATA:
             self._sync_status_label.setText("No video for selected raw data")
             self._sync_status_label.setStyleSheet("color: red; font-weight: bold;")
         else:
