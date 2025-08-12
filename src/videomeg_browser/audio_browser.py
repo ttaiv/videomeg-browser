@@ -18,6 +18,7 @@ from qtpy.QtWidgets import (
 
 from . import gui_utils
 from .audio import AudioFile
+from .syncable_media_browser import SyncableMediaBrowser
 from .time_selector import TimeSelector
 
 logger = logging.getLogger(__name__)
@@ -380,7 +381,7 @@ class AudioView(QWidget):
         )
 
 
-class AudioBrowser(QWidget):
+class AudioBrowser(SyncableMediaBrowser):
     """Qt widget for browsing audio with playback controls.
 
     This browser allows interactive visualization of audio data from AudioFile objects.
@@ -392,8 +393,6 @@ class AudioBrowser(QWidget):
     parent : QWidget | None, optional
         The parent widget, by default None.
     """
-
-    sigPositionChanged = Signal(int)  # sample index
 
     def __init__(
         self,
@@ -422,7 +421,9 @@ class AudioBrowser(QWidget):
         self._slider = gui_utils.IndexSlider(
             min_value=0, max_value=audio.n_samples - 1, value=0, parent=self
         )
-        self._slider.sigIndexChanged.connect(self.set_position_sample)
+        self._slider.sigIndexChanged.connect(
+            lambda idx: self.set_position(idx, 0, signal=True)
+        )
         self._layout.addWidget(self._slider)
 
         self._navigation_bar = gui_utils.NavigationBar(
@@ -446,18 +447,43 @@ class AudioBrowser(QWidget):
         """Get the current position in seconds."""
         return self._audio_view.current_time
 
-    def set_position_sample(self, sample_idx: int, signal: bool = True) -> None:
-        """Set the current position to the given sample index."""
-        success = self._audio_view.display_at_sample(sample_idx, signal=False)
+    def set_position(
+        self, position_idx: int, media_idx: int, signal: bool = True
+    ) -> bool:
+        """Set the current position to the given sample index.
+
+        NOTE: Does not do anything with media_idx, as this browser currently only
+        supports a single audio file.
+        """
+        success = self._audio_view.display_at_sample(position_idx, signal=False)
         if not success:
             logger.debug(
-                f"Cannot set position to sample index {sample_idx} (out of bounds). "
+                f"Cannot set position to sample index {position_idx} (out of bounds). "
                 "Keeping current position."
             )
-            return
+            return False
         self._update_browser_to_current_sample()
         if signal:
-            self.sigPositionChanged.emit(sample_idx)
+            # Emit zero as media_idx.
+            self.sigPositionChanged.emit(0, position_idx)
+        return True
+
+    def jump_to_end(self, media_idx: int, signal: bool = True) -> None:
+        """Display the last sample of the audio.
+
+        NOTE: Does not do anything with media_idx, as this browser currently only
+        supports a single audio file.
+        """
+        last_sample = self._audio.n_samples - 1
+        self.set_position(last_sample, media_idx, signal=signal)
+
+    def jump_to_start(self, media_idx: int, signal: bool = True) -> None:
+        """Display the first sample of the audio.
+
+        NOTE: Does not do anything with media_idx, as this browser currently only
+        supports a single audio file.
+        """
+        self.set_position(0, media_idx, signal=signal)
 
     def _update_browser_to_current_sample(self) -> None:
         """Update the audio browser UI to reflect the currently selected sample."""
@@ -470,7 +496,8 @@ class AudioBrowser(QWidget):
         # The updated sample index is fetched from the audio view using
         # self.current_sample.
         self._update_browser_to_current_sample()
-        self.sigPositionChanged.emit(sample_idx)
+        # Emit the position changed signal with zero as media index.
+        self.sigPositionChanged.emit(0, sample_idx)
 
     @Slot()
     def _toggle_play_pause(self) -> None:
@@ -482,14 +509,14 @@ class AudioBrowser(QWidget):
         """Advance one second in the audio."""
         samples_to_advance = int(self._audio.sampling_rate)
         new_sample = self.current_sample + samples_to_advance
-        self.set_position_sample(new_sample, signal=False)
+        self.set_position(new_sample, 0, signal=True)
 
     @Slot()
     def _jump_backwards(self) -> None:
         """Go back one second in the audio."""
         samples_to_rewind = int(self._audio.sampling_rate)
         new_sample = self.current_sample - samples_to_rewind
-        self.set_position_sample(new_sample, signal=False)
+        self.set_position(new_sample, 0, signal=True)
 
     def _update_buttons_enabled(self) -> None:
         """Enable or disable buttons based on the current position."""
