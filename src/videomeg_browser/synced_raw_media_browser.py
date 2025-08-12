@@ -382,16 +382,11 @@ def browse_raw_with_video(
         synchronization between the raw data browser and the video browser.
     """
     # Set up the video browser.
-    if video_display_method is None:
-        # Save space in the UI by excluding histogram with multiple videos.
-        display_method = "image_item" if len(videos) > 1 else "image_view"
-    else:
-        display_method = video_display_method
     video_browser = VideoBrowser(
         videos,
         show_sync_status=True,
         parent=None,
-        display_method=display_method,
+        display_method=_decide_video_display_method(video_display_method, len(videos)),
         video_splitter_orientation=video_splitter_orientation,
     )
     return SyncedRawMediaBrowser(
@@ -461,6 +456,8 @@ def browse_raw_with_video_and_audio(
     video_aligners: list[RawMediaAligner],
     audio: AudioFile,
     audio_aligner: RawMediaAligner,
+    video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
+    video_display_method: Literal["image_item", "image_view"] | None = None,
     max_sync_fps: int = 10,
     show: bool = True,
     parent: QObject | None = None,
@@ -485,6 +482,12 @@ def browse_raw_with_video_and_audio(
     audio_aligner : RawMediaAligner
         A `RawMediaAligner` instance that provides the mapping between raw data time
         points and audio samples for the audio file.
+    video_splitter_orientation : Literal["horizontal", "vertical"], optional
+        Whether to show multiple videos in a horizontal or vertical layout.
+        This has no effect if only one video is provided.
+    video_display_method : Literal["image_item", "image_view"], optional
+        The display method to use for the video browser. By default, "image_item" is
+        used if more than one video is provided, otherwise "image_view".
     max_sync_fps : int, optional
         The maximum frames per second for synchronizing the raw data browser and media
         browser. This determines how often the synchronization updates can happen and
@@ -504,8 +507,9 @@ def browse_raw_with_video_and_audio(
     video_browser = VideoBrowser(
         videos,
         show_sync_status=True,
+        video_splitter_orientation=video_splitter_orientation,
+        display_method=_decide_video_display_method(video_display_method, len(videos)),
         parent=None,
-        display_method="image_item" if len(videos) > 1 else "image_view",
     )
     # Set up the audio browser.
     audio_browser = AudioBrowser(audio, parent=None)
@@ -519,3 +523,14 @@ def browse_raw_with_video_and_audio(
         max_sync_fps=max_sync_fps,
         parent=parent,
     )
+
+
+def _decide_video_display_method(
+    video_display_method: Literal["image_item", "image_view"] | None, n_videos: int
+) -> Literal["image_item", "image_view"]:
+    """Decide video display method based on the number of videos and user preference."""
+    if video_display_method is None:
+        # Save space in the UI by excluding histogram with multiple videos.
+        return "image_item" if n_videos > 1 else "image_view"
+    else:
+        return video_display_method
