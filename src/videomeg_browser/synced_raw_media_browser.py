@@ -453,3 +453,69 @@ def browse_raw_with_audio(
         max_sync_fps=max_sync_fps,
         parent=parent,
     )
+
+
+def browse_raw_with_video_and_audio(
+    raw_browser: MNEQtBrowser,
+    videos: list[VideoFile],
+    video_aligners: list[RawMediaAligner],
+    audio: AudioFile,
+    audio_aligner: RawMediaAligner,
+    max_sync_fps: int = 10,
+    show: bool = True,
+    parent: QObject | None = None,
+) -> SyncedRawMediaBrowser:
+    """Synchronize MNE raw data browser with both video and audio browsers.
+
+    Parameters
+    ----------
+    raw_browser : mne_qt_browser.figure.MNEQtBrowser
+        The MNE raw data browser object to be synchronized with the media browser.
+        This can be created with 'plot' method of MNE raw data object when using qt
+        backend.
+    videos : list[VideoFile]
+        The video file object(s) to be displayed in the video browser.
+    video_aligners : list[RawMediaAligner]
+        A list of `RawMediaAligner` instances, one for each video file.
+        Each aligner provides the mapping between raw data time points and video frames
+        for the corresponding video file. The order of the aligners must match the order
+        of the video files in the `videos` parameter.
+    audio : AudioFile
+        The audio file object to be displayed in the audio browser.
+    audio_aligner : RawMediaAligner
+        A `RawMediaAligner` instance that provides the mapping between raw data time
+        points and audio samples for the audio file.
+    max_sync_fps : int, optional
+        The maximum frames per second for synchronizing the raw data browser and media
+        browser. This determines how often the synchronization updates can happen and
+        has an effect on the performance.
+    show : bool, optional
+        Whether to show the browsers immediately, by default True.
+    parent : QObject, optional
+        The parent QObject for this synchronized browser, by default None.
+
+    Returns
+    -------
+    SyncedRawMediaBrowser
+        An instance of `SyncedRawMediaBrowser`, a Qt controller object that handles
+        synchronization between the raw data browser and the video and audio browsers.
+    """
+    # Set up the video browser.
+    video_browser = VideoBrowser(
+        videos,
+        show_sync_status=True,
+        parent=None,
+        display_method="image_item" if len(videos) > 1 else "image_view",
+    )
+    # Set up the audio browser.
+    audio_browser = AudioBrowser(audio, parent=None)
+
+    return SyncedRawMediaBrowser(
+        raw_browser,
+        [video_browser, audio_browser],
+        [video_aligners, [audio_aligner]],
+        media_browser_titles=["Video Browser", "Audio Browser"],
+        show=show,
+        max_sync_fps=max_sync_fps,
+        parent=parent,
+    )
