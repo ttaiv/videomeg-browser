@@ -138,7 +138,7 @@ class RawMediaAligner:
         return self._raw_idx_to_media_frame_idx[raw_idx]
 
     def media_sample_index_to_raw_time(self, media_frame_idx: int) -> MappingResult:
-        """Convert a media index sample index to a raw data time point (in seconds).
+        """Convert a media sample index to a raw data time point (in seconds).
 
         Media sample index can be the index of a frame in a video or the index of an
         audio sample.

@@ -20,7 +20,7 @@ class SyncableMediaBrowser(QWidget):
     Defines methods and signal that subclasses must implement.
     """
 
-    # Emits a signal when the displayed frame of any shown video changes.
+    # Emits a signal when the displayed frame or sample of any shown media changes.
     sigPositionChanged = Signal(int, int)  # media index, sample index
 
     def __init_subclass__(cls) -> None:
