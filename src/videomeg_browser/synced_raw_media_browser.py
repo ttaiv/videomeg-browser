@@ -1,5 +1,6 @@
 """Code for syncing MNE raw data browser with video or audio browser."""
 
+import functools
 import logging
 from typing import Literal
 
@@ -113,11 +114,7 @@ class SyncedRawMediaBrowser(QObject):
             media_browser.sigPositionChanged.connect(throttler.trigger)
             # _sync_all_to_media slot takes (browser_idx, media_idx, position_idx)
             throttler.triggered.connect(
-                lambda media_idx,
-                position_idx,
-                _browser_idx=browser_idx: self._sync_all_to_media(
-                    _browser_idx, media_idx, position_idx
-                )
+                functools.partial(self._sync_all_to_media, browser_idx)
             )
 
         # When selected time of raw browser changes update each media in each browser.
