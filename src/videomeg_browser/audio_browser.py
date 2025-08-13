@@ -32,7 +32,11 @@ class AudioView(QWidget):
     Parameters
     ----------
     audio : AudioFile
-        The audio file to be displayed..
+        The audio file to be displayed.
+    plotting_window_size : int | None, optional
+        The size of the plotting window in samples. Plotting window size N means that
+        N samples are aggregated into a single point in the plot. If None (default),
+        the plotting window size is set to 1% of the audio sampling rate.
     default_view_len : float, optional
         The duration to show in the audio view with default zoom level,
         by default 10.0 seconds.
@@ -49,12 +53,22 @@ class AudioView(QWidget):
     def __init__(
         self,
         audio: AudioFile,
+        plotting_window_size: int | None = None,
         default_view_len: float = 10.0,
         time_selector_padding: float = 0.1,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
         self._audio = audio
+        if plotting_window_size is None:
+            self._plotting_window_size = int(audio.sampling_rate / 100)
+            logger.info(
+                f"Using default plotting window size of {self._plotting_window_size} "
+                f"for {audio.sampling_rate} Hz audio."
+            )
+        else:
+            self._plotting_window_size = plotting_window_size
+
         self._time_selector_padding = time_selector_padding
         self._default_view_len = default_view_len
         # The index of the currently highlighted/selected sample
@@ -296,20 +310,26 @@ class AudioView(QWidget):
         # Re-add the time selector after clearing
         self._time_selector.add_to_plot(self._plot_widget)
 
-        # Create time vector for x-axis
-        times = np.arange(self._audio.n_samples) / self._audio.sampling_rate
-
-        if self._channel_selection is None:
-            # Plot the mean of all channels
-            audio_data = self._audio.get_audio_mean()
-            self._plot_widget.plot(times, audio_data, pen=pg.mkPen(color="b", width=1))
-        else:
-            # Plot the selected channel
-            channel_idx = self._channel_selection
-            audio_data = self._audio.get_audio_all_channels()
-            self._plot_widget.plot(
-                times, audio_data[channel_idx, :], pen=pg.mkPen(color="g", width=1)
-            )
+        # Plot min and max of the audio in windows.
+        times, audio_min, audio_max = self._audio.get_min_max_envelope(
+            window_size=self._plotting_window_size,
+            channel_idx=self._channel_selection,
+            sample_range=None,  # Plot the whole audio
+        )
+        logger.debug(f"Plotting {len(audio_min)} samples of audio envelope.")
+        # Plot a filled region between min and max
+        upper_curve = self._plot_widget.plot(
+            times, audio_max, pen=pg.mkPen("b", width=1)
+        )
+        lower_curve = self._plot_widget.plot(
+            times, audio_min, pen=pg.mkPen("b", width=1)
+        )
+        fill = pg.FillBetweenItem(
+            upper_curve,
+            lower_curve,
+            brush=(100, 100, 255, 80),
+        )
+        self._plot_widget.addItem(fill)
 
     @Slot()
     def _on_time_selector_moved(self) -> None:
