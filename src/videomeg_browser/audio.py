@@ -63,6 +63,83 @@ class AudioFile(ABC):
         """
         pass
 
+    def get_min_max_envelope(
+        self,
+        window_size: int,
+        channel_idx: int | None,
+        sample_range: tuple[int, int] | None = None,
+    ) -> tuple[
+        npt.NDArray[np.float64], npt.NDArray[np.float32], npt.NDArray[np.float32]
+    ]:
+        """Calculate min-max envelope of the audio data using non-overlapping windows.
+
+        Divides the audio signal into consecutive non-overlapping windows of fixed size
+        and computes the minimum and maximum values in each window, capturing amplitude
+        variations over time.
+
+        Parameters
+        ----------
+        window_size : int
+            The number of audio samples in each window.
+        channel_idx : int | None
+            The zero-based index of the channel to calculate the envelope for. If None,
+            the envelope is calculated for the mean signal across all channels.
+        sample_range : tuple[int, int] | None, optional
+            A tuple specifying the start and end (exclusive) sample indices to include
+            in the calculation. If None (default), all the samples are included.
+
+        Returns
+        -------
+        times : npt.NDArray[np.float64]
+            A 1D array of time points corresponding to the start time of each window.
+        min_envelope : npt.NDArray[np.float32]
+            A 1D array containing the minimum values of the audio signal in each window.
+        max_envelope : npt.NDArray[np.float32]
+            A 1D array containing the maximum values of the audio signal in each window.
+        """
+        if window_size <= 0:
+            raise ValueError("Window size must be a positive integer.")
+        if channel_idx is not None and (
+            channel_idx < 0 or channel_idx >= self.n_channels
+        ):
+            raise ValueError(
+                f"Invalid channel index: {channel_idx}. "
+                f"Must be in range [0, {self.n_channels - 1}]."
+            )
+
+        if channel_idx is None:
+            audio_data = self.get_audio_mean(sample_range)
+        else:
+            audio_data = self.get_audio_all_channels(sample_range)[channel_idx, :]
+
+        n_samples = len(audio_data)
+        if n_samples < window_size:
+            raise ValueError(
+                f"Audio data length {len(audio_data)} is less than the window "
+                f"size {window_size}."
+            )
+
+        # Pad the audio data with the last sample if necessary.
+        remainder = n_samples % window_size
+        if remainder != 0:
+            pad_size = window_size - remainder
+            audio_data = np.pad(audio_data, (0, pad_size), mode="edge")
+        n_samples = len(audio_data)  # Update n_samples after padding
+        assert n_samples % window_size == 0, "Remainder should be zero after padding."
+
+        # Calculate the min-max envelope
+        n_windows = n_samples // window_size
+        audio_windows = audio_data.reshape(n_windows, window_size)
+        min_envelope = np.min(audio_windows, axis=1)
+        max_envelope = np.max(audio_windows, axis=1)
+
+        # Calculate the time points for the start of each window
+        start_sample = 0 if sample_range is None else sample_range[0]
+        window_start_samples = np.arange(n_windows) * window_size + start_sample
+        times = window_start_samples / self.sampling_rate  # Convert to seconds
+
+        return times, min_envelope, max_envelope
+
     @property
     def fname(self) -> str:
         """Return full path to the audio file that is being read."""

@@ -86,6 +86,7 @@ def main() -> None:
         [video_aligner],
         audio,
         audio_aligner,
+        video_display_method="image_item",
     )
     app.exec_()
 
