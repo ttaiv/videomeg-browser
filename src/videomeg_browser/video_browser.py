@@ -54,7 +54,6 @@ class VideoBrowser(SyncableMediaBrowser):
         self,
         videos: list[VideoFile],
         show_sync_status: bool = False,
-        display_method: Literal["image_view", "image_item"] = "image_view",
         video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
         parent: QWidget | None = None,
     ) -> None:
@@ -90,7 +89,6 @@ class VideoBrowser(SyncableMediaBrowser):
             VideoView(
                 video,
                 show_sync_status=show_sync_status,
-                display_method=display_method,
                 parent=self,
             )
             for video in videos
