@@ -3,7 +3,7 @@
 import logging
 from importlib.resources import files
 
-from qtpy.QtCore import Qt, Signal, Slot  # type: ignore
+from qtpy.QtCore import Qt, Signal  # type: ignore
 from qtpy.QtGui import QPixmap
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSlider, QWidget
 
