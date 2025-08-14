@@ -18,8 +18,8 @@ class RawBrowserInterface(QObject):
     browser and for adding an item to the plot. Emits a signal when visible time
     range of the browser changes.
 
-    NOTE: The correct way to modify view of the raw browser from outside should
-    be considered.
+    NOTE: Some attribute accesses are marked with `# type: ignore`, because my IDE
+    does not understand that the attributes exist.
     """
 
     sigTimeRangeChanged = Signal(tuple)
@@ -29,7 +29,7 @@ class RawBrowserInterface(QObject):
     ) -> None:
         super().__init__(parent=parent)
         self.browser = raw_browser
-        self.plt = self.browser.mne.plt
+        self.plt = self.browser.mne.plt  # type: ignore
 
         # Connect the signal for time range changes to emit a custom signal
         self.plt.sigXRangeChanged.connect(
@@ -38,7 +38,7 @@ class RawBrowserInterface(QObject):
 
     def get_max_time(self) -> float:
         """Return the maximum time in the raw data browser."""
-        return self.browser.mne.xmax
+        return self.browser.mne.xmax  # type: ignore
 
     def get_view_time_range(self) -> tuple[float, float]:
         """Return the bounds of currently visible time axis."""
@@ -52,7 +52,7 @@ class RawBrowserInterface(QObject):
 
     def get_visible_duration(self) -> float:
         """Return the duration of the currently visible time range in seconds."""
-        return self.browser.mne.duration
+        return self.browser.mne.duration  # type: ignore
 
     def add_item_to_plot(self, item) -> None:
         """Add an item to the plot. Calls the addItem method for browser.mne.plt."""

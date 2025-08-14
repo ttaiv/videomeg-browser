@@ -14,11 +14,10 @@ _NBITS = 43  # including the parity bit
 
 
 def _read_timestamp(dtrigs, cur, step, nbits):
-    """
-    Read and decode one timestamp. Return the timestamp on success or -1
-    otherwise.
-    """
+    """Read and decode one timestamp.
 
+    Return the timestamp on success or -1 otherwise.
+    """
     ts = 0
     parity = False
 
@@ -48,10 +47,13 @@ def _read_timestamp(dtrigs, cur, step, nbits):
 
 
 def _comp_tstamps_1bit(inp, sfreq):
-    """Extract timestamps from a "normal" (not composite) trigger channel
+    """Extract timestamps from a "normal" (not composite) trigger channel.
 
+    Parameters
+    ----------
         inp - vector of samples for the trigger channel
         sfreq - sampling frequency
+
     Return the vector of the same length as inp, containing timestamps for
     each entry of inp. For detecting timestamps use parameters in the beginning
     of the file. Assume that the input values are either 0 or 1.
@@ -62,7 +64,6 @@ def _comp_tstamps_1bit(inp, sfreq):
     Thus the first pulse train will always be ignored. It would be neat to fix
     this.
     """
-
     THRESH = 0.5
 
     # input should be a 1-d vector
@@ -96,25 +97,27 @@ def _comp_tstamps_1bit(inp, sfreq):
     errs = np.abs(np.polyval(p, samps) - tss)
 
     print(
-        "comp_tstamps: regression fit errors (abs): mean %f, median %f, max %f"
-        % (errs.mean(), np.median(errs), errs.max())
+        f"comp_tstamps: regression fit errors (abs): mean {errs.mean():f}, median "
+        f"{np.median(errs):f}, max {errs.max():f}"
     )
 
     return data_tstamps
 
 
 def comp_tstamps(inp, sfreq):
-    """Extract timestamps from a trigger channel
+    """Extract timestamps from a trigger channel.
 
+    Parameters
+    ----------
         inp - vector of samples for the trigger channel
         sfreq - sampling frequency
+
     Check individual bits of the inp to see whether any of them contains timing
     information. Return the vector of the same length as inp, containing
     timestamps for each entry of inp.
     """
-
     if inp.min() < 0:
-        raise Exception("Negative values in composite? channel")
+        raise ValueError("Negative values in composite? channel")
 
     # Try different bits until succeeding or running out of the bits
     while inp.max() > 0:

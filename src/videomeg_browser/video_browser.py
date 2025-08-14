@@ -54,7 +54,6 @@ class VideoBrowser(SyncableMediaBrowser):
         self,
         videos: list[VideoFile],
         show_sync_status: bool = False,
-        display_method: Literal["image_view", "image_item"] = "image_view",
         video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
         parent: QWidget | None = None,
     ) -> None:
@@ -90,7 +89,6 @@ class VideoBrowser(SyncableMediaBrowser):
             VideoView(
                 video,
                 show_sync_status=show_sync_status,
-                display_method=display_method,
                 parent=self,
             )
             for video in videos
@@ -444,7 +442,6 @@ class VideoView(QWidget):
         self,
         video: VideoFile,
         show_sync_status: bool = False,
-        display_method: Literal["image_view", "image_item"] = "image_view",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
@@ -453,27 +450,15 @@ class VideoView(QWidget):
 
         self._layout = QVBoxLayout(self)
 
-        # Add either ImageView or plain GraphicsLayoutWidget with ImageItem.
-        # Both ImageItem and ImageView have method `setImage()` to display the image.
-        if display_method == "image_view":
-            self._image_view = pg.ImageView(parent=self)
-            self._layout.addWidget(self._image_view)
-        elif display_method == "image_item":
-            # Manually create a GraphicsLayoutWidget with ViewBox.
-            graphics_widget = pg.GraphicsLayoutWidget(parent=self)
-            self._layout.addWidget(graphics_widget)
-            view_box = graphics_widget.addViewBox()
-            view_box.setAspectLocked(True)
-            # Inverting Y makes the orientation the same as in ImageView.
-            view_box.invertY(True)
-            # Place the ImageItem in the ViewBox.
-            self._image_view = pg.ImageItem()
-            view_box.addItem(self._image_view)
-        else:
-            raise ValueError(
-                f"Invalid display method: {display_method}. "
-                "Use 'image_view' or 'image_item'."
-            )
+        # Add graphics view...
+        graphics_widget = pg.GraphicsView(parent=self)
+        self._layout.addWidget(graphics_widget)
+        # that has viewbox...
+        self._view_box = pg.ViewBox(lockAspect=True, invertY=True)
+        graphics_widget.setCentralWidget(self._view_box)
+        # that holds image item.
+        self._image_view = pg.ImageItem()
+        self._view_box.addItem(self._image_view)
 
         # Add a horizontal layout for extras like frame index label and center button.
         extras_layout = QHBoxLayout()
@@ -580,12 +565,7 @@ class VideoView(QWidget):
 
     def center_video(self) -> None:
         """Scale and pan the view around video such that the image fills the view."""
-        if isinstance(self._image_view, pg.ImageView):
-            self._image_view.getView().autoRange()
-        elif isinstance(self._image_view, pg.ImageItem):
-            self._image_view.getViewBox().autoRange()
-        else:
-            logger.warning("Unknown image view type. Cannot center and scale the view.")
+        self._view_box.autoRange()
 
     @property
     def current_frame_idx(self) -> int:

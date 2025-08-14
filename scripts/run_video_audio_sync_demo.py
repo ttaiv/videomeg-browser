@@ -81,12 +81,7 @@ def main() -> None:
     app = QApplication([])
     raw_browser = raw.plot(block=False, show=False)
     browser = browse_raw_with_video_and_audio(
-        raw_browser,
-        [video],
-        [video_aligner],
-        audio,
-        audio_aligner,
-        video_display_method="image_item",
+        raw_browser, [video], [video_aligner], audio, audio_aligner
     )
     app.exec_()
 

@@ -401,7 +401,8 @@ class RawMediaAligner:
             mapping_results = closest_target_indices
 
         for source_idx, result in zip(valid_source_indices, mapping_results):
-            mapping[source_idx] = MappingSuccess(result=result)
+            # Use .item() to convert numpy scalar to a native Python int or float.
+            mapping[source_idx] = MappingSuccess(result=result.item())
 
         # Make sure that all the source indices were mapped.
         assert len(mapping) == len(source_timestamps_ms), (

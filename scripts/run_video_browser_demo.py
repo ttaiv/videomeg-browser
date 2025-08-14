@@ -15,6 +15,7 @@ from videomeg_browser.video_browser import VideoBrowser
 
 
 def main() -> None:
+    """Run the video browser demo."""
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s [%(levelname)s] %(message)s",
