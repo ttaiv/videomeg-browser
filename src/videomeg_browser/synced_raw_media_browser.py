@@ -162,6 +162,10 @@ class SyncedRawMediaBrowser(QObject):
         match mapping:
             case MappingSuccess(result=position_idx):
                 # Raw time point has a corresponding media frame/sample.
+                assert isinstance(position_idx, int), (
+                    f"Mapping success for media browser should contain an "
+                    f"integer index, got {type(position_idx)}."
+                )
                 browser_to_update.set_position(position_idx, media_idx, signal=False)
                 browser_to_update.set_sync_status(SyncStatus.SYNCHRONIZED, media_idx)
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
