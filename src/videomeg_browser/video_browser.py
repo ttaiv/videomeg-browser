@@ -453,20 +453,19 @@ class VideoView(QWidget):
 
         self._layout = QVBoxLayout(self)
 
-        # Add either ImageView or plain GraphicsLayoutWidget with ImageItem.
+        # Add either ImageView or plain GraphicsView with ViewBox that has ImageItem.
         # Both ImageItem and ImageView have method `setImage()` to display the image.
         if display_method == "image_view":
             self._image_view = pg.ImageView(parent=self)
             self._layout.addWidget(self._image_view)
         elif display_method == "image_item":
-            # Manually create a GraphicsLayoutWidget with ViewBox.
-            graphics_widget = pg.GraphicsLayoutWidget(parent=self)
+            # Add graphics view...
+            graphics_widget = pg.GraphicsView(parent=self)
             self._layout.addWidget(graphics_widget)
-            view_box = graphics_widget.addViewBox()
-            view_box.setAspectLocked(True)
-            # Inverting Y makes the orientation the same as in ImageView.
-            view_box.invertY(True)
-            # Place the ImageItem in the ViewBox.
+            # that has viewbox...
+            view_box = pg.ViewBox(lockAspect=True, invertY=True)
+            graphics_widget.setCentralWidget(view_box)
+            # that holds image item.
             self._image_view = pg.ImageItem()
             view_box.addItem(self._image_view)
         else:
