@@ -278,6 +278,9 @@ class AudioView(QWidget):
         min_time = 0.0
         max_time = self._audio.duration
 
+        # NOTE: My IDE does not know the correct signature of setXRange, so I have
+        # ignored the warnings.
+
         if new_min < min_time:
             logger.debug(
                 "Setting audio time range to start: "
@@ -285,8 +288,11 @@ class AudioView(QWidget):
                 f"{self._visible_duration_seconds} seconds."
             )
             self._plot_widget.setXRange(
-                min_time, self._visible_duration_seconds, padding=0
+                min_time,
+                self._visible_duration_seconds,
+                padding=0,  # type: ignore
             )
+
         elif new_max > max_time:
             logger.debug(
                 "Setting audio time range to end: "
@@ -294,14 +300,16 @@ class AudioView(QWidget):
                 f"visible duration {self._visible_duration_seconds} seconds."
             )
             self._plot_widget.setXRange(
-                max_time - self._visible_duration_seconds, max_time, padding=0
+                max_time - self._visible_duration_seconds,
+                max_time,
+                padding=0,  # type: ignore
             )
         else:
             logger.debug(
                 f"Setting audio time range to: [{new_min}, {new_max}] seconds "
                 f"with visible duration {self._visible_duration_seconds} seconds."
             )
-            self._plot_widget.setXRange(new_min, new_max, padding=0)
+            self._plot_widget.setXRange(new_min, new_max, padding=0)  # type: ignore
 
     def _plot_selected_channel(self) -> None:
         """Update the plot to show the selected channel or mean of all channels."""
