@@ -117,7 +117,7 @@ def comp_tstamps(inp, sfreq):
     timestamps for each entry of inp.
     """
     if inp.min() < 0:
-        raise Exception("Negative values in composite? channel")
+        raise ValueError("Negative values in composite? channel")
 
     # Try different bits until succeeding or running out of the bits
     while inp.max() > 0:
