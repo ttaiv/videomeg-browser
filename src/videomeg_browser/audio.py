@@ -343,8 +343,12 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         )
         return self._audio_timestamps_ms
 
-    def unpack_audio(self) -> None:
+    def unpack_audio(self, normalize: bool = True) -> None:
         """Unpack the raw byte audio data and compute timestamps for all samples.
+
+        Produces a float32 numpy array of shape (n_channels, n_samples) that can
+        be accessed via getter methods `get_audio_all_channels()` and
+        `get_audio_mean()`.
 
         This method is automatically called by the getter methods that require unpacked
         audio data. However, as this method is heavy on memory and time consumption,
@@ -352,6 +356,13 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         surprisingly heavy get operations.
 
         NOTE: this method consumes a lot of memory!
+
+        Parameters
+        ----------
+        normalize : bool, optional
+            If True (default), the audio samples are normalized to the range [-1, 1].
+            Normalization is done by dividing all samples by the maximum absolute value
+            of the samples across all channels (global normalization).
         """
         # ------------------------------------------------------------------
         # Compute timestamps for all the audio samples
@@ -405,6 +416,13 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
                 self.raw_audio[i * bytes_per_sample : (i + 1) * bytes_per_sample],
             )
             audio[i % self._n_channels, i // self._n_channels] = samp_val
+
+        if normalize:
+            global_max = np.abs(audio).max()
+            if global_max > 0:
+                audio /= global_max
+            else:
+                logger.warning("All audio samples are zero, normalization skipped.")
 
         self._unpacked_audio = audio
         self._unpacked_mean_audio = audio.mean(axis=0)
