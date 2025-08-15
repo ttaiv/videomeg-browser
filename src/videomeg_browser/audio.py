@@ -7,9 +7,11 @@
 import logging
 import struct
 from abc import ABC, abstractmethod
+from fractions import Fraction
 
 import numpy as np
 import numpy.typing as npt
+from scipy import signal
 
 from .helsinki_videomeg_file_utils import UnknownVersionError, read_attrib
 
@@ -140,6 +142,52 @@ class AudioFile(ABC):
 
         return times, min_envelope, max_envelope
 
+    def resample_poly(
+        self, target_rate: int, channel_idx: int | None
+    ) -> npt.NDArray[np.float32]:
+        """Resample the audio to the target sampling rate using polyphase filtering.
+
+        Parameters
+        ----------
+        target_rate : int
+            The desired sampling rate to resample the audio data to.
+        channel_idx : int | None
+            The zero-based index of the channel to resample. If None, the mean signal
+            across all channels is resampled.
+
+        Returns
+        -------
+        npt.NDArray[np.float32]
+            A 1D array containing the resampled audio data.
+        """
+        if target_rate <= 0:
+            raise ValueError("Target sampling rate must be a positive integer.")
+        # Get the audio data to resample.
+        if channel_idx is None:
+            audio_data = self.get_audio_mean()
+        else:
+            audio_data = self.get_audio_all_channels()[channel_idx, :]
+
+        if target_rate == self.sampling_rate:
+            logger.info(
+                "Target sampling rate is the same as the original. "
+                "Returning original audio data without resampling."
+            )
+            return audio_data
+
+        up, down = self._find_resample_factors(target_rate)
+        if max(up, down) > 1000:
+            logger.warning(
+                f"Resampling factors are large {up}:{down}. This may lead to "
+                "significant computational overhead. Consider using different "
+                "resampling method or adjusting the target rate."
+            )
+        logger.info(
+            f"Resampling audio from {self.sampling_rate} Hz to {target_rate} Hz "
+            f"using polyphase filtering with factors {up}:{down}."
+        )
+        return signal.resample_poly(audio_data, up, down)
+
     @property
     def fname(self) -> str:
         """Return full path to the audio file that is being read."""
@@ -183,6 +231,12 @@ class AudioFile(ABC):
         print(f"  - Bit depth: {self.bit_depth} bits")
         print(f"  - Duration: {self.duration:.2f} seconds")
         print(f"  - Number of samples per channel: {self.n_samples}")
+
+    def _find_resample_factors(self, target_rate: int) -> tuple[int, int]:
+        """Find the factors for up-and downsampling to match the target rate."""
+        frac = Fraction(target_rate, self.sampling_rate)
+        up, down = frac.numerator, frac.denominator
+        return up, down
 
 
 class AudioFileHelsinkiVideoMEG(AudioFile):
