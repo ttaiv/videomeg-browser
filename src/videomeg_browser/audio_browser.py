@@ -5,7 +5,7 @@ import os.path
 
 import numpy as np
 import pyqtgraph as pg
-from qtpy.QtCore import Qt, Signal, Slot  # type: ignore
+from qtpy.QtCore import Qt, QTimer, Signal, Slot  # type: ignore
 from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -16,7 +16,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from . import gui_utils
+from . import audio_player, gui_utils
 from .audio import AudioFile
 from .syncable_media_browser import SyncableMediaBrowser
 from .time_selector import TimeSelector
@@ -48,7 +48,8 @@ class AudioView(QWidget):
     """
 
     # Emits a signal with the sample index when the position changes
-    sigSampleIndexChanged = Signal(int)  # sample index,
+    sigSampleIndexChanged = Signal(int)  # sample index
+    sigChannelSelectionChanged = Signal(object)  # channel index or None
 
     def __init__(
         self,
@@ -104,6 +105,18 @@ class AudioView(QWidget):
     def current_time(self) -> float:
         """Get the current position in seconds."""
         return self._current_sample / self._audio.sampling_rate
+
+    @property
+    def channel_selection(self) -> int | None:
+        """Get the currently selected channel index.
+
+        Returns
+        -------
+        int | None
+            The index of the selected channel, or None if mean of all the channels
+            is shown.
+        """
+        return self._channel_selection
 
     def display_at_sample(self, sample_idx: int, signal: bool = True) -> bool:
         """Set the currently highlighted sample index and update the view if necessary.
@@ -373,6 +386,7 @@ class AudioView(QWidget):
             self._channel_selection = index - 1  # Adjust for "All" being index 0
 
         self._plot_selected_channel()
+        self.sigChannelSelectionChanged.emit(self._channel_selection)
 
     @Slot()
     def _zoom_in(self) -> None:
@@ -418,6 +432,9 @@ class AudioBrowser(SyncableMediaBrowser):
     ----------
     audio : AudioFile
         The audio file to visualize.
+    playback_update_interval_ms : int, optional
+        Determines how often the visualization is updated during audio playback.
+        By default 50 ms, which corresponds to 20 updates per second.
     parent : QWidget | None, optional
         The parent widget, by default None.
     """
@@ -425,11 +442,29 @@ class AudioBrowser(SyncableMediaBrowser):
     def __init__(
         self,
         audio: AudioFile,
+        playback_update_interval_ms: int = 50,
         parent: QWidget | None = None,
     ) -> None:
         """Initialize the audio browser."""
         super().__init__(parent=parent)
         self._audio = audio
+        # Get sample rate that is suitable for playing audio on the hardware we are
+        # running on. Audio will be resampled if necessary.
+        self._playing_rate = audio_player.find_sample_rate_for_playing(
+            original_rate=audio.sampling_rate
+        )
+
+        # Create a timer that will be used to update the visualization during playback.
+        self._playback_timer = QTimer(self)
+        self._playback_timer.setInterval(playback_update_interval_ms)
+        self._playback_timer.timeout.connect(self._on_playback_timeout)
+
+        self._is_playing = False
+        # How many samples to advance in the visualization when the playback timer
+        # timeouts (how many samples there is in the playback update interval).
+        self._playback_elapsed_samples = int(
+            playback_update_interval_ms / 1000 * audio.sampling_rate
+        )
 
         self.setWindowTitle("Audio Browser")
 
@@ -441,6 +476,10 @@ class AudioBrowser(SyncableMediaBrowser):
         self._audio_view = AudioView(audio, parent=self)
         self._audio_view.sigSampleIndexChanged.connect(
             self._on_audio_view_sample_change
+        )
+        # Keep playback audio data in sync with the visualized data.
+        self._audio_view.sigChannelSelectionChanged.connect(
+            self._set_playback_audio_data
         )
         self._layout.addWidget(self._audio_view)
 
@@ -465,9 +504,12 @@ class AudioBrowser(SyncableMediaBrowser):
         self._navigation_bar.sigPreviousClicked.connect(self._jump_backwards)
 
         self._update_browser_to_current_sample()
+        # Sets self._playback_audio_data
+        self._set_playback_audio_data(channel_idx=self._audio_view.channel_selection)
 
     @property
     def current_sample(self) -> int:
+        """Get the index of the current sample position."""
         return self._audio_view.current_sample
 
     @property
@@ -527,10 +569,73 @@ class AudioBrowser(SyncableMediaBrowser):
         # Emit the position changed signal with zero as media index.
         self.sigPositionChanged.emit(0, sample_idx)
 
+    @Slot(object)
+    def _set_playback_audio_data(self, channel_idx: int | None) -> None:
+        """Set the audio data to play when user changes selected channel."""
+        if self._playing_rate == self._audio.sampling_rate:
+            if channel_idx is None:
+                self._playback_audio_data = self._audio.get_audio_mean()
+            else:
+                # Get data for the selected channel.
+                self._playback_audio_data = self._audio.get_audio_all_channels()[
+                    channel_idx, :
+                ]
+        else:
+            logger.info(
+                f"Resampling audio from {self._audio.sampling_rate} Hz to "
+                f"{self._playing_rate} Hz for playback."
+            )
+            self._playback_audio_data = self._audio.resample_poly(
+                self._playing_rate, channel_idx=channel_idx
+            )
+
+    @Slot()
+    def _on_playback_timeout(self) -> None:
+        """Update the visualization during playback when playback timer timeouts."""
+        if not self._is_playing:
+            logger.warning(
+                "Playback timer timed out when self._is_playing is False. "
+                "Skipping updating position."
+            )
+            return
+        # Calculate at which sample index the playback is currently at.
+        playback_sample_idx = self.current_sample + self._playback_elapsed_samples
+        success = self.set_position(playback_sample_idx, media_idx=0, signal=True)
+        if not success:
+            # Pause playback if the sample index is out of bounds.
+            self._pause_playback()
+
     @Slot()
     def _toggle_play_pause(self) -> None:
-        """Advance the playback position."""
-        print("Should play/pause audio now.")
+        """Start or stop the audio playback."""
+        if self._is_playing:
+            self._pause_playback()
+        else:
+            self._start_playback()
+
+    def _start_playback(self) -> None:
+        """Start the audio playback from the current position."""
+        logger.debug("Starting audio playback.")
+
+        visualized_time = self.current_time
+        # Starting sample for playback depends on the sample rate used for playing.
+        playback_start_sample = int(visualized_time * self._playing_rate)
+
+        audio_player.play(
+            self._playback_audio_data[playback_start_sample:],
+            sampling_rate=self._playing_rate,
+        )
+        self._navigation_bar.set_playing()
+        self._playback_timer.start()
+        self._is_playing = True
+
+    def _pause_playback(self) -> None:
+        """Pause the audio playback."""
+        logger.debug("Pausing audio playback.")
+        audio_player.stop()
+        self._navigation_bar.set_paused()
+        self._playback_timer.stop()
+        self._is_playing = False
 
     @Slot()
     def _jump_forward(self) -> None:
@@ -555,3 +660,7 @@ class AudioBrowser(SyncableMediaBrowser):
 
         self._navigation_bar.set_prev_enabled(self.current_time >= min_time)
         self._navigation_bar.set_next_enabled(self.current_time <= max_time)
+
+        self._navigation_bar.set_play_pause_enabled(
+            self.current_sample < self._audio.n_samples - 1
+        )
