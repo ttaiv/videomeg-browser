@@ -613,8 +613,6 @@ class AudioBrowser(SyncableMediaBrowser):
         else:
             self._start_playback()
 
-        self._is_playing = not self._is_playing
-
     def _start_playback(self) -> None:
         """Start the audio playback from the current position."""
         logger.debug("Starting audio playback.")
@@ -629,6 +627,7 @@ class AudioBrowser(SyncableMediaBrowser):
         )
         self._navigation_bar.set_playing()
         self._playback_timer.start()
+        self._is_playing = True
 
     def _pause_playback(self) -> None:
         """Pause the audio playback."""
@@ -636,6 +635,7 @@ class AudioBrowser(SyncableMediaBrowser):
         audio_player.stop()
         self._navigation_bar.set_paused()
         self._playback_timer.stop()
+        self._is_playing = False
 
     @Slot()
     def _jump_forward(self) -> None:
