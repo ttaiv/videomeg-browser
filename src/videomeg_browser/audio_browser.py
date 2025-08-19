@@ -660,3 +660,7 @@ class AudioBrowser(SyncableMediaBrowser):
 
         self._navigation_bar.set_prev_enabled(self.current_time >= min_time)
         self._navigation_bar.set_next_enabled(self.current_time <= max_time)
+
+        self._navigation_bar.set_play_pause_enabled(
+            self.current_sample < self._audio.n_samples - 1
+        )
