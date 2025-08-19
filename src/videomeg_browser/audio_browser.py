@@ -434,7 +434,7 @@ class AudioBrowser(SyncableMediaBrowser):
         The audio file to visualize.
     playback_update_interval_ms : int, optional
         Determines how often the visualization is updated during audio playback.
-        By default 50 ms, which coresponds to 20 updates per second.
+        By default 50 ms, which corresponds to 20 updates per second.
     parent : QWidget | None, optional
         The parent widget, by default None.
     """
@@ -594,7 +594,7 @@ class AudioBrowser(SyncableMediaBrowser):
         """Update the visualization during playback when playback timer timeouts."""
         if not self._is_playing:
             logger.warning(
-                "Playback timer timeouted when self._is_playing is False. "
+                "Playback timer timed out when self._is_playing is False. "
                 "Skipping updating position."
             )
             return
