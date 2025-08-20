@@ -41,10 +41,10 @@ and `sounddevice` for audio playback. Here's how to set up an environment with a
 Now you should be able to test the video browser by running example scripts in `scripts/` directory. For example:
 
 ```bash
-python scripts/run_sync_demo_with_sample_data.py
+python scripts/run_video_sync_demo_2.py
 ```
 
-Script `run_sync_demo_with_sample_data.py` uses a sample dataset from MNE Python and a fake video file. Other examples require you
+Script `run_video_sync_demo_2.py` uses a sample dataset from MNE Python and a fake video file. Other examples require you
 to have your own raw data and video files in a correct format.
 
 ## Running tests
