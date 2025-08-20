@@ -9,24 +9,30 @@ volunteered to be the test subject), synchronized with MNE-Python's sample MEG d
 
 ## Installation for development
 
-In addition to MNE-Python, this project currently requires package `OpenCV` for standard video file reading.
-Here's how to set up a environment with all the necessary dependencies:
+In addition to MNE-Python, this project currently requires package `OpenCV` for standard video file (such as .mp4) reading
+and `sounddevice` for audio playback. Here's how to set up an environment with all the necessary dependencies:
 
-1. Create a new conda environment (named `mne-videomeg`) with MNE-Python and OpenCV:
+1. Create a new conda environment (named `mne-videomeg`) with MNE-Python and sounddevice.
 
    ```bash
-   conda create --channel=conda-forge --strict-channel-priority --name=mne-videomeg mne opencv
+   conda create --channel=conda-forge --strict-channel-priority --name=mne-videomeg mne python-sounddevice
    ```
 
-2. Clone this repository and navigate to project root.
-
-3. Activate the environment:
+2. Activate the environment:
 
    ```bash
    conda activate mne-videomeg
    ```
 
-4. Install the package in editable mode:
+3. Add light version of `OpenCV` to the environment:
+
+   ```bash
+   pip install opencv-python-headless
+   ```
+
+4. Clone this repository and navigate to project root.
+
+5. Install the package in editable mode:
 
    ```bash
    pip install -e .
