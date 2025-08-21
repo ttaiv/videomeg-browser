@@ -7,7 +7,7 @@ authors = [
     { name = "Teemu Taivainen", email = "teemu.taivainen@hotmail.fi" }
 ]
 requires-python = ">=3.10"
-dependencies = ["mne"]
+dependencies = ["mne", "opencv-python-headless", "sounddevice"]
 
 [project.optional-dependencies]
 dev = [
