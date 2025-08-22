@@ -148,9 +148,7 @@ class VideoBrowser(SyncableMediaBrowser):
                 [os.path.basename(video.fname) for video in self._videos]
             )
             self._video_selector.setCurrentIndex(self._selected_video_idx)
-            self._video_selector.currentIndexChanged.connect(
-                self._on_selected_video_change
-            )
+            self._video_selector.currentIndexChanged.connect(self._set_selected_video)
             navigation_layout.addStretch()  # Push the selector to the right
             navigation_layout.addWidget(self._video_selector)
 
@@ -284,6 +282,24 @@ class VideoBrowser(SyncableMediaBrowser):
         """
         self._video_views[media_idx].set_sync_status(status)
 
+    def start_playback(self, media_idx: int) -> None:
+        """Start playing the specified video.
+
+        Parameters
+        ----------
+        media_idx : int
+            Index of the video to start playing.
+        """
+        # Make the specified video view the selected one (corresponds to user changing
+        # the selected video).
+        self._set_selected_video(media_idx)
+        # Start playing the video.
+        self._play_video()
+
+    def pause_playback(self) -> None:
+        """Pause playback of the currently playing video."""
+        self._pause_video()
+
     def _play_video(self) -> None:
         """Play the selected video with its original frame rate."""
         if self._is_playing:
@@ -297,6 +313,8 @@ class VideoBrowser(SyncableMediaBrowser):
         self._navigation_bar.set_playing()
         # Start the timer that controls automatic frame updates
         self._play_timer.start()
+
+        self.sigPlaybackStateChanged.emit(self._selected_video_idx, True)
 
     def _pause_video(self) -> None:
         """Pause video playing and stop at current frame."""
@@ -312,6 +330,8 @@ class VideoBrowser(SyncableMediaBrowser):
         self._fps_label.setText("Playing FPS: -")
         # Reset the frame tracker to start fresh with the next play.
         self._frame_rate_tracker.reset()
+
+        self.sigPlaybackStateChanged.emit(self._selected_video_idx, False)
 
     @Slot()
     def _toggle_play_pause(self) -> None:
@@ -358,7 +378,7 @@ class VideoBrowser(SyncableMediaBrowser):
         return self._video_views[self._selected_video_idx].current_frame_idx
 
     @Slot(int)
-    def _on_selected_video_change(self, new_index: int) -> None:
+    def _set_selected_video(self, new_index: int) -> None:
         """Handle user changing the selected video."""
         self._selected_video_idx = new_index
         self._selected_video = self._videos[new_index]
