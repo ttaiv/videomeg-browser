@@ -115,12 +115,15 @@ class ElapsedTimeLabel(QLabel):
 
     def _format_time(self, time_seconds: float) -> str:
         """Format seconds as mm:ss or hh:mm:ss, depending on the include_hours flag."""
-        minutes, seconds = divmod(int(time_seconds), 60)
+        total_seconds = int(time_seconds)
+        milliseconds = int((time_seconds - total_seconds) * 1000)
+
+        minutes, seconds = divmod(total_seconds, 60)
         if self._include_hours:
             hours, minutes = divmod(minutes, 60)
-            return f"{hours}:{minutes:02d}:{seconds:02d}"
+            return f"{hours}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}"
 
-        return f"{minutes}:{seconds:02d}"
+        return f"{minutes}:{seconds:02d}.{milliseconds:03d}"
 
 
 class IndexSlider(QWidget):
