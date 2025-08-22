@@ -22,6 +22,7 @@ class SyncableMediaBrowser(QWidget):
 
     # Emits a signal when the displayed frame or sample of any shown media changes.
     sigPositionChanged = Signal(int, int)  # media index, sample index
+    sigPlaybackStateChanged = Signal(int, bool)  # media index, is playing
 
     def __init_subclass__(cls) -> None:
         """Ensure that subclasses implement required methods."""
@@ -31,6 +32,10 @@ class SyncableMediaBrowser(QWidget):
             raise TypeError(f"{cls.__name__} must implement jump_to_end method.")
         if cls.jump_to_start is SyncableMediaBrowser.jump_to_start:
             raise TypeError(f"{cls.__name__} must implement jump_to_start method.")
+        if cls.start_playback is SyncableMediaBrowser.start_playback:
+            raise TypeError(f"{cls.__name__} must implement start_playback method.")
+        if cls.pause_playback is SyncableMediaBrowser.pause_playback:
+            raise TypeError(f"{cls.__name__} must implement pause_playback method.")
 
     def set_position(
         self, position_idx: int, media_idx: int, signal: bool = True
@@ -97,3 +102,21 @@ class SyncableMediaBrowser(QWidget):
         """
         # Default implementation does nothing.
         pass
+
+    def start_playback(self, media_idx: int) -> None:
+        """Start playing the specified media.
+
+        Parameters
+        ----------
+        media_idx : int
+            Index of the media to start playing.
+        """
+        raise NotImplementedError(
+            "start_playback method must be implemented by subclasses."
+        )
+
+    def pause_playback(self) -> None:
+        """Pause playback of the currently playing media."""
+        raise NotImplementedError(
+            "pause_playback method must be implemented by subclasses."
+        )
