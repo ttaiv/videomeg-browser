@@ -555,6 +555,36 @@ class AudioBrowser(SyncableMediaBrowser):
         """
         self.set_position(0, media_idx, signal=signal)
 
+    def start_playback(self, media_idx: int) -> None:
+        """Start the audio playback from the current position."""
+        # Audio browser currently only supports a single audio file,
+        # so media_idx is not used.
+        logger.debug("Starting audio playback.")
+
+        visualized_time = self.current_time
+        # Starting sample for playback depends on the sample rate used for playing.
+        playback_start_sample = int(visualized_time * self._playing_rate)
+
+        audio_player.play(
+            self._playback_audio_data[playback_start_sample:],
+            sampling_rate=self._playing_rate,
+        )
+        self._navigation_bar.set_playing()
+        self._playback_timer.start()
+        self._is_playing = True
+
+        self.sigPlaybackStateChanged.emit(0, True)
+
+    def pause_playback(self) -> None:
+        """Pause the audio playback."""
+        logger.debug("Pausing audio playback.")
+        audio_player.stop()
+        self._navigation_bar.set_paused()
+        self._playback_timer.stop()
+        self._is_playing = False
+
+        self.sigPlaybackStateChanged.emit(0, False)
+
     def _update_browser_to_current_sample(self) -> None:
         """Update the audio browser UI to reflect the currently selected sample."""
         self._slider.set_value(self.current_sample, signal=False)
@@ -603,39 +633,15 @@ class AudioBrowser(SyncableMediaBrowser):
         success = self.set_position(playback_sample_idx, media_idx=0, signal=True)
         if not success:
             # Pause playback if the sample index is out of bounds.
-            self._pause_playback()
+            self.pause_playback()
 
     @Slot()
     def _toggle_play_pause(self) -> None:
         """Start or stop the audio playback."""
         if self._is_playing:
-            self._pause_playback()
+            self.pause_playback()
         else:
-            self._start_playback()
-
-    def _start_playback(self) -> None:
-        """Start the audio playback from the current position."""
-        logger.debug("Starting audio playback.")
-
-        visualized_time = self.current_time
-        # Starting sample for playback depends on the sample rate used for playing.
-        playback_start_sample = int(visualized_time * self._playing_rate)
-
-        audio_player.play(
-            self._playback_audio_data[playback_start_sample:],
-            sampling_rate=self._playing_rate,
-        )
-        self._navigation_bar.set_playing()
-        self._playback_timer.start()
-        self._is_playing = True
-
-    def _pause_playback(self) -> None:
-        """Pause the audio playback."""
-        logger.debug("Pausing audio playback.")
-        audio_player.stop()
-        self._navigation_bar.set_paused()
-        self._playback_timer.stop()
-        self._is_playing = False
+            self.start_playback(media_idx=0)  # media_idx is not used in audio browser
 
     @Slot()
     def _jump_forward(self) -> None:
