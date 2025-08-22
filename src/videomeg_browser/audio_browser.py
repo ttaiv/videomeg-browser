@@ -517,6 +517,11 @@ class AudioBrowser(SyncableMediaBrowser):
         """Get the current position in seconds."""
         return self._audio_view.current_time
 
+    @property
+    def is_playing(self) -> bool:
+        """Return whether the audio is currently playing."""
+        return self._is_playing
+
     def set_position(
         self, position_idx: int, media_idx: int, signal: bool = True
     ) -> bool:

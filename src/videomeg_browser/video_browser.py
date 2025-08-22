@@ -159,6 +159,11 @@ class VideoBrowser(SyncableMediaBrowser):
 
         self._update_buttons_enabled()
 
+    @property
+    def is_playing(self) -> bool:
+        """Return whether the video is currently playing."""
+        return self._is_playing
+
     @Slot(int)
     def display_frame_for_selected_video(self, frame_idx: int) -> bool:
         """Display the frame at the specified index for the selected video view.
