@@ -18,6 +18,10 @@ class SyncableMediaBrowser(QWidget):
     """Base class for syncable video and audio browser widgets.
 
     Defines methods and signal that subclasses must implement.
+
+    NOTE: This class does not inherit from abc.ABC to prevent metaclass conflicts
+    with Qt widgets. Instead, it uses `__init_subclass__` to enforce
+    implementation of required methods in subclasses.
     """
 
     # Emits a signal when the displayed frame or sample of any shown media changes.
