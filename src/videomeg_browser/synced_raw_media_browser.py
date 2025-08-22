@@ -122,6 +122,13 @@ class SyncedRawMediaBrowser(QObject):
             self._sync_media_to_raw  # no throttling needed here
         )
 
+        # When one browser starts playing, pause all other media browsers
+        # to avoid mess in synchronization.
+        for browser_idx, media_browser in enumerate(self._media_browsers):
+            media_browser.sigPlaybackStateChanged.connect(
+                functools.partial(self._on_playback_state_changed, browser_idx)
+            )
+
         # Consider raw data browser to be the main browser and start by
         # synchronizing the media browsers to the initial raw time.
         initial_raw_time = self._raw_browser_manager.get_selected_time()
@@ -273,6 +280,25 @@ class SyncedRawMediaBrowser(QObject):
 
             case _:
                 raise ValueError(f"Unexpected mapping result: {mapping}. ")
+
+    @Slot(int, int, bool)
+    def _on_playback_state_changed(
+        self, media_browser_idx: int, media_idx: int, is_playing: bool
+    ) -> None:
+        """Prevent other media browsers from playing when one starts playing."""
+        logger.debug(
+            "Received signal about playback state change "
+            f"for media browser {media_browser_idx} to {is_playing}."
+        )
+        if is_playing:
+            self._pause_other_media_browsers(media_browser_idx)
+
+    def _pause_other_media_browsers(self, excluded_browser_idx: int) -> None:
+        """Pause all other media browsers except the one with the given index."""
+        for browser_idx, media_browser in enumerate(self._media_browsers):
+            if excluded_browser_idx != browser_idx and media_browser.is_playing:
+                logger.debug(f"Pausing media browser with index {browser_idx}.")
+                media_browser.pause_playback()
 
 
 class BufferedThrottler(QObject):

@@ -437,6 +437,9 @@ class AudioBrowser(SyncableMediaBrowser):
         By default 50 ms, which corresponds to 20 updates per second.
     parent : QWidget | None, optional
         The parent widget, by default None.
+
+    NOTE: This browser currently only supports a single audio file. Methods that receive
+    `media_idx` parameter ignore it and signals emit `media_idx` as zero.
     """
 
     def __init__(
@@ -517,6 +520,11 @@ class AudioBrowser(SyncableMediaBrowser):
         """Get the current position in seconds."""
         return self._audio_view.current_time
 
+    @property
+    def is_playing(self) -> bool:
+        """Return whether the audio is currently playing."""
+        return self._is_playing
+
     def set_position(
         self, position_idx: int, media_idx: int, signal: bool = True
     ) -> bool:
@@ -554,6 +562,36 @@ class AudioBrowser(SyncableMediaBrowser):
         supports a single audio file.
         """
         self.set_position(0, media_idx, signal=signal)
+
+    def start_playback(self, media_idx: int) -> None:
+        """Start the audio playback from the current position."""
+        # Audio browser currently only supports a single audio file,
+        # so media_idx is not used.
+        logger.debug("Starting audio playback.")
+
+        visualized_time = self.current_time
+        # Starting sample for playback depends on the sample rate used for playing.
+        playback_start_sample = int(visualized_time * self._playing_rate)
+
+        audio_player.play(
+            self._playback_audio_data[playback_start_sample:],
+            sampling_rate=self._playing_rate,
+        )
+        self._navigation_bar.set_playing()
+        self._playback_timer.start()
+        self._is_playing = True
+
+        self.sigPlaybackStateChanged.emit(0, True)  # emit zero as media_idx
+
+    def pause_playback(self) -> None:
+        """Pause the audio playback."""
+        logger.debug("Pausing audio playback.")
+        audio_player.stop()
+        self._navigation_bar.set_paused()
+        self._playback_timer.stop()
+        self._is_playing = False
+
+        self.sigPlaybackStateChanged.emit(0, False)  # emit zero as media_idx
 
     def _update_browser_to_current_sample(self) -> None:
         """Update the audio browser UI to reflect the currently selected sample."""
@@ -603,39 +641,15 @@ class AudioBrowser(SyncableMediaBrowser):
         success = self.set_position(playback_sample_idx, media_idx=0, signal=True)
         if not success:
             # Pause playback if the sample index is out of bounds.
-            self._pause_playback()
+            self.pause_playback()
 
     @Slot()
     def _toggle_play_pause(self) -> None:
         """Start or stop the audio playback."""
         if self._is_playing:
-            self._pause_playback()
+            self.pause_playback()
         else:
-            self._start_playback()
-
-    def _start_playback(self) -> None:
-        """Start the audio playback from the current position."""
-        logger.debug("Starting audio playback.")
-
-        visualized_time = self.current_time
-        # Starting sample for playback depends on the sample rate used for playing.
-        playback_start_sample = int(visualized_time * self._playing_rate)
-
-        audio_player.play(
-            self._playback_audio_data[playback_start_sample:],
-            sampling_rate=self._playing_rate,
-        )
-        self._navigation_bar.set_playing()
-        self._playback_timer.start()
-        self._is_playing = True
-
-    def _pause_playback(self) -> None:
-        """Pause the audio playback."""
-        logger.debug("Pausing audio playback.")
-        audio_player.stop()
-        self._navigation_bar.set_paused()
-        self._playback_timer.stop()
-        self._is_playing = False
+            self.start_playback(media_idx=0)  # media_idx is not used in audio browser
 
     @Slot()
     def _jump_forward(self) -> None:

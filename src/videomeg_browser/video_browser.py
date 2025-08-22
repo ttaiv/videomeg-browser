@@ -138,7 +138,7 @@ class VideoBrowser(SyncableMediaBrowser):
         self._navigation_bar.sigNextClicked.connect(
             self.display_next_frame_for_selected_video
         )
-        self._navigation_bar.sigPlayPauseClicked.connect(self.toggle_play_pause)
+        self._navigation_bar.sigPlayPauseClicked.connect(self._toggle_play_pause)
         navigation_layout.addWidget(self._navigation_bar)
 
         # Add drop-down menu for selecting which video to control.
@@ -148,9 +148,7 @@ class VideoBrowser(SyncableMediaBrowser):
                 [os.path.basename(video.fname) for video in self._videos]
             )
             self._video_selector.setCurrentIndex(self._selected_video_idx)
-            self._video_selector.currentIndexChanged.connect(
-                self._on_selected_video_change
-            )
+            self._video_selector.currentIndexChanged.connect(self._set_selected_video)
             navigation_layout.addStretch()  # Push the selector to the right
             navigation_layout.addWidget(self._video_selector)
 
@@ -160,6 +158,11 @@ class VideoBrowser(SyncableMediaBrowser):
         self._layout.addWidget(self._fps_label)
 
         self._update_buttons_enabled()
+
+    @property
+    def is_playing(self) -> bool:
+        """Return whether the video is currently playing."""
+        return self._is_playing
 
     @Slot(int)
     def display_frame_for_selected_video(self, frame_idx: int) -> bool:
@@ -271,45 +274,6 @@ class VideoBrowser(SyncableMediaBrowser):
             self._get_current_frame_index_of_selected_video() - 1
         )
 
-    @Slot()
-    def play_video(self) -> None:
-        """Play the selected video with its original frame rate."""
-        if self._is_playing:
-            logger.warning(
-                "Received signal to play video even though video should be "
-                "already playing. Skipping action."
-            )
-            return
-        logger.debug("Playing video.")
-        self._is_playing = True
-        self._navigation_bar.set_playing()
-        # Start the timer that controls automatic frame updates
-        self._play_timer.start()
-
-    @Slot()
-    def pause_video(self) -> None:
-        """Pause video playing and stop at current frame."""
-        if not self._is_playing:
-            logger.warning(
-                "Received signal to pause video even though video should not "
-                "be playing. Skipping action."
-            )
-        logger.debug("Pausing video.")
-        self._is_playing = False
-        self._play_timer.stop()
-        self._navigation_bar.set_paused()
-        self._fps_label.setText("Playing FPS: -")
-        # Reset the frame tracker to start fresh with the next play.
-        self._frame_rate_tracker.reset()
-
-    @Slot()
-    def toggle_play_pause(self) -> None:
-        """Either play or pause the video based on the current state."""
-        if self._is_playing:
-            self.pause_video()
-        else:
-            self.play_video()
-
     # Overrides the empty implementation of parent class
     def set_sync_status(self, status: SyncStatus, media_idx: int) -> None:
         """Set the sync status for a specific video view.
@@ -323,6 +287,66 @@ class VideoBrowser(SyncableMediaBrowser):
         """
         self._video_views[media_idx].set_sync_status(status)
 
+    def start_playback(self, media_idx: int) -> None:
+        """Start playing the specified video.
+
+        Parameters
+        ----------
+        media_idx : int
+            Index of the video to start playing.
+        """
+        # Make the specified video view the selected one (corresponds to user changing
+        # the selected video).
+        self._set_selected_video(media_idx)
+        # Start playing the video.
+        self._play_video()
+
+    def pause_playback(self) -> None:
+        """Pause playback of the currently playing video."""
+        self._pause_video()
+
+    def _play_video(self) -> None:
+        """Play the selected video with its original frame rate."""
+        if self._is_playing:
+            logger.warning(
+                "Received signal to play video even though video should be "
+                "already playing. Skipping action."
+            )
+            return
+        logger.debug("Playing video.")
+        self._is_playing = True
+        self._navigation_bar.set_playing()
+        # Start the timer that controls automatic frame updates
+        self._play_timer.start()
+
+        self.sigPlaybackStateChanged.emit(self._selected_video_idx, True)
+
+    def _pause_video(self) -> None:
+        """Pause video playing and stop at current frame."""
+        if not self._is_playing:
+            logger.warning(
+                "Received signal to pause video even though video should not "
+                "be playing. Skipping action."
+            )
+            return
+        logger.debug("Pausing video.")
+        self._is_playing = False
+        self._play_timer.stop()
+        self._navigation_bar.set_paused()
+        self._fps_label.setText("Playing FPS: -")
+        # Reset the frame tracker to start fresh with the next play.
+        self._frame_rate_tracker.reset()
+
+        self.sigPlaybackStateChanged.emit(self._selected_video_idx, False)
+
+    @Slot()
+    def _toggle_play_pause(self) -> None:
+        """Either play or pause the video based on the current state."""
+        if self._is_playing:
+            self._pause_video()
+        else:
+            self._play_video()
+
     @Slot()
     def _play_next_frame(self) -> None:
         """Play next frame of currently selected video when play timer timeouts."""
@@ -331,7 +355,7 @@ class VideoBrowser(SyncableMediaBrowser):
             self._update_frame_rate()
         else:
             # Pause the video if we are in the end
-            self.pause_video()
+            self._pause_video()
 
     def _update_frame_rate(self) -> None:
         """Update frame rate state and possibly also displayed fps."""
@@ -360,7 +384,7 @@ class VideoBrowser(SyncableMediaBrowser):
         return self._video_views[self._selected_video_idx].current_frame_idx
 
     @Slot(int)
-    def _on_selected_video_change(self, new_index: int) -> None:
+    def _set_selected_video(self, new_index: int) -> None:
         """Handle user changing the selected video."""
         self._selected_video_idx = new_index
         self._selected_video = self._videos[new_index]
