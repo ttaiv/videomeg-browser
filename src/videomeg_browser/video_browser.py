@@ -323,6 +323,7 @@ class VideoBrowser(SyncableMediaBrowser):
                 "Received signal to pause video even though video should not "
                 "be playing. Skipping action."
             )
+            return
         logger.debug("Pausing video.")
         self._is_playing = False
         self._play_timer.stop()
