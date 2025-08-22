@@ -291,18 +291,14 @@ class SyncedRawMediaBrowser(QObject):
             f"for media browser {media_browser_idx} to {is_playing}."
         )
         if is_playing:
-            logger.debug(
-                "Pausing all other media browsers except the one on index "
-                f"{media_browser_idx}."
-            )
             self._pause_other_media_browsers(media_browser_idx)
 
     def _pause_other_media_browsers(self, excluded_browser_idx: int) -> None:
         """Pause all other media browsers except the one with the given index."""
         for browser_idx, media_browser in enumerate(self._media_browsers):
-            if excluded_browser_idx == browser_idx:
-                continue
-            media_browser.pause_playback()
+            if excluded_browser_idx != browser_idx and media_browser.is_playing:
+                logger.debug(f"Pausing media browser with index {browser_idx}.")
+                media_browser.pause_playback()
 
 
 class BufferedThrottler(QObject):
