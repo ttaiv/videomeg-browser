@@ -437,6 +437,9 @@ class AudioBrowser(SyncableMediaBrowser):
         By default 50 ms, which corresponds to 20 updates per second.
     parent : QWidget | None, optional
         The parent widget, by default None.
+
+    NOTE: This browser currently only supports a single audio file. Methods that receive
+    `media_idx` parameter ignore it and signals emit `media_idx` as zero.
     """
 
     def __init__(
@@ -578,7 +581,7 @@ class AudioBrowser(SyncableMediaBrowser):
         self._playback_timer.start()
         self._is_playing = True
 
-        self.sigPlaybackStateChanged.emit(0, True)
+        self.sigPlaybackStateChanged.emit(0, True)  # emit zero as media_idx
 
     def pause_playback(self) -> None:
         """Pause the audio playback."""
@@ -588,7 +591,7 @@ class AudioBrowser(SyncableMediaBrowser):
         self._playback_timer.stop()
         self._is_playing = False
 
-        self.sigPlaybackStateChanged.emit(0, False)
+        self.sigPlaybackStateChanged.emit(0, False)  # emit zero as media_idx
 
     def _update_browser_to_current_sample(self) -> None:
         """Update the audio browser UI to reflect the currently selected sample."""
