@@ -284,7 +284,6 @@ class VideoBrowser(SyncableMediaBrowser):
         """
         self._video_views[media_idx].set_sync_status(status)
 
-    @Slot()
     def _play_video(self) -> None:
         """Play the selected video with its original frame rate."""
         if self._is_playing:
@@ -299,7 +298,6 @@ class VideoBrowser(SyncableMediaBrowser):
         # Start the timer that controls automatic frame updates
         self._play_timer.start()
 
-    @Slot()
     def _pause_video(self) -> None:
         """Pause video playing and stop at current frame."""
         if not self._is_playing:
