@@ -59,6 +59,10 @@ class ElapsedTimeLabel(QLabel):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
+        if current_time_seconds < 0:
+            raise ValueError("Current time cannot be negative.")
+        if max_time_seconds < 0:
+            raise ValueError("Maximum time cannot be negative.")
         if current_time_seconds > max_time_seconds:
             logger.warning("Current time exceeds maximum time.")
         self._current_time_seconds = current_time_seconds
