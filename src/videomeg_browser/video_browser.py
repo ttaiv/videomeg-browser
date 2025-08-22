@@ -138,7 +138,7 @@ class VideoBrowser(SyncableMediaBrowser):
         self._navigation_bar.sigNextClicked.connect(
             self.display_next_frame_for_selected_video
         )
-        self._navigation_bar.sigPlayPauseClicked.connect(self.toggle_play_pause)
+        self._navigation_bar.sigPlayPauseClicked.connect(self._toggle_play_pause)
         navigation_layout.addWidget(self._navigation_bar)
 
         # Add drop-down menu for selecting which video to control.
@@ -271,8 +271,21 @@ class VideoBrowser(SyncableMediaBrowser):
             self._get_current_frame_index_of_selected_video() - 1
         )
 
+    # Overrides the empty implementation of parent class
+    def set_sync_status(self, status: SyncStatus, media_idx: int) -> None:
+        """Set the sync status for a specific video view.
+
+        Parameters
+        ----------
+        status : SyncStatus
+            The synchronization status to set.
+        media_idx : int
+            Index of the video view to update.
+        """
+        self._video_views[media_idx].set_sync_status(status)
+
     @Slot()
-    def play_video(self) -> None:
+    def _play_video(self) -> None:
         """Play the selected video with its original frame rate."""
         if self._is_playing:
             logger.warning(
@@ -287,7 +300,7 @@ class VideoBrowser(SyncableMediaBrowser):
         self._play_timer.start()
 
     @Slot()
-    def pause_video(self) -> None:
+    def _pause_video(self) -> None:
         """Pause video playing and stop at current frame."""
         if not self._is_playing:
             logger.warning(
@@ -303,25 +316,12 @@ class VideoBrowser(SyncableMediaBrowser):
         self._frame_rate_tracker.reset()
 
     @Slot()
-    def toggle_play_pause(self) -> None:
+    def _toggle_play_pause(self) -> None:
         """Either play or pause the video based on the current state."""
         if self._is_playing:
-            self.pause_video()
+            self._pause_video()
         else:
-            self.play_video()
-
-    # Overrides the empty implementation of parent class
-    def set_sync_status(self, status: SyncStatus, media_idx: int) -> None:
-        """Set the sync status for a specific video view.
-
-        Parameters
-        ----------
-        status : SyncStatus
-            The synchronization status to set.
-        media_idx : int
-            Index of the video view to update.
-        """
-        self._video_views[media_idx].set_sync_status(status)
+            self._play_video()
 
     @Slot()
     def _play_next_frame(self) -> None:
@@ -331,7 +331,7 @@ class VideoBrowser(SyncableMediaBrowser):
             self._update_frame_rate()
         else:
             # Pause the video if we are in the end
-            self.pause_video()
+            self._pause_video()
 
     def _update_frame_rate(self) -> None:
         """Update frame rate state and possibly also displayed fps."""
