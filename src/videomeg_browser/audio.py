@@ -418,50 +418,20 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
             Normalization is done by dividing all samples by the maximum absolute value
             of the samples across all channels (global normalization).
         """
-        # ------------------------------------------------------------------
-        # Compute timestamps for all the audio samples
-        #
         logger.info("Unpacking audio data, this may take a while...")
-        bytes_per_sample = struct.calcsize(self.format_string)
+        self._compute_audio_timestamps()
+
+        n_bytes_per_sample = struct.calcsize(self.format_string)
+        n_samples_per_buffer = self.buffer_size // (
+            self._n_channels * n_bytes_per_sample
+        )
         n_chunks = len(self.buffer_timestamps_ms)
-        samp_per_buf = self.buffer_size // (self._n_channels * bytes_per_sample)
-        nsamp = samp_per_buf * n_chunks
-        samps = np.arange(samp_per_buf - 1, nsamp, samp_per_buf)
-
-        errs = -np.ones(n_chunks)
-        audio_ts = -np.ones(nsamp)
-
-        # split the data into segments for piecewise linear regression
-        split_indx = list(range(0, nsamp, _REGR_SEGM_LENGTH * self._sampling_rate))
-        split_indx[-1] = (
-            nsamp  # the last segment might be up to twice as long as the others
-        )
-
-        for i in range(len(split_indx) - 1):
-            sel_indx = np.where(
-                (samps >= split_indx[i]) & (samps < split_indx[i + 1])
-            )  # select one segment
-            p = np.polyfit(
-                samps[sel_indx], self.buffer_timestamps_ms[sel_indx], 1
-            )  # compute the regression coefficients
-            errs[sel_indx] = np.abs(
-                np.polyval(p, samps[sel_indx]) - self.buffer_timestamps_ms[sel_indx]
-            )  # compute the regression error
-            audio_ts[split_indx[i] : split_indx[i + 1]] = np.polyval(
-                p, np.arange(split_indx[i], split_indx[i + 1])
-            )  # compute the timestamps with regression
-
-        assert audio_ts.min() >= 0  # make sure audio_ts was completely filled
-        assert errs.min() >= 0  # make sure errs was completely filled
-        logger.info(
-            f"Audio regression fit errors (abs): mean {errs.mean():.3f}, median "
-            f"{np.median(errs):.3f}, max {errs.max():.3f}"
-        )
+        n_samples = n_samples_per_buffer * n_chunks
 
         # ------------------------------------------------------------------
         # Parse the raw audio data
         #
-        total_samples = nsamp * self._n_channels
+        total_samples = n_samples * self._n_channels
 
         # Create a format string for unpacking all samples at once.
         endian_char = self.format_string[0]
@@ -470,7 +440,7 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
 
         # Unpack all the samples.
         unpacked_samples = struct.unpack(
-            bulk_format_string, self.raw_audio[: total_samples * bytes_per_sample]
+            bulk_format_string, self.raw_audio[: total_samples * n_bytes_per_sample]
         )
         # Convert the tuple to numpy array.
         audio = np.array(unpacked_samples, dtype=np.float32)
@@ -478,7 +448,7 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         # Reshape (n_channels, n_samples) layout.
         # The data is interleaved, so reshape to (n_samples, n_channels) first
         # and then transpose.
-        audio = audio.reshape(nsamp, self._n_channels).T
+        audio = audio.reshape(n_samples, self._n_channels).T
 
         if normalize:
             global_max = np.abs(audio).max()
@@ -489,7 +459,6 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
 
         self._unpacked_audio = audio
         self._unpacked_mean_audio = audio.mean(axis=0)
-        self._audio_timestamps_ms = audio_ts
 
     def print_stats(self) -> None:
         """Print basic statistics about the audio file."""
@@ -566,3 +535,42 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
                 "Consider calling unpack_audio() manually before using the getters."
             )
             self.unpack_audio()
+
+    def _compute_audio_timestamps(self):
+        bytes_per_sample = struct.calcsize(self.format_string)
+        n_chunks = len(self.buffer_timestamps_ms)
+        samp_per_buf = self.buffer_size // (self._n_channels * bytes_per_sample)
+        nsamp = samp_per_buf * n_chunks
+        samps = np.arange(samp_per_buf - 1, nsamp, samp_per_buf)
+
+        errs = -np.ones(n_chunks)
+        audio_ts = -np.ones(nsamp)
+
+        # split the data into segments for piecewise linear regression
+        split_indx = list(range(0, nsamp, _REGR_SEGM_LENGTH * self._sampling_rate))
+        split_indx[-1] = (
+            nsamp  # the last segment might be up to twice as long as the others
+        )
+
+        for i in range(len(split_indx) - 1):
+            sel_indx = np.where(
+                (samps >= split_indx[i]) & (samps < split_indx[i + 1])
+            )  # select one segment
+            p = np.polyfit(
+                samps[sel_indx], self.buffer_timestamps_ms[sel_indx], 1
+            )  # compute the regression coefficients
+            errs[sel_indx] = np.abs(
+                np.polyval(p, samps[sel_indx]) - self.buffer_timestamps_ms[sel_indx]
+            )  # compute the regression error
+            audio_ts[split_indx[i] : split_indx[i + 1]] = np.polyval(
+                p, np.arange(split_indx[i], split_indx[i + 1])
+            )  # compute the timestamps with regression
+
+        assert audio_ts.min() >= 0  # make sure audio_ts was completely filled
+        assert errs.min() >= 0  # make sure errs was completely filled
+        logger.info(
+            f"Audio regression fit errors (abs): mean {errs.mean():.3f}, median "
+            f"{np.median(errs):.3f}, max {errs.max():.3f}"
+        )
+
+        self._audio_timestamps_ms = audio_ts
