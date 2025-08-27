@@ -284,7 +284,6 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
                 "II", data_file.read(8)
             )
             self.format_string = data_file.read(2).decode("ascii")
-            self._bit_depth = self._get_bit_depth(self.format_string)
 
             # Get the size of the data part in the file.
             begin_data = data_file.tell()
@@ -297,11 +296,11 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
 
             assert (end_data - begin_data) % total_sz == 0
 
-            n_chunks = (end_data - begin_data) // total_sz
-            self.raw_audio = bytearray(n_chunks * self.buffer_size)
-            self.buffer_timestamps_ms = np.zeros(n_chunks)
+            self._n_chunks = (end_data - begin_data) // total_sz
+            self.raw_audio = bytearray(self._n_chunks * self.buffer_size)
+            self.buffer_timestamps_ms = np.zeros(self._n_chunks)
 
-            for i in range(n_chunks):
+            for i in range(self._n_chunks):
                 ts, sz, cur_total_sz = read_attrib(data_file, self.ver)
                 assert cur_total_sz == total_sz
                 self.raw_audio[self.buffer_size * i : self.buffer_size * (i + 1)] = (
@@ -309,6 +308,19 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
                 )
                 self.buffer_timestamps_ms[i] = ts
         # close the file
+
+        # Calculate stats for a single sample.
+        self._bit_depth = self._get_bit_depth(self.format_string)
+        self._n_bytes_per_sample = struct.calcsize(self.format_string)
+
+        # Calculate how many samples there is in one raw audio data buffer,
+        # taking into account that the buffer contains interleaved samples
+        # from all channels.
+        self._n_samples_per_buffer = self.buffer_size // (
+            self._n_channels * self._n_bytes_per_sample
+        )
+        # Calculate total number of samples per channel in the whole audio.
+        self._n_samples = self._n_samples_per_buffer * self._n_chunks
 
         # Initialize the attributes for unpacked audio data as None.
         # If user tries to access these without explicitly calling unpack_audio(),
@@ -421,17 +433,10 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         logger.info("Unpacking audio data, this may take a while...")
         self._compute_audio_timestamps()
 
-        n_bytes_per_sample = struct.calcsize(self.format_string)
-        n_samples_per_buffer = self.buffer_size // (
-            self._n_channels * n_bytes_per_sample
-        )
-        n_chunks = len(self.buffer_timestamps_ms)
-        n_samples = n_samples_per_buffer * n_chunks
-
         # ------------------------------------------------------------------
         # Parse the raw audio data
         #
-        total_samples = n_samples * self._n_channels
+        total_samples = self.n_samples * self.n_channels
 
         # Create a format string for unpacking all samples at once.
         endian_char = self.format_string[0]
@@ -439,8 +444,9 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         bulk_format_string = f"{endian_char}{total_samples}{sample_type}"
 
         # Unpack all the samples.
+        total_bytes = total_samples * self._n_bytes_per_sample
         unpacked_samples = struct.unpack(
-            bulk_format_string, self.raw_audio[: total_samples * n_bytes_per_sample]
+            bulk_format_string, self.raw_audio[:total_bytes]
         )
         # Convert the tuple to numpy array.
         audio = np.array(unpacked_samples, dtype=np.float32)
@@ -448,7 +454,7 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         # Reshape (n_channels, n_samples) layout.
         # The data is interleaved, so reshape to (n_samples, n_channels) first
         # and then transpose.
-        audio = audio.reshape(n_samples, self._n_channels).T
+        audio = audio.reshape(self.n_samples, self.n_channels).T
 
         if normalize:
             global_max = np.abs(audio).max()
@@ -480,23 +486,10 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
 
     @property
     def n_samples(self) -> int:
-        """Return the number of samples (per channel) in the unpacked audio.
-
-        Triggers unpacking of audio data if it has not been done yet.
-        """
-        self._ensure_unpacked_audio()
-        assert self._unpacked_audio is not None, (
-            "Audio data should be unpacked after calling _ensure_unpacked_audio."
-        )
-        return self._unpacked_audio.shape[1]
+        return self._n_samples
 
     @property
     def duration(self) -> float:
-        """Return the duration of the audio in seconds.
-
-        Duration is calculated as the number of samples divided by the sampling rate.
-        Triggers unpacking of audio data if it has not been done yet.
-        """
         return self.n_samples / self.sampling_rate
 
     def _get_bit_depth(self, format_string: str) -> int:
@@ -536,21 +529,25 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
             )
             self.unpack_audio()
 
-    def _compute_audio_timestamps(self):
-        bytes_per_sample = struct.calcsize(self.format_string)
-        n_chunks = len(self.buffer_timestamps_ms)
-        samp_per_buf = self.buffer_size // (self._n_channels * bytes_per_sample)
-        nsamp = samp_per_buf * n_chunks
-        samps = np.arange(samp_per_buf - 1, nsamp, samp_per_buf)
+    def _compute_audio_timestamps(self) -> None:
+        """Transform sparse buffer timestamps into dense sample timestamps.
 
-        errs = -np.ones(n_chunks)
-        audio_ts = -np.ones(nsamp)
+        Uses piecewise linear regression to estimate timestamps for all samples
+        based on the buffer timestamps.
+        """
+        samps = np.arange(
+            self._n_samples_per_buffer - 1, self.n_samples, self._n_samples_per_buffer
+        )
+
+        errs = -np.ones(self._n_chunks)
+        audio_ts = -np.ones(self.n_samples)
 
         # split the data into segments for piecewise linear regression
-        split_indx = list(range(0, nsamp, _REGR_SEGM_LENGTH * self._sampling_rate))
-        split_indx[-1] = (
-            nsamp  # the last segment might be up to twice as long as the others
+        split_indx = list(
+            range(0, self.n_samples, _REGR_SEGM_LENGTH * self._sampling_rate)
         )
+        # the last segment might be up to twice as long as the others
+        split_indx[-1] = self.n_samples
 
         for i in range(len(split_indx) - 1):
             sel_indx = np.where(
