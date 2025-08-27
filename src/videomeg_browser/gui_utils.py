@@ -111,7 +111,7 @@ class ElapsedTimeLabel(QLabel):
         self.setText(f"{self._current_time_text} / {self._max_time_text}")
 
     def _format_time(self, time_seconds: float) -> str:
-        """Format seconds as mm:ss or hh:mm:ss, depending on the include_hours flag."""
+        """Format seconds as mm:ss.mmm or hh:mm:ss.mmm, based on include_hours flag."""
         total_seconds = int(time_seconds)
         milliseconds = int((time_seconds - total_seconds) * 1000)
 
