@@ -80,6 +80,8 @@ class ElapsedTimeLabel(QLabel):
 
     def set_current_time(self, current_time_seconds: float) -> None:
         """Update the current time displayed in the label."""
+        if current_time_seconds < 0:
+            raise ValueError("Current time cannot be negative.")
         if current_time_seconds > self._max_time_seconds:
             logger.warning("Current time exceeds maximum time.")
         self._current_time_text = self._format_time(current_time_seconds)
@@ -91,6 +93,8 @@ class ElapsedTimeLabel(QLabel):
         Also updates the display format to include or exclude hours based on
         `max_time_seconds` being more or less than an hour.
         """
+        if max_time_seconds < 0:
+            raise ValueError("Maximum time cannot be negative.")
         if max_time_seconds < self._current_time_seconds:
             logger.warning("Maximum time is less than current time.")
         if max_time_seconds < 3600:
@@ -111,6 +115,10 @@ class ElapsedTimeLabel(QLabel):
         Also updates the display format to include or exclude hours based on
         `max_time_seconds` being more or less than an hour.
         """
+        if current_time_seconds < 0:
+            raise ValueError("Current time cannot be negative.")
+        if max_time_seconds < 0:
+            raise ValueError("Maximum time cannot be negative.")
         if current_time_seconds > max_time_seconds:
             logger.warning("Current time exceeds maximum time.")
         self._current_time_seconds = current_time_seconds
