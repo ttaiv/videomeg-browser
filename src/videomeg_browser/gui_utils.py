@@ -59,6 +59,10 @@ class ElapsedTimeLabel(QLabel):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent=parent)
+        if current_time_seconds < 0:
+            raise ValueError("Current time cannot be negative.")
+        if max_time_seconds < 0:
+            raise ValueError("Maximum time cannot be negative.")
         if current_time_seconds > max_time_seconds:
             logger.warning("Current time exceeds maximum time.")
         self._current_time_seconds = current_time_seconds
@@ -76,8 +80,12 @@ class ElapsedTimeLabel(QLabel):
 
     def set_current_time(self, current_time_seconds: float) -> None:
         """Update the current time displayed in the label."""
+        if current_time_seconds < 0:
+            raise ValueError("Current time cannot be negative.")
         if current_time_seconds > self._max_time_seconds:
             logger.warning("Current time exceeds maximum time.")
+
+        self._current_time_seconds = current_time_seconds
         self._current_time_text = self._format_time(current_time_seconds)
         self.setText(f"{self._current_time_text} / {self._max_time_text}")
 
@@ -87,6 +95,8 @@ class ElapsedTimeLabel(QLabel):
         Also updates the display format to include or exclude hours based on
         `max_time_seconds` being more or less than an hour.
         """
+        if max_time_seconds < 0:
+            raise ValueError("Maximum time cannot be negative.")
         if max_time_seconds < self._current_time_seconds:
             logger.warning("Maximum time is less than current time.")
         if max_time_seconds < 3600:
@@ -94,33 +104,23 @@ class ElapsedTimeLabel(QLabel):
         else:
             self._include_hours = True
 
+        self._max_time_seconds = max_time_seconds
         self._max_time_text = self._format_time(max_time_seconds)
         # Also update the current time text in case display format changed.
         self._current_time_text = self._format_time(self._current_time_seconds)
         self.setText(f"{self._current_time_text} / {self._max_time_text}")
 
-    def set_current_and_max_time(
-        self, current_time_seconds: float, max_time_seconds: float
-    ) -> None:
-        """Update both current and maximum time displayed in the label.
-
-        Also updates the display format to include or exclude hours based on
-        `max_time_seconds` being more or less than an hour.
-        """
-        if current_time_seconds > max_time_seconds:
-            logger.warning("Current time exceeds maximum time.")
-        self._current_time_seconds = current_time_seconds
-        # This handles also updating the current time text.
-        self.set_max_time(max_time_seconds)
-
     def _format_time(self, time_seconds: float) -> str:
-        """Format seconds as mm:ss or hh:mm:ss, depending on the include_hours flag."""
-        minutes, seconds = divmod(int(time_seconds), 60)
+        """Format seconds as mm:ss.mmm or hh:mm:ss.mmm, based on include_hours flag."""
+        total_seconds = int(time_seconds)
+        milliseconds = int((time_seconds - total_seconds) * 1000)
+
+        minutes, seconds = divmod(total_seconds, 60)
         if self._include_hours:
             hours, minutes = divmod(minutes, 60)
-            return f"{hours}:{minutes:02d}:{seconds:02d}"
+            return f"{hours}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}"
 
-        return f"{minutes}:{seconds:02d}"
+        return f"{minutes}:{seconds:02d}.{milliseconds:03d}"
 
 
 class IndexSlider(QWidget):

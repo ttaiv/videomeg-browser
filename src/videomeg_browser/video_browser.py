@@ -431,10 +431,9 @@ class VideoBrowser(SyncableMediaBrowser):
         """
         video_frame_idx = self._get_current_frame_index_of_selected_video()
         time_seconds = video_frame_idx / self._selected_video.fps
-        if new_max is None:
-            self._time_label.set_current_time(time_seconds)
-        else:
-            self._time_label.set_current_and_max_time(time_seconds, new_max)
+        self._time_label.set_current_time(time_seconds)
+        if new_max is not None:
+            self._time_label.set_max_time(new_max)
 
 
 class VideoView(QWidget):
