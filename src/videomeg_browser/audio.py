@@ -461,15 +461,24 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         # ------------------------------------------------------------------
         # Parse the raw audio data
         #
-        audio = np.zeros((self._n_channels, nsamp), dtype=np.float32)
+        total_samples = nsamp * self._n_channels
 
-        # NOTE: assuming the raw audio is interleaved
-        for i in range(0, nsamp * self._n_channels):
-            (samp_val,) = struct.unpack(
-                self.format_string,
-                self.raw_audio[i * bytes_per_sample : (i + 1) * bytes_per_sample],
-            )
-            audio[i % self._n_channels, i // self._n_channels] = samp_val
+        # Create a format string for unpacking all samples at once.
+        endian_char = self.format_string[0]
+        sample_type = self.format_string[1]
+        bulk_format_string = f"{endian_char}{total_samples}{sample_type}"
+
+        # Unpack all the samples.
+        unpacked_samples = struct.unpack(
+            bulk_format_string, self.raw_audio[: total_samples * bytes_per_sample]
+        )
+        # Convert the tuple to numpy array.
+        audio = np.array(unpacked_samples, dtype=np.float32)
+
+        # Reshape (n_channels, n_samples) layout.
+        # The data is interleaved, so reshape to (n_samples, n_channels) first
+        # and then transpose.
+        audio = audio.reshape(nsamp, self._n_channels).T
 
         if normalize:
             global_max = np.abs(audio).max()
