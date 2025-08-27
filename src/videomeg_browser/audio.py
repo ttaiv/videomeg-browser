@@ -433,9 +433,6 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         logger.info("Unpacking audio data, this may take a while...")
         self._compute_audio_timestamps()
 
-        # ------------------------------------------------------------------
-        # Parse the raw audio data
-        #
         total_samples = self.n_samples * self.n_channels
 
         # Create a format string for unpacking all samples at once.
