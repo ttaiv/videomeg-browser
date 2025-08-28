@@ -546,6 +546,20 @@ class AudioBrowser(QWidget, SyncableMediaBrowser):
             self.sigPositionChanged.emit(0, position_idx)
         return True
 
+    def get_current_position(self, media_idx: int) -> int:
+        """Get the index of the current sample position.
+
+        Parameter media_idx is ignored as this browser only supports a single audio
+        file.
+        """
+        if media_idx != 0:
+            logger.warning(
+                f"AudioBrowser only supports a single audio file, but was asked for "
+                f"current position of media on index {media_idx}. Returning position "
+                f"of the only audio file (index 0)."
+            )
+        return self.current_sample
+
     def jump_to_end(self, media_idx: int, signal: bool = True) -> None:
         """Display the last sample of the audio.
 
