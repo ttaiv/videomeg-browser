@@ -26,7 +26,7 @@ from .video_browser import VideoBrowser
 logger = logging.getLogger(__name__)
 
 
-class SyncedRawMediaBrowser(QObject):
+class BrowserSynchronizer(QObject):
     """Synchronizes MNE raw data browser with one or more media browsers.
 
     Parameters
@@ -59,7 +59,6 @@ class SyncedRawMediaBrowser(QObject):
         primary_browser: RawBrowserManager,
         secondary_browsers: list[SyncableMediaBrowser],
         aligners: list[list[RawMediaAligner]],
-        primary_media_idx: int = 0,
         max_sync_fps: int = 10,
         parent: QObject | None = None,
     ) -> None:
@@ -67,8 +66,9 @@ class SyncedRawMediaBrowser(QObject):
         self._primary_browser = primary_browser
         self._secondary_browsers = secondary_browsers
         self._aligners = aligners
-        self._primary_media_idx = primary_media_idx
         self._max_update_fps = max_sync_fps
+
+        self._primary_media_idx = 0
 
         # Set up synchronization
 
@@ -347,7 +347,7 @@ def browse_raw_with_audio(
     show: bool = True,
     max_sync_fps: int = 10,
     parent: QObject | None = None,
-) -> SyncedRawMediaBrowser:
+) -> BrowserSynchronizer:
     """Synchronize MNE raw data browser with a audio browser.
 
     Parameters
@@ -379,7 +379,7 @@ def browse_raw_with_audio(
     """
     # Set up the audio browser.
     audio_browser = AudioBrowser(audio, parent=None)
-    return SyncedRawMediaBrowser(
+    return BrowserSynchronizer(
         raw_browser,
         [audio_browser],
         [[aligner]],
@@ -400,7 +400,7 @@ def browse_raw_with_video_and_audio(
     max_sync_fps: int = 10,
     show: bool = True,
     parent: QObject | None = None,
-) -> SyncedRawMediaBrowser:
+) -> BrowserSynchronizer:
     """Synchronize MNE raw data browser with both video and audio browsers.
 
     Parameters
@@ -449,7 +449,7 @@ def browse_raw_with_video_and_audio(
     # Set up the audio browser.
     audio_browser = AudioBrowser(audio, parent=None)
 
-    return SyncedRawMediaBrowser(
+    return BrowserSynchronizer(
         raw_browser,
         [video_browser, audio_browser],
         [video_aligners, [audio_aligner]],
@@ -505,6 +505,6 @@ class Aapa(QObject):
                 dock.hide()
             self._docks.append(dock)
 
-        self._synchronizer = SyncedRawMediaBrowser(
+        self._synchronizer = BrowserSynchronizer(
             self._raw_browser_managers[0], media_browsers, aligners, parent=self
         )
