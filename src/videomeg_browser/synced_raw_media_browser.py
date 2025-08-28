@@ -55,10 +55,12 @@ class SyncedRawMediaBrowser(QObject):
 
     def __init__(
         self,
-        raw_browser: MNEQtBrowser,
+        raw_browsers: list[MNEQtBrowser],
         media_browsers: list[SyncableMediaBrowser],
         aligners: list[list[RawMediaAligner]],
         media_browser_titles: list[str],
+        raw_aligners: list[RawMediaAligner] | None = None,
+        main_raw_browser_idx: int = 0,
         show: bool = True,
         max_sync_fps: int = 10,
         parent: QObject | None = None,
@@ -66,30 +68,43 @@ class SyncedRawMediaBrowser(QObject):
         super().__init__(parent=parent)
         self._media_browsers = media_browsers
         self._aligners = aligners
+        self._raw_aligners = raw_aligners
+        self._main_raw_browser_idx = main_raw_browser_idx
         self._raw_update_max_fps = max_sync_fps
 
+        if len(raw_browsers) > 1 and raw_aligners is None:
+            raise ValueError(
+                "When multiple raw browsers are provided, raw_aligners must also "
+                "be provided to map between the raw browsers."
+            )
+
         # Wrap the raw browser to a class that exposes the necessary methods.
-        raw_browser_interface = RawBrowserInterface(raw_browser, parent=self)
+        raw_browser_interfaces = [
+            RawBrowserInterface(raw_browser, parent=self)
+            for raw_browser in raw_browsers
+        ]
         # Pass interface for manager that contains actual logic for managing the browser
         # in sync with the video browser.
-        self._raw_browser_manager = RawBrowserManager(
-            raw_browser_interface, parent=self
-        )
+        self._raw_browser_managers = [
+            RawBrowserManager(raw_browser_interface, parent=self)
+            for raw_browser_interface in raw_browser_interfaces
+        ]
         # Make sure that raw browser visibility matches the `show` parameter.
-        if show:
-            self._raw_browser_manager.show_browser()
-        else:
-            self._raw_browser_manager.hide_browser()
+        for raw_browser_manager in self._raw_browser_managers:
+            if show:
+                raw_browser_manager.show_browser()
+            else:
+                raw_browser_manager.hide_browser()
 
         # Dock the media browsers to the raw data browser.
         self._docks = []
         for media_browser, media_browser_title in zip(
             self._media_browsers, media_browser_titles
         ):
-            dock = QDockWidget(media_browser_title, raw_browser)
+            dock = QDockWidget(media_browser_title, raw_browsers[0])
             dock.setWidget(media_browser)
             dock.setFloating(True)
-            raw_browser.addDockWidget(Qt.RightDockWidgetArea, dock)
+            raw_browsers[0].addDockWidget(Qt.RightDockWidgetArea, dock)
             dock.resize(1000, 800)
             if not show:
                 dock.hide()
@@ -118,9 +133,14 @@ class SyncedRawMediaBrowser(QObject):
             )
 
         # When selected time of raw browser changes update each media in each browser.
-        self._raw_browser_manager.sigSelectedTimeChanged.connect(
-            self._sync_media_to_raw  # no throttling needed here
-        )
+        for raw_browser_idx, raw_browser_manager in enumerate(
+            self._raw_browser_managers
+        ):
+            raw_browser_manager.sigSelectedTimeChanged.connect(
+                functools.partial(
+                    self._on_raw_time_changed, raw_browser_idx
+                )  # no throttling needed here
+            )
 
         # When one browser starts playing, pause all other media browsers
         # to avoid mess in synchronization.
@@ -131,18 +151,20 @@ class SyncedRawMediaBrowser(QObject):
 
         # Consider raw data browser to be the main browser and start by
         # synchronizing the media browsers to the initial raw time.
-        initial_raw_time = self._raw_browser_manager.get_selected_time()
-        self._sync_media_to_raw(initial_raw_time)
+        initial_raw_time = self._raw_browser_managers[0].get_selected_time()
+        self._on_raw_time_changed(initial_raw_time)
 
     def show(self) -> None:
         """Show the synchronized raw and video browsers."""
-        self._raw_browser_manager.show_browser()
+        self._raw_browser_managers[0].show_browser()
         for dock in self._docks:
             dock.show()
 
-    @Slot(float)
-    def _sync_media_to_raw(self, raw_time_seconds: float) -> None:
-        """Update the media browsers based on the selected raw time."""
+    @Slot(int, float)
+    def _on_raw_time_changed(
+        self, raw_browser_idx: int, raw_time_seconds: float
+    ) -> None:
+        """Update the media browsers and possibly other raw browsers when raw time changes."""
         logger.debug(
             "Detected change in raw data browser's selected time, syncing media."
         )
@@ -157,6 +179,18 @@ class SyncedRawMediaBrowser(QObject):
                     raw_time_seconds
                 )
                 self._update_media(browser_idx, media_idx, mapping_to_media)
+
+        if len(self._raw_browser_managers) > 1:
+            """
+            assert self._raw_aligners is not None
+            for other_raw_browser_idx, raw_aligner in enumerate(self._raw_aligners):
+                if other_raw_browser_idx == raw_browser_idx:
+                    continue
+                mapping_to_other_raw = raw_aligner.raw_time_to_media_sample_index(
+                    raw_time_seconds
+                )
+                self._update_raw(other_raw_browser_idx, mapping_to_other_raw)
+            """
 
     def _update_media(
         self, browser_idx: int, media_idx: int, mapping: MappingResult
@@ -215,7 +249,7 @@ class SyncedRawMediaBrowser(QObject):
         mapping_to_raw = browser_aligners[media_idx].media_sample_index_to_raw_time(
             position_idx
         )
-        mapping_success = self._update_raw(mapping_to_raw)
+        mapping_success = self._update_raw(self._main_raw_browser_idx, mapping_to_raw)
         if mapping_success:
             browser_that_changed.set_sync_status(SyncStatus.SYNCHRONIZED, media_idx)
         else:
@@ -223,7 +257,7 @@ class SyncedRawMediaBrowser(QObject):
             browser_that_changed.set_sync_status(SyncStatus.NO_RAW_DATA, media_idx)
         # Get the resulting raw time by asking it from the browser and use
         # it to update other media (if any).
-        raw_time_seconds = self._raw_browser_manager.get_selected_time()
+        raw_time_seconds = self._raw_browser_managers[0].get_selected_time()
         for _browser_idx, aligners in enumerate(self._aligners):
             for _media_idx, aligner in enumerate(aligners):
                 if _media_idx == media_idx and _browser_idx == browser_idx:
@@ -239,7 +273,7 @@ class SyncedRawMediaBrowser(QObject):
                 )
                 self._update_media(_browser_idx, _media_idx, mapping_to_media)
 
-    def _update_raw(self, mapping: MappingResult) -> bool:
+    def _update_raw(self, browser_idx: int, mapping: MappingResult) -> bool:
         """Update raw browser view based on mapping from media frame index to raw time.
 
         If the media frame index is out of bounds of the raw data, moves the raw view
@@ -260,7 +294,9 @@ class SyncedRawMediaBrowser(QObject):
             case MappingSuccess(result=raw_time):
                 # Video frame index has a corresponding raw time point
                 logger.debug(f"Setting raw browser to time: {raw_time:.3f} seconds.")
-                self._raw_browser_manager.set_selected_time_no_signal(raw_time)
+                self._raw_browser_managers[browser_idx].set_selected_time_no_signal(
+                    raw_time
+                )
                 return True
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
@@ -268,14 +304,14 @@ class SyncedRawMediaBrowser(QObject):
                 logger.debug(
                     "No raw data for this small video frame, moving raw view to start."
                 )
-                self._raw_browser_manager.jump_to_start()
+                self._raw_browser_managers[browser_idx].jump_to_start()
                 return False
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
                 logger.debug(
                     "No raw data for this large video frame, moving raw view to end."
                 )
-                self._raw_browser_manager.jump_to_end()
+                self._raw_browser_managers[browser_idx].jump_to_end()
                 return False
 
             case _:
