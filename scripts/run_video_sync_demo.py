@@ -61,23 +61,14 @@ def main() -> None:
         return raw.time_as_index(time, use_rounding=True)[0]
 
     # Set up mapping between raw data points and video frames
-    aligner = RawMediaAligner(
-        raw_timestamps_ms,
-        video_timestamps_ms,
-        raw_times=raw.times,
-        raw_time_to_index=raw_time_to_index,
-    )
+    aligner = RawMediaAligner(raw_timestamps_ms, video_timestamps_ms)
 
     app = QApplication([])
 
     # Instantiate raw browser
     raw_browser = raw.plot(block=False, show=False)
 
-    browser = browse_raw_with_video(
-        raw_browser,
-        [video_file],
-        [aligner],
-    )
+    browser = browse_raw_with_video(raw_browser, raw, [video_file], [aligner])
 
     app.exec_()  # Start the Qt event loop
     video_file.close()

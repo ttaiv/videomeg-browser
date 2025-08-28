@@ -27,23 +27,23 @@ logger = logging.getLogger(__name__)
 
 
 class BrowserSynchronizer(QObject):
-    """Synchronizes MNE raw data browser with one or more media browsers.
+    """Synchronizes MNE raw data browser with one or more other browsers.
+
+    Other browsers can be video, audio or other MNE raw data browsers that implement
+    the `SyncableMediaBrowser` interface.
 
     Parameters
     ----------
-    raw_browser : mne_qt_browser.figure.MNEQtBrowser
-        The MNE raw data browser object to be synchronized with the media browser.
-        This can be created with 'plot' method of MNE raw data object when using qt
-        backend.
-    media_browsers : list[SyncableMediaBrowser]
-        The media browsers to be synchronized with the raw data browser.
+    primary_browser : RawBrowserManager
+        The primary raw data browser manager. This browser is considered the main
+        browser and other browsers are synchronized to it.
+    secondary_browsers : list[SyncableMediaBrowser]
+        A list of other browsers to be synchronized with the primary raw data browser.
     aligners : list[list[RawMediaAligner]]
         A list of lists of `RawMediaAligner` instances. aligners[i][j] provides
-        the mapping between raw data time points and media samples for the j-th media
-        file in the i-th media browser.
-    media_browser_titles : list[str]
-        Titles for the media browsers. Each title corresponds to a media browser in
-        `media_browsers`.
+        the mapping between the primary raw data browser and samples for the j-th media
+        file in the i-th secondary browser. The order of the aligners must match the
+        order of the secondary browsers and their media files..
     max_sync_fps : int, optional
         The maximum frames per second for synchronizing the raw data browser and media
         browser. This determines how often the synchronization updates can happen and
