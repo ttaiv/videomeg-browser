@@ -3,7 +3,6 @@
 import logging
 from abc import ABC
 from collections import Counter
-from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
@@ -56,13 +55,6 @@ class RawMediaAligner:
     media_timestamps : NDArray[np.floating]
         1-D sorted array of media timestamps used for synchronization.
         In Helsinki VideoMEG project these are unix times in milliseconds.
-    raw_times : NDArray[np.floating]
-        1-D array of raw data times in seconds, used for converting raw indices
-        to actual time points.
-    raw_time_to_index : Callable[[float], int]
-        A function that converts a raw time point in seconds to the corresponding
-        index in the raw data. Required for converting arbitrary raw time
-        to a discrete index in the raw data.
     timestamp_unit : Literal["milliseconds", "seconds"], optional
         The unit of the timestamps in `raw_timestamps` and `media_timestamps`.
         By default "milliseconds".
@@ -77,13 +69,9 @@ class RawMediaAligner:
         self,
         raw_timestamps: NDArray[np.floating],
         media_timestamps: NDArray[np.floating],
-        raw_times: NDArray[np.floating],
-        raw_time_to_index: Callable[[float], int],
         timestamp_unit: Literal["milliseconds", "seconds"] = "milliseconds",
         select_on_tie: Literal["left", "right"] = "left",
     ) -> None:
-        self._raw_times = raw_times
-        self._raw_time_to_index = raw_time_to_index
         self._timestamp_unit = timestamp_unit
         self._select_on_tie = select_on_tie
         # Internally store timestamps in milliseconds.
@@ -117,7 +105,6 @@ class RawMediaAligner:
             self._build_mapping(
                 source_timestamps_ms=self._media_timestamps_ms,
                 target_timestamps_ms=self._raw_timestamps_ms,
-                convert_raw_results_to_seconds=True,
             )
         )
         self._log_mapping_results(
@@ -129,12 +116,11 @@ class RawMediaAligner:
             header="Mapping results from media frame indices to raw times:",
         )
 
-    def raw_time_to_media_sample_index(self, raw_time_seconds: float) -> MappingResult:
-        """Convert a time point from raw data (in seconds) to media index."""
+    def raw_time_to_media_sample_index(self, raw_idx: int) -> MappingResult:
+        """Convert an index of raw data to media index."""
         # Find the raw index that corresponds to the given time point.
         # We cannot use the given time directly, as it may not match exactly with raw
         # times.
-        raw_idx = self._raw_time_to_index(raw_time_seconds)
         return self._raw_idx_to_media_frame_idx[raw_idx]
 
     def media_sample_index_to_raw_time(self, media_frame_idx: int) -> MappingResult:
@@ -154,11 +140,6 @@ class RawMediaAligner:
         if not np.all(np.diff(self._media_timestamps_ms) >= 0):
             raise ValueError(
                 "Media timestamps are not strictly increasing. "
-                "This is required for the mapping to work correctly."
-            )
-        if not len(self._raw_timestamps_ms) == len(self._raw_times):
-            raise ValueError(
-                "Length of raw timestamps does not match the length of raw times. "
                 "This is required for the mapping to work correctly."
             )
 
@@ -392,15 +373,7 @@ class RawMediaAligner:
         )
         self._log_mapping_errors(errors_ms)
 
-        if convert_raw_results_to_seconds:
-            # Convert the raw indices to actual time points in seconds
-            closest_raw_times = self._raw_times[closest_target_indices]
-            mapping_results = closest_raw_times
-        else:
-            # The results are the plain indices of the target timestamps
-            mapping_results = closest_target_indices
-
-        for source_idx, result in zip(valid_source_indices, mapping_results):
+        for source_idx, result in zip(valid_source_indices, closest_target_indices):
             # Use .item() to convert numpy scalar to a native Python int or float.
             mapping[source_idx] = MappingSuccess(result=result.item())
 
