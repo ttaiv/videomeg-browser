@@ -159,6 +159,10 @@ class VideoBrowser(QWidget, SyncableMediaBrowser):
 
         self._update_buttons_enabled()
 
+    def get_current_position(self, media_idx: int) -> int:
+        """Return the current position index of the specified video."""
+        return self._video_views[media_idx].current_frame_idx
+
     @property
     def is_playing(self) -> bool:
         """Return whether the video is currently playing."""

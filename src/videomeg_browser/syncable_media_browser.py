@@ -35,6 +35,10 @@ class SyncableMediaBrowser:
             raise TypeError(f"{cls.__name__} must implement jump_to_end method.")
         if cls.jump_to_start is SyncableMediaBrowser.jump_to_start:
             raise TypeError(f"{cls.__name__} must implement jump_to_start method.")
+        if cls.get_current_position is SyncableMediaBrowser.get_current_position:
+            raise TypeError(
+                f"{cls.__name__} must implement get_current_position method."
+            )
 
     def set_position(
         self, position_idx: int, media_idx: int, signal: bool = True
@@ -115,6 +119,12 @@ class SyncableMediaBrowser:
     def pause_playback(self) -> None:
         """Pause playback of the currently playing media."""
         pass  # Empty default implementation
+
+    def get_current_position(self, media_idx: int) -> int:
+        """Return the current position index of the specified media."""
+        raise NotImplementedError(
+            "get_current_position method must be implemented by subclasses."
+        )
 
     @property
     def is_playing(self) -> bool:
