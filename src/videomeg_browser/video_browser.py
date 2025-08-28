@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 pg.setConfigOptions(imageAxisOrder="row-major")
 
 
-class VideoBrowser(SyncableMediaBrowser):
+class VideoBrowser(QWidget, SyncableMediaBrowser):
     """A browser for viewing video frames from one or more video files.
 
     Parameters
