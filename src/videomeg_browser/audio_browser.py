@@ -423,7 +423,7 @@ class AudioView(QWidget):
         )
 
 
-class AudioBrowser(SyncableMediaBrowser):
+class AudioBrowser(QWidget, SyncableMediaBrowser):
     """Qt widget for browsing audio with playback controls.
 
     This browser allows interactive visualization of audio data from AudioFile objects.

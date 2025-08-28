@@ -3,7 +3,6 @@
 from enum import Enum
 
 from qtpy.QtCore import Signal  # type: ignore
-from qtpy.QtWidgets import QWidget
 
 
 class SyncStatus(Enum):
@@ -14,7 +13,7 @@ class SyncStatus(Enum):
     NO_MEDIA_DATA = "no_media_data"  # No media data available for the current raw data
 
 
-class SyncableMediaBrowser(QWidget):
+class SyncableMediaBrowser:
     """Base class for syncable video and audio browser widgets.
 
     Defines methods and signal that subclasses must implement.
