@@ -56,17 +56,23 @@ class SyncedRawMediaBrowser(QObject):
 
     def __init__(
         self,
-        browsers: list[SyncableMediaBrowser],
+        main_browser: SyncableMediaBrowser,
+        extra_browsers: list[SyncableMediaBrowser],
         aligners: list[list[RawMediaAligner]],
-        main_browser_idx: int = 0,
         main_media_idx: int = 0,
         max_sync_fps: int = 10,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent=parent)
-        self._browsers = browsers
+        self._main_browser = main_browser
+        self._extra_browsers = extra_browsers
+
+        # Main browser is first in the list, aligner for extra browser on index
+        # x is found from aligner list on index x - 1.
+        self._all_browsers = [main_browser] + extra_browsers
+        self._main_browser_idx = 0
+
         self._aligners = aligners
-        self._main_browser_idx = main_browser_idx
         self._main_media_idx = main_media_idx
         self._max_update_fps = max_sync_fps
 
@@ -77,13 +83,13 @@ class SyncedRawMediaBrowser(QObject):
         # One throttler for each media browser
         self._throttlers = [
             BufferedThrottler(self._min_sync_interval_ms, parent=self)
-            for _ in self._browsers
+            for _ in self._all_browsers
         ]
 
         # When the position in a media changes
         # update the raw browser and other media through throttler.
         for browser_idx, (media_browser, throttler) in enumerate(
-            zip(self._browsers, self._throttlers)
+            zip(self._all_browsers, self._throttlers)
         ):
             # Media browser emits (media_idx, position_idx)
             media_browser.sigPositionChanged.connect(throttler.trigger)
@@ -94,16 +100,14 @@ class SyncedRawMediaBrowser(QObject):
 
         # When one browser starts playing, pause all other media browsers
         # to avoid mess in synchronization.
-        for browser_idx, browser in enumerate(self._browsers):
+        for browser_idx, browser in enumerate(self._all_browsers):
             browser.sigPlaybackStateChanged.connect(
                 functools.partial(self._on_playback_state_changed, browser_idx)
             )
 
         # Consider raw data browser to be the main browser and start by
         # synchronizing the media browsers to the initial raw time.
-        initial_position = self._browsers[main_browser_idx].get_current_position(
-            media_idx=0
-        )
+        initial_position = self._main_browser.get_current_position(self._main_media_idx)
         self._sync_other_browsers(
             self._main_browser_idx, self._main_media_idx, initial_position
         )
@@ -123,7 +127,7 @@ class SyncedRawMediaBrowser(QObject):
         # NOTE: The signal=False is used to prevent the media browser from
         # emitting the sigPositionChanged signal, which would trigger update of the
         # raw browser and cause an infinite loop of updates.
-        browser_to_update = self._browsers[browser_idx]
+        browser_to_update = self._all_browsers[browser_idx]
         match mapping:
             case MappingSuccess(result=position_idx):
                 # Raw time point has a corresponding media frame/sample.
@@ -164,8 +168,8 @@ class SyncedRawMediaBrowser(QObject):
     ) -> None:
         """Update raw data browser's view and other media when media changes."""
         logger.debug(
-            f"Detected change in media {media_idx + 1} of "
-            f"browser {browser_idx + 1}/{len(self._browsers)} to "
+            f"Detected change in media {media_idx} of "
+            f"browser {browser_idx + 1}/{len(self._all_browsers)} to "
             f"position index: {position_idx}. Syncing other browsers."
         )
 
@@ -173,24 +177,11 @@ class SyncedRawMediaBrowser(QObject):
             logger.debug(
                 "Change was in the main browser, looping over other browsers and updating."
             )
-            # Easy, just update all other browsers.
-            for _browser_idx, aligners in enumerate(self._aligners):
-                for _media_idx, aligner in enumerate(aligners):
-                    if _media_idx == media_idx and _browser_idx == browser_idx:
-                        # Skip the media that triggered the change.
-                        continue
-                    logger.debug(
-                        f"Syncing media {_media_idx + 1}/{len(aligners)} of browser "
-                        f"{_browser_idx + 1}/{len(self._browsers)} to raw index: "
-                        f"{position_idx}."
-                    )
-                    mapping_to_media = aligner.raw_time_to_media_sample_index(
-                        position_idx
-                    )
-                    self._update_browser(_browser_idx, _media_idx, mapping_to_media)
+            self.update_extra_browsers(position_idx, exclude_idx=None)
+
         else:
             # Fist sync main browser, then others.
-            browser_that_changed = self._browsers[browser_idx]
+            browser_that_changed = self._all_browsers[browser_idx]
             aligner = self._aligners[browser_idx - 1][media_idx]
 
             mapping = aligner.media_sample_index_to_raw_time(position_idx)
@@ -205,22 +196,30 @@ class SyncedRawMediaBrowser(QObject):
 
             # Get the resulting raw time by asking it from the browser and use
             # it to update other media (if any).
-            main_browser = self._browsers[self._main_browser_idx]
-            raw_time_index = main_browser.get_current_position(self._main_media_idx)
-            for _browser_idx, aligners in enumerate(self._aligners):
-                for _media_idx, aligner in enumerate(aligners):
-                    if _media_idx == media_idx and _browser_idx == browser_idx:
-                        # Skip the media that triggered the change.
-                        continue
-                    logger.debug(
-                        f"Syncing media {_media_idx + 1}/{len(aligners)} of browser "
-                        f"{_browser_idx + 1}/{len(self._browsers)} to raw index: "
-                        f"{raw_time_index}."
-                    )
-                    mapping_to_media = aligner.raw_time_to_media_sample_index(
-                        raw_time_index
-                    )
-                    self._update_browser(_browser_idx, _media_idx, mapping_to_media)
+            raw_index = self._main_browser.get_current_position(self._main_media_idx)
+            self.update_extra_browsers(
+                raw_index, exclude_idx=(browser_idx - 1, media_idx)
+            )
+
+    def update_extra_browsers(
+        self, position_idx: int, exclude_idx: tuple[int, int] | None
+    ) -> None:
+        _exclude_idx = exclude_idx if exclude_idx is not None else (-1, -1)
+        for extra_browser_idx, aligners in enumerate(self._aligners):
+            for media_idx, aligner in enumerate(aligners):
+                if (
+                    extra_browser_idx == _exclude_idx[0]
+                    and media_idx == _exclude_idx[1]
+                ):
+                    logger.debug("Skipping update")
+                    continue
+                logger.debug(
+                    f"Syncing media {media_idx + 1}/{len(aligners)} of extra "
+                    f"browser {extra_browser_idx + 1}/{len(self._extra_browsers)} "
+                    f"to position index {position_idx}."
+                )
+                mapping_to_media = aligner.raw_time_to_media_sample_index(position_idx)
+                self._update_browser(extra_browser_idx + 1, media_idx, mapping_to_media)
 
     @Slot(int, int, bool)
     def _on_playback_state_changed(
@@ -236,7 +235,7 @@ class SyncedRawMediaBrowser(QObject):
 
     def _pause_other_media_browsers(self, excluded_browser_idx: int) -> None:
         """Pause all other media browsers except the one with the given index."""
-        for browser_idx, media_browser in enumerate(self._browsers):
+        for browser_idx, media_browser in enumerate(self._all_browsers):
             if excluded_browser_idx != browser_idx and media_browser.is_playing:
                 logger.debug(f"Pausing media browser with index {browser_idx}.")
                 media_browser.pause_playback()
@@ -523,5 +522,5 @@ class Aapa(QObject):
             self._docks.append(dock)
 
         self._synchronizer = SyncedRawMediaBrowser(
-            self._raw_browser_managers + media_browsers, aligners, parent=self
+            self._raw_browser_managers[0], media_browsers, aligners, parent=self
         )
