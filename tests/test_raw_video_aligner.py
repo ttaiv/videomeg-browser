@@ -1,16 +1,15 @@
-from collections.abc import Callable
 from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
 import pytest
 
-from videomeg_browser.raw_media_aligner import (
+from videomeg_browser.timestamp_aligner import (
     MapFailureReason,
     MappingFailure,
     MappingResult,
     MappingSuccess,
-    RawMediaAligner,
+    TimestampAligner,
 )
 
 
@@ -41,28 +40,24 @@ def test_with_matching_timestamps(
     # Raw timestamps corresponding to each raw data point in milliseconds
     raw_timestamps_ms = video_timestamps_ms.copy()
 
-    # These could be anything just as long there as as many as the raw timestamps.
-    raw_times = np.arange(len(raw_timestamps_ms), dtype=np.float64)
-    raw_time_to_index = _make_simple_raw_time_to_index_function(raw_times)
-
-    aligner = RawMediaAligner(
+    aligner = TimestampAligner(
         raw_timestamps_ms,
         video_timestamps_ms,
-        raw_times=raw_times,
-        raw_time_to_index=raw_time_to_index,
     )
 
-    # Test that mapping each raw time yields the correct video frame index.
+    # Test that mapping each raw index yields the correct video frame index.
     # As the timestamps match, each resulting video frame index should be the
     # same as the raw time index.
-    for correct_video_idx, raw_time in enumerate(raw_times):
-        mapping_to_media_idx = aligner.raw_time_to_media_sample_index(raw_time)
+    for raw_idx in range(len(raw_timestamps_ms)):
+        correct_video_idx = raw_idx
+        mapping_to_media_idx = aligner.a_index_to_b_index(raw_idx)
         _assert_mapping_success(mapping_to_media_idx, expected_value=correct_video_idx)
 
     # Test the other way around, mapping video frame index to raw time.
-    for video_frame_idx, correct_raw_time in enumerate(raw_times):
-        mapping_to_raw_time = aligner.media_sample_index_to_raw_time(video_frame_idx)
-        _assert_mapping_success(mapping_to_raw_time, expected_value=correct_raw_time)
+    for video_frame_idx in range(len(video_timestamps_ms)):
+        correct_raw_idx = video_frame_idx
+        mapping_to_raw_time = aligner.b_index_to_a_index(video_frame_idx)
+        _assert_mapping_success(mapping_to_raw_time, expected_value=correct_raw_idx)
 
 
 @pytest.mark.parametrize(
@@ -119,14 +114,8 @@ def test_with_constant_interval_timestamps(
         num=int(raw_sfreq * duration_seconds),  # number of raw samples
         endpoint=False,
     )
-    # Create raw times that start from zero and correspond to sampling frequency.
-    raw_times = np.linspace(
-        0, duration_seconds, num=int(raw_sfreq * duration_seconds), endpoint=False
-    )
 
-    _run_alignment_test(
-        video_timestamps_ms, raw_timestamps_ms, raw_times, select_on_tie
-    )
+    _run_alignment_test(video_timestamps_ms, raw_timestamps_ms, select_on_tie)
 
 
 @pytest.mark.parametrize(
@@ -196,20 +185,12 @@ def test_with_random_timestamps(
         "Video timestamps must be strictly increasing. Fix the test."
     )
 
-    # Create raw times that start from zero and correspond to sampling frequency.
-    raw_times = np.linspace(
-        0, duration_seconds, num=int(raw_sfreq * duration_seconds), endpoint=False
-    )
-
-    _run_alignment_test(
-        video_timestamps_ms, raw_timestamps_ms, raw_times, select_on_tie
-    )
+    _run_alignment_test(video_timestamps_ms, raw_timestamps_ms, select_on_tie)
 
 
 def _run_alignment_test(
     video_timestamps_ms: npt.NDArray[np.floating],
     raw_timestamps_ms: npt.NDArray[np.floating],
-    raw_times: npt.NDArray[np.floating],
     select_on_tie: Literal["left", "right"],
 ) -> None:
     """Run the alignment test with given video and raw timestamps and raw times.
@@ -217,14 +198,10 @@ def _run_alignment_test(
     Tests mapping all the video frame indices (indices of `video_timestamps_ms`) to raw
     times and all `raw_times` to video frame indices.
     """
-    raw_time_to_index = _make_simple_raw_time_to_index_function(raw_times)
-
     # Create the aligner to test.
-    aligner = RawMediaAligner(
+    aligner = TimestampAligner(
         raw_timestamps_ms,
         video_timestamps_ms,
-        raw_times=raw_times,
-        raw_time_to_index=raw_time_to_index,
         select_on_tie=select_on_tie,
     )
 
@@ -240,12 +217,10 @@ def _run_alignment_test(
     # Test mapping each video frame index to a raw time and assert correct mapping.
     for test_video_frame_idx, video_ts in enumerate(video_timestamps_ms):
         # Use the aligner to get a raw time.
-        mapping_to_raw_time = aligner.media_sample_index_to_raw_time(
-            test_video_frame_idx
-        )
+        mapping_to_raw_idx = aligner.b_index_to_a_index(test_video_frame_idx)
         # Manually calculate the raw time closest to the video timestamp.
-        closest_raw_time = _find_closest_raw_time(
-            raw_timestamps_ms, video_ts, raw_times, side=select_on_tie
+        closest_raw_idx = _find_closest_raw_idx(
+            raw_timestamps_ms, video_ts, side=select_on_tie
         )
         # Assert that mapping result is either failure with appropriate reason or a
         # success with the closest raw time, depending on min and max valid timestamps.
@@ -253,16 +228,14 @@ def _run_alignment_test(
             source_ts=video_ts,
             min_valid_source_ts=video_timestamp_valid_range[0],
             max_valid_source_ts=video_timestamp_valid_range[1],
-            mapping_result=mapping_to_raw_time,
-            result_if_success=closest_raw_time,
+            mapping_result=mapping_to_raw_idx,
+            result_if_success=closest_raw_idx,
         )
 
     # Do the same but vice versa: map each raw time to video frame index and check
     # correctness.
-    for test_raw_time, raw_ts in zip(raw_times, raw_timestamps_ms):
-        mapping_to_media_frame_idx = aligner.raw_time_to_media_sample_index(
-            test_raw_time
-        )
+    for test_raw_idx, raw_ts in enumerate(raw_timestamps_ms):
+        mapping_to_media_frame_idx = aligner.a_index_to_b_index(test_raw_idx)
         closest_video_frame_idx = _find_closest_video_frame_index(
             video_timestamps_ms, raw_ts, side=select_on_tie
         )
@@ -296,12 +269,11 @@ def _find_closest_video_frame_index(
     return int(closest_video_frame_idx)
 
 
-def _find_closest_raw_time(
+def _find_closest_raw_idx(
     raw_timestamps: npt.NDArray[np.floating],
     video_timestamp: float,
-    raw_times: npt.NDArray[np.floating],
     side: Literal["left", "right"],
-) -> float:
+) -> int:
     """Find the raw time closest to a video timestamp to be used as ground truth."""
     if side == "left":
         # Use argmin nomally, as it returns the first occurrence of the minimum value.
@@ -313,8 +285,7 @@ def _find_closest_raw_time(
     else:
         raise ValueError(f"Invalid side '{side}'. Use 'left' or 'right'.")
 
-    closest_raw_time = raw_times[closest_raw_idx]
-    return closest_raw_time
+    return int(closest_raw_idx)
 
 
 def _assert_correct_mapping(
@@ -354,22 +325,6 @@ def _assert_correct_mapping(
         )
     else:
         _assert_mapping_success(mapping_result, expected_value=result_if_success)
-
-
-def _make_simple_raw_time_to_index_function(
-    raw_times: npt.NDArray[np.floating],
-) -> Callable[[float], int]:
-    """Return a function that maps raw time to its index in `raw_times`."""
-
-    def raw_time_to_index(time: float) -> int:
-        """Convert a time in seconds to the corresponding index in the raw data."""
-        # Assume that all input raw times are directly found in the raw timestamps.
-        matches = (raw_times == time).nonzero()[0]
-        if len(matches) == 0:
-            raise ValueError(f"Time {time} not found in `raw_times`")
-        return matches[0]  # return first matching index
-
-    return raw_time_to_index
 
 
 def _assert_mapping_success(

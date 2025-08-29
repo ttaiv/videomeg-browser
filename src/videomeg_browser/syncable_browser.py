@@ -1,9 +1,8 @@
-"""Contains the base class for syncable media browser widgets."""
+"""Contains the base class for syncable browser widgets."""
 
 from enum import Enum
 
 from qtpy.QtCore import Signal  # type: ignore
-from qtpy.QtWidgets import QWidget
 
 
 class SyncStatus(Enum):
@@ -14,7 +13,7 @@ class SyncStatus(Enum):
     NO_MEDIA_DATA = "no_media_data"  # No media data available for the current raw data
 
 
-class SyncableMediaBrowser(QWidget):
+class SyncableBrowser:
     """Base class for syncable video and audio browser widgets.
 
     Defines methods and signal that subclasses must implement.
@@ -30,18 +29,16 @@ class SyncableMediaBrowser(QWidget):
 
     def __init_subclass__(cls) -> None:
         """Ensure that subclasses implement required methods."""
-        if cls.set_position is SyncableMediaBrowser.set_position:
+        if cls.set_position is SyncableBrowser.set_position:
             raise TypeError(f"{cls.__name__} must implement set_position method.")
-        if cls.jump_to_end is SyncableMediaBrowser.jump_to_end:
+        if cls.jump_to_end is SyncableBrowser.jump_to_end:
             raise TypeError(f"{cls.__name__} must implement jump_to_end method.")
-        if cls.jump_to_start is SyncableMediaBrowser.jump_to_start:
+        if cls.jump_to_start is SyncableBrowser.jump_to_start:
             raise TypeError(f"{cls.__name__} must implement jump_to_start method.")
-        if cls.start_playback is SyncableMediaBrowser.start_playback:
-            raise TypeError(f"{cls.__name__} must implement start_playback method.")
-        if cls.pause_playback is SyncableMediaBrowser.pause_playback:
-            raise TypeError(f"{cls.__name__} must implement pause_playback method.")
-        if cls.is_playing is SyncableMediaBrowser.is_playing:
-            raise TypeError(f"{cls.__name__} must implement is_playing property.")
+        if cls.get_current_position is SyncableBrowser.get_current_position:
+            raise TypeError(
+                f"{cls.__name__} must implement get_current_position method."
+            )
 
     def set_position(
         self, position_idx: int, media_idx: int, signal: bool = True
@@ -117,19 +114,19 @@ class SyncableMediaBrowser(QWidget):
         media_idx : int
             Index of the media to start playing.
         """
-        raise NotImplementedError(
-            "start_playback method must be implemented by subclasses."
-        )
+        pass  # Empty default implementation
 
     def pause_playback(self) -> None:
         """Pause playback of the currently playing media."""
+        pass  # Empty default implementation
+
+    def get_current_position(self, media_idx: int) -> int:
+        """Return the current position index of the specified media."""
         raise NotImplementedError(
-            "pause_playback method must be implemented by subclasses."
+            "get_current_position method must be implemented by subclasses."
         )
 
     @property
     def is_playing(self) -> bool:
         """Return whether the media is currently playing."""
-        raise NotImplementedError(
-            "is_playing property must be implemented by subclasses."
-        )
+        return False  # Default implementation

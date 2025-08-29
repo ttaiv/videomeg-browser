@@ -13,8 +13,8 @@ from mne.datasets import sample
 from qtpy.QtWidgets import QApplication
 
 from videomeg_browser.audio import AudioFileHelsinkiVideoMEG
-from videomeg_browser.raw_media_aligner import RawMediaAligner
 from videomeg_browser.synced_raw_media_browser import browse_raw_with_video_and_audio
+from videomeg_browser.timestamp_aligner import TimestampAligner
 from videomeg_browser.video import VideoFileHelsinkiVideoMEG
 
 BASE_PATH = "/u/69/taivait1/unix/video_meg_testing/2025-07-11_MEG2MEG_test/"
@@ -60,32 +60,27 @@ def main() -> None:
     end_ts = start_ts + 60 * 1000  # End at 60 seconds later (convert to milliseconds)
     raw_timestamps_ms = np.linspace(start_ts, end_ts, raw.n_times, endpoint=False)
 
-    # Define function for converting raw time to index
-    def raw_time_to_index(time: float) -> int:
-        """Convert a time in seconds to the corresponding index in the raw data."""
-        return raw.time_as_index(time, use_rounding=True)[0]
-
     # Create an aligner for each video and audio.
-    vid_aligner1 = RawMediaAligner(
-        raw_timestamps=raw_timestamps_ms,
-        media_timestamps=video1_timestamps_ms,
-        raw_times=raw.times,
-        raw_time_to_index=raw_time_to_index,
+    vid_aligner1 = TimestampAligner(
+        timestamps_a=raw_timestamps_ms,
+        timestamps_b=video1_timestamps_ms,
         timestamp_unit="milliseconds",
+        name_a="raw",
+        name_b="video1",
     )
-    vid_aligner2 = RawMediaAligner(
-        raw_timestamps=raw_timestamps_ms,
-        media_timestamps=video2_timestamps_ms,
-        raw_times=raw.times,
-        raw_time_to_index=raw_time_to_index,
+    vid_aligner2 = TimestampAligner(
+        timestamps_a=raw_timestamps_ms,
+        timestamps_b=video2_timestamps_ms,
         timestamp_unit="milliseconds",
+        name_a="raw",
+        name_b="video2",
     )
-    audio_aligner = RawMediaAligner(
-        raw_timestamps=raw_timestamps_ms,
-        media_timestamps=audio_timestamps_ms,
-        raw_times=raw.times,
-        raw_time_to_index=raw_time_to_index,
+    audio_aligner = TimestampAligner(
+        timestamps_a=raw_timestamps_ms,
+        timestamps_b=audio_timestamps_ms,
         timestamp_unit="milliseconds",
+        name_a="raw",
+        name_b="audio",
     )
 
     # Start the browser.
@@ -93,6 +88,7 @@ def main() -> None:
     raw_browser = raw.plot(block=False, show=False)
     browser = browse_raw_with_video_and_audio(
         raw_browser,
+        raw,
         [video1, video2],
         [vid_aligner1, vid_aligner2],
         audio,

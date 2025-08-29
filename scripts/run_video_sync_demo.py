@@ -13,8 +13,8 @@ from numpy.typing import NDArray
 from qtpy.QtWidgets import QApplication
 
 from videomeg_browser.comp_tstamps import comp_tstamps
-from videomeg_browser.raw_media_aligner import RawMediaAligner
 from videomeg_browser.synced_raw_media_browser import browse_raw_with_video
+from videomeg_browser.timestamp_aligner import TimestampAligner
 from videomeg_browser.video import VideoFileHelsinkiVideoMEG
 
 
@@ -55,17 +55,12 @@ def main() -> None:
     raw_timestamps_ms = get_raw_timestamps(raw, RAW_TIMING_CHANNEL)
     video_timestamps_ms = video_file.timestamps_ms
 
-    # Define function for converting raw time to index
-    def raw_time_to_index(time: float) -> int:
-        """Convert a time in seconds to the corresponding index in the raw data."""
-        return raw.time_as_index(time, use_rounding=True)[0]
-
     # Set up mapping between raw data points and video frames
-    aligner = RawMediaAligner(
+    aligner = TimestampAligner(
         raw_timestamps_ms,
         video_timestamps_ms,
-        raw_times=raw.times,
-        raw_time_to_index=raw_time_to_index,
+        name_a="raw",
+        name_b="video",
     )
 
     app = QApplication([])
@@ -75,6 +70,7 @@ def main() -> None:
 
     browser = browse_raw_with_video(
         raw_browser,
+        raw,
         [video_file],
         [aligner],
     )

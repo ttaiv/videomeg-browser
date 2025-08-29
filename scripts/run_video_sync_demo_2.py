@@ -11,9 +11,9 @@ import scipy
 from mne.datasets import sample
 from qtpy.QtWidgets import QApplication
 
-from videomeg_browser.raw_media_aligner import RawMediaAligner
 from videomeg_browser.synced_raw_media_browser import browse_raw_with_video
 from videomeg_browser.test_utils import create_fake_video_with_markers
+from videomeg_browser.timestamp_aligner import TimestampAligner
 
 
 def _create_binary_stimulus_vector(
@@ -96,18 +96,14 @@ def main() -> None:
 
     # Create mapping between raw data points and video frames
 
-    def raw_time_to_index(time: float) -> int:
-        """Convert a time in seconds to the corresponding index in the raw data."""
-        return raw.time_as_index(time, use_rounding=True)[0]
-
     # Both raw times and video times go from 0 to DURATION_SECONDS, so we can use them
     # directly as synchronization timestamps.
-    aligner = RawMediaAligner(
-        raw_timestamps=raw.times,
-        media_timestamps=video_times,
-        raw_times=raw.times,
-        raw_time_to_index=raw_time_to_index,
+    aligner = TimestampAligner(
+        timestamps_a=raw.times,
+        timestamps_b=video_times,
         timestamp_unit="seconds",
+        name_a="raw",
+        name_b="video",
     )
 
     # Launch the synced raw and video browsers.
@@ -116,7 +112,7 @@ def main() -> None:
 
     raw_browser = raw.plot(block=False, show=False)
 
-    browser = browse_raw_with_video(raw_browser, [video], [aligner])
+    browser = browse_raw_with_video(raw_browser, raw, [video], [aligner])
 
     app.exec_()  # Start the Qt event loop
 

@@ -21,7 +21,7 @@ from qtpy.QtWidgets import (
 
 import videomeg_browser.gui_utils as gui_utils
 
-from .syncable_media_browser import SyncableMediaBrowser, SyncStatus
+from .syncable_browser import SyncableBrowser, SyncStatus
 from .video import VideoFile
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 pg.setConfigOptions(imageAxisOrder="row-major")
 
 
-class VideoBrowser(SyncableMediaBrowser):
+class VideoBrowser(QWidget, SyncableBrowser):
     """A browser for viewing video frames from one or more video files.
 
     Parameters
@@ -158,6 +158,10 @@ class VideoBrowser(SyncableMediaBrowser):
         self._layout.addWidget(self._fps_label)
 
         self._update_buttons_enabled()
+
+    def get_current_position(self, media_idx: int) -> int:
+        """Return the current position index of the specified video."""
+        return self._video_views[media_idx].current_frame_idx
 
     @property
     def is_playing(self) -> bool:

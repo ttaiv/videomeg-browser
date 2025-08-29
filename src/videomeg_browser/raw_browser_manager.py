@@ -2,10 +2,12 @@
 
 import logging
 
+import mne
 import numpy as np
 from mne_qt_browser._pg_figure import MNEQtBrowser
 from qtpy.QtCore import QObject, Signal, Slot  # type: ignore
 
+from .syncable_browser import SyncableBrowser
 from .time_selector import TimeSelector
 
 logger = logging.getLogger(__name__)
@@ -67,7 +69,7 @@ class RawBrowserInterface(QObject):
         self.browser.hide()
 
 
-class RawBrowserManager(QObject):
+class RawBrowserManager(QObject, SyncableBrowser):
     """Manager for raw browser instance tailored for time syncing with video.
 
     Provides methods for manipulating the view and adds a 'time selector'
@@ -78,6 +80,8 @@ class RawBrowserManager(QObject):
     ----------
     raw_browser : RawBrowserInterface
         The raw browser to manage wrapped in RawBrowserInterface.
+    raw : mne.io.Raw
+        The raw data object being displayed in the browser.
     selector_padding : float, optional
         Padding (in seconds) to apply when clamping the time selector to the
         current view range of the raw data browser, by default 0.1
@@ -88,18 +92,17 @@ class RawBrowserManager(QObject):
         The parent QObject for this manager, by default None
     """
 
-    # Carries the currently selected time in seconds
-    sigSelectedTimeChanged = Signal(float)
-
     def __init__(
         self,
         raw_browser: RawBrowserInterface,
+        raw: mne.io.Raw,
         selector_padding=0.1,
         default_selector_position=0.5,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent=parent)
         self._browser = raw_browser
+        self._raw = raw
         self._selector_padding = selector_padding
         # User can modify this by dragging the time selector.
         self._time_selector_fraction = default_selector_position
@@ -133,8 +136,39 @@ class RawBrowserManager(QObject):
         # Initialize the time selector position
         self._handle_time_range_change(raw_browser.get_view_time_range())
 
-    def jump_to_start(self) -> None:
+    def set_position(
+        self, position_idx: int, media_idx: int, signal: bool = True
+    ) -> bool:
+        """Set the current position for the raw data browser.
+
+        Parameters
+        ----------
+        position_idx : int
+            The sample index in the raw data to set the position to.
+        media_idx : int
+            Ignored.
+        signal : bool, optional
+            Whether to emit sigPositionChanged signal, by default True.
+
+        Returns
+        -------
+        bool
+            True if the position was set successfully, False if the position index
+            is out of bounds.
+        """
+        self._warn_about_media_idx(media_idx)
+        # Convert position index to time in seconds.
+        raw_time_seconds = self._raw.times[position_idx]
+        self._set_selected_time_no_signal(raw_time_seconds)
+
+        if signal:
+            self.sigPositionChanged.emit(0, position_idx)  # emit zero as media_idx
+
+        return True
+
+    def jump_to_start(self, media_idx: int, signal: bool = True) -> None:
         """Set browser's view and time selector to the beginning of the data."""
+        self._warn_about_media_idx(media_idx)
         max_time = self._raw_min_time + self._browser.get_visible_duration()
         logger.debug(
             f"Setting raw view to range [{self._raw_min_time:.3f}, {max_time:.3f}] "
@@ -143,8 +177,12 @@ class RawBrowserManager(QObject):
         self._browser.set_view_time_range(self._raw_min_time, max_time)
         self._raw_time_selector.set_selected_time_no_signal(self._raw_min_time)
 
-    def jump_to_end(self) -> None:
+        if signal:
+            self.sigPositionChanged.emit(0, 0)  # emit zero as media_idx
+
+    def jump_to_end(self, media_idx: int, signal: bool = True) -> None:
         """Set browser's view and time selector to the end of the data."""
+        self._warn_about_media_idx(media_idx)
         min_time = self._raw_max_time - self._browser.get_visible_duration()
         logger.debug(
             f"Setting raw view to range [{min_time:.3f}, {self._raw_max_time:.3f}] "
@@ -153,7 +191,25 @@ class RawBrowserManager(QObject):
         self._browser.set_view_time_range(min_time, self._raw_max_time)
         self._raw_time_selector.set_selected_time_no_signal(self._raw_max_time)
 
-    def set_selected_time_no_signal(self, time_seconds: float) -> None:
+        if signal:
+            # Emit zero as media_idx and last index as position_idx
+            self.sigPositionChanged.emit(0, self._raw.n_times - 1)
+
+    def get_current_position(self, media_idx: int) -> int:
+        """Get the current position in the raw data as a sample index."""
+        self._warn_about_media_idx(media_idx)
+        raw_time_seconds = self._raw_time_selector.selected_time
+        return int(self._raw.time_as_index(raw_time_seconds, use_rounding=True)[0])
+
+    def show_browser(self) -> None:
+        """Show the raw data browser."""
+        self._browser.show()
+
+    def hide_browser(self) -> None:
+        """Hide the raw data browser."""
+        self._browser.hide()
+
+    def _set_selected_time_no_signal(self, time_seconds: float) -> None:
         """Set the raw time selector to a specific time point (in seconds).
 
         Also moves the raw data browser's view if it is required to keep the
@@ -163,18 +219,6 @@ class RawBrowserManager(QObject):
         logger.debug(f"Setting raw time selector to {time_seconds:.3f} seconds.")
         self._raw_time_selector.set_selected_time_no_signal(time_seconds)
         self._move_view_to_time_selector()
-
-    def get_selected_time(self) -> float:
-        """Get the current position of the raw time selector in seconds."""
-        return self._raw_time_selector.selected_time
-
-    def show_browser(self) -> None:
-        """Show the raw data browser."""
-        self._browser.show()
-
-    def hide_browser(self) -> None:
-        """Hide the raw data browser."""
-        self._browser.hide()
 
     @Slot()
     def _handle_time_selector_change(self) -> None:
@@ -189,7 +233,7 @@ class RawBrowserManager(QObject):
             "Detected change in raw time selector, setting new default position."
         )
         self._update_default_time_selector_position(clamped_time)
-        self.sigSelectedTimeChanged.emit(clamped_time)
+        self.sigPositionChanged.emit(0, self.get_current_position(media_idx=0))
 
     @Slot(tuple)
     def _handle_time_range_change(self, new_xrange: tuple[float, float]) -> None:
@@ -217,7 +261,7 @@ class RawBrowserManager(QObject):
             f"New raw time selector value set to {raw_time_seconds:.3f} seconds."
         )
         logger.debug("Emitting signal for selected time change in raw data browser.")
-        self.sigSelectedTimeChanged.emit(raw_time_seconds)
+        self.sigPositionChanged.emit(0, self.get_current_position(media_idx=0))
 
     def _update_default_time_selector_position(self, new_selector_value: float) -> None:
         """Update the default position of the time selector based on current view."""
@@ -299,3 +343,11 @@ class RawBrowserManager(QObject):
             # Ensure that the flag is reset even if an exception occurs
             # during setting the view range.
             self._programmatic_time_range_change = False
+
+    def _warn_about_media_idx(self, media_idx: int) -> None:
+        """Log a warning if media_idx is not zero."""
+        if media_idx != 0:
+            logger.warning(
+                f"RawBrowserManager does not support multiple media, but it was asked "
+                f"set or get position for media index {media_idx}."
+            )

@@ -18,7 +18,7 @@ from qtpy.QtWidgets import (
 
 from . import audio_player, gui_utils
 from .audio import AudioFile
-from .syncable_media_browser import SyncableMediaBrowser
+from .syncable_browser import SyncableBrowser
 from .time_selector import TimeSelector
 
 logger = logging.getLogger(__name__)
@@ -423,7 +423,7 @@ class AudioView(QWidget):
         )
 
 
-class AudioBrowser(SyncableMediaBrowser):
+class AudioBrowser(QWidget, SyncableBrowser):
     """Qt widget for browsing audio with playback controls.
 
     This browser allows interactive visualization of audio data from AudioFile objects.
@@ -545,6 +545,20 @@ class AudioBrowser(SyncableMediaBrowser):
             # Emit zero as media_idx.
             self.sigPositionChanged.emit(0, position_idx)
         return True
+
+    def get_current_position(self, media_idx: int) -> int:
+        """Get the index of the current sample position.
+
+        Parameter media_idx is ignored as this browser only supports a single audio
+        file.
+        """
+        if media_idx != 0:
+            logger.warning(
+                f"AudioBrowser only supports a single audio file, but was asked for "
+                f"current position of media on index {media_idx}. Returning position "
+                f"of the only audio file (index 0)."
+            )
+        return self.current_sample
 
     def jump_to_end(self, media_idx: int, signal: bool = True) -> None:
         """Display the last sample of the audio.
