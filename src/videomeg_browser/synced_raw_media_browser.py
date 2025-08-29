@@ -364,6 +364,7 @@ class BufferedThrottler(QObject):
 
 def browse_raw_with_video(
     raw_browser: MNEQtBrowser,
+    raw: mne.io.Raw,
     videos: list[VideoFile],
     aligners: list[RawMediaAligner],
     video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
@@ -379,6 +380,8 @@ def browse_raw_with_video(
         The MNE raw data browser object to be synchronized with the video browser.
         This can be created with 'plot' method of MNE raw data object when using qt
         backend.
+    raw : mne.io.Raw
+        The MNE raw data object that was used to create the `raw_browser`.
     videos : list[VideoFile]
         The video file object(s) to be displayed in the video browser.
     aligners : list[RawMediaAligner]
@@ -414,6 +417,7 @@ def browse_raw_with_video(
     )
     return SyncedRawMediaBrowser(
         raw_browser,
+        raw,
         [video_browser],
         [aligners],
         media_browser_titles=["Video Browser"],
@@ -425,6 +429,7 @@ def browse_raw_with_video(
 
 def browse_raw_with_audio(
     raw_browser: MNEQtBrowser,
+    raw: mne.io.Raw,
     audio: AudioFile,
     aligner: RawMediaAligner,
     show: bool = True,
@@ -439,6 +444,8 @@ def browse_raw_with_audio(
         The MNE raw data browser object to be synchronized with the video browser.
         This can be created with 'plot' method of MNE raw data object when using qt
         backend.
+    raw : mne.io.Raw
+        The MNE raw data object that was used to create the `raw_browser`.
     audio : AudioFile
         The audio file object to be displayed in the audio browser.
     aligner : RawMediaAligner
@@ -464,6 +471,7 @@ def browse_raw_with_audio(
     audio_browser = AudioBrowser(audio, parent=None)
     return SyncedRawMediaBrowser(
         raw_browser,
+        raw,
         [audio_browser],
         [[aligner]],
         media_browser_titles=["Audio Browser"],
@@ -475,6 +483,7 @@ def browse_raw_with_audio(
 
 def browse_raw_with_video_and_audio(
     raw_browser: MNEQtBrowser,
+    raw: mne.io.Raw,
     videos: list[VideoFile],
     video_aligners: list[RawMediaAligner],
     audio: AudioFile,
@@ -492,6 +501,8 @@ def browse_raw_with_video_and_audio(
         The MNE raw data browser object to be synchronized with the media browser.
         This can be created with 'plot' method of MNE raw data object when using qt
         backend.
+    raw : mne.io.Raw
+        The MNE raw data object that was used to create the `raw_browser`.
     videos : list[VideoFile]
         The video file object(s) to be displayed in the video browser.
     video_aligners : list[RawMediaAligner]
@@ -534,6 +545,7 @@ def browse_raw_with_video_and_audio(
 
     return SyncedRawMediaBrowser(
         raw_browser,
+        raw,
         [video_browser, audio_browser],
         [video_aligners, [audio_aligner]],
         media_browser_titles=["Video Browser", "Audio Browser"],
