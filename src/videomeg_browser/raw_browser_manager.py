@@ -7,7 +7,7 @@ import numpy as np
 from mne_qt_browser._pg_figure import MNEQtBrowser
 from qtpy.QtCore import QObject, Signal, Slot  # type: ignore
 
-from .syncable_media_browser import SyncableMediaBrowser
+from .syncable_media_browser import SyncableBrowser
 from .time_selector import TimeSelector
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ class RawBrowserInterface(QObject):
         self.browser.hide()
 
 
-class RawBrowserManager(QObject, SyncableMediaBrowser):
+class RawBrowserManager(QObject, SyncableBrowser):
     """Manager for raw browser instance tailored for time syncing with video.
 
     Provides methods for manipulating the view and adds a 'time selector'

@@ -1,4 +1,4 @@
-"""Contains the base class for syncable media browser widgets."""
+"""Contains the base class for syncable browser widgets."""
 
 from enum import Enum
 
@@ -13,7 +13,7 @@ class SyncStatus(Enum):
     NO_MEDIA_DATA = "no_media_data"  # No media data available for the current raw data
 
 
-class SyncableMediaBrowser:
+class SyncableBrowser:
     """Base class for syncable video and audio browser widgets.
 
     Defines methods and signal that subclasses must implement.
@@ -29,13 +29,13 @@ class SyncableMediaBrowser:
 
     def __init_subclass__(cls) -> None:
         """Ensure that subclasses implement required methods."""
-        if cls.set_position is SyncableMediaBrowser.set_position:
+        if cls.set_position is SyncableBrowser.set_position:
             raise TypeError(f"{cls.__name__} must implement set_position method.")
-        if cls.jump_to_end is SyncableMediaBrowser.jump_to_end:
+        if cls.jump_to_end is SyncableBrowser.jump_to_end:
             raise TypeError(f"{cls.__name__} must implement jump_to_end method.")
-        if cls.jump_to_start is SyncableMediaBrowser.jump_to_start:
+        if cls.jump_to_start is SyncableBrowser.jump_to_start:
             raise TypeError(f"{cls.__name__} must implement jump_to_start method.")
-        if cls.get_current_position is SyncableMediaBrowser.get_current_position:
+        if cls.get_current_position is SyncableBrowser.get_current_position:
             raise TypeError(
                 f"{cls.__name__} must implement get_current_position method."
             )

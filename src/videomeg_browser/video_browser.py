@@ -21,7 +21,7 @@ from qtpy.QtWidgets import (
 
 import videomeg_browser.gui_utils as gui_utils
 
-from .syncable_media_browser import SyncableMediaBrowser, SyncStatus
+from .syncable_media_browser import SyncableBrowser, SyncStatus
 from .video import VideoFile
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 pg.setConfigOptions(imageAxisOrder="row-major")
 
 
-class VideoBrowser(QWidget, SyncableMediaBrowser):
+class VideoBrowser(QWidget, SyncableBrowser):
     """A browser for viewing video frames from one or more video files.
 
     Parameters

@@ -12,7 +12,7 @@ from qtpy.QtWidgets import QDockWidget
 from .audio import AudioFile
 from .audio_browser import AudioBrowser
 from .raw_browser_manager import RawBrowserInterface, RawBrowserManager
-from .syncable_media_browser import SyncableMediaBrowser, SyncStatus
+from .syncable_media_browser import SyncableBrowser, SyncStatus
 from .timestamp_aligner import (
     MapFailureReason,
     MappingFailure,
@@ -60,7 +60,7 @@ class SyncedRawMediaBrowser(QObject):
         self,
         raw_browser: MNEQtBrowser,
         raw: mne.io.Raw,
-        media_browsers: list[SyncableMediaBrowser],
+        media_browsers: list[SyncableBrowser],
         aligners: list[list[TimestampAligner]],
         media_browser_titles: list[str],
         show: bool = True,

@@ -18,7 +18,7 @@ from qtpy.QtWidgets import (
 
 from . import audio_player, gui_utils
 from .audio import AudioFile
-from .syncable_media_browser import SyncableMediaBrowser
+from .syncable_media_browser import SyncableBrowser
 from .time_selector import TimeSelector
 
 logger = logging.getLogger(__name__)
@@ -423,7 +423,7 @@ class AudioView(QWidget):
         )
 
 
-class AudioBrowser(QWidget, SyncableMediaBrowser):
+class AudioBrowser(QWidget, SyncableBrowser):
     """Qt widget for browsing audio with playback controls.
 
     This browser allows interactive visualization of audio data from AudioFile objects.
