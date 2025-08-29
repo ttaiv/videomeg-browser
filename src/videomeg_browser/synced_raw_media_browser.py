@@ -12,14 +12,14 @@ from qtpy.QtWidgets import QDockWidget
 from .audio import AudioFile
 from .audio_browser import AudioBrowser
 from .raw_browser_manager import RawBrowserInterface, RawBrowserManager
-from .raw_media_aligner import (
+from .syncable_media_browser import SyncableMediaBrowser, SyncStatus
+from .timestamp_aligner import (
     MapFailureReason,
     MappingFailure,
     MappingResult,
     MappingSuccess,
     TimestampAligner,
 )
-from .syncable_media_browser import SyncableMediaBrowser, SyncStatus
 from .video import VideoFile
 from .video_browser import VideoBrowser
 

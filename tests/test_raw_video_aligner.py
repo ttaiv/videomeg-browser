@@ -1,11 +1,10 @@
-from collections.abc import Callable
 from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
 import pytest
 
-from videomeg_browser.raw_media_aligner import (
+from videomeg_browser.timestamp_aligner import (
     MapFailureReason,
     MappingFailure,
     MappingResult,

@@ -12,8 +12,8 @@ from mne.datasets import sample
 from qtpy.QtWidgets import QApplication
 
 from videomeg_browser.audio import AudioFileHelsinkiVideoMEG
-from videomeg_browser.raw_media_aligner import TimestampAligner
 from videomeg_browser.synced_raw_media_browser import browse_raw_with_audio
+from videomeg_browser.timestamp_aligner import TimestampAligner
 
 # Replace this with the path to your audio file.
 AUDIO_PATH = (
