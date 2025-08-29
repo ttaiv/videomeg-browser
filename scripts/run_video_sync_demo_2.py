@@ -11,7 +11,7 @@ import scipy
 from mne.datasets import sample
 from qtpy.QtWidgets import QApplication
 
-from videomeg_browser.raw_media_aligner import RawMediaAligner
+from videomeg_browser.raw_media_aligner import TimestampAligner
 from videomeg_browser.synced_raw_media_browser import browse_raw_with_video
 from videomeg_browser.test_utils import create_fake_video_with_markers
 
@@ -98,10 +98,12 @@ def main() -> None:
 
     # Both raw times and video times go from 0 to DURATION_SECONDS, so we can use them
     # directly as synchronization timestamps.
-    aligner = RawMediaAligner(
-        raw_timestamps=raw.times,
-        media_timestamps=video_times,
+    aligner = TimestampAligner(
+        timestamps_a=raw.times,
+        timestamps_b=video_times,
         timestamp_unit="seconds",
+        name_a="raw",
+        name_b="video",
     )
 
     # Launch the synced raw and video browsers.

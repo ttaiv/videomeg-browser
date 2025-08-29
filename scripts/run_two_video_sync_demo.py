@@ -15,7 +15,7 @@ import numpy as np
 from mne.datasets import sample
 from qtpy.QtWidgets import QApplication
 
-from videomeg_browser.raw_media_aligner import RawMediaAligner
+from videomeg_browser.raw_media_aligner import TimestampAligner
 from videomeg_browser.synced_raw_media_browser import browse_raw_with_video
 from videomeg_browser.video import VideoFileHelsinkiVideoMEG
 
@@ -53,15 +53,19 @@ def main() -> None:
     raw_timestamps_ms = np.linspace(start_ts, end_ts, raw.n_times, endpoint=False)
 
     # Create a separate aligner for both videos
-    aligner1 = RawMediaAligner(
-        raw_timestamps=raw_timestamps_ms,
-        media_timestamps=video1.timestamps_ms,
+    aligner1 = TimestampAligner(
+        timestamps_a=raw_timestamps_ms,
+        timestamps_b=video1.timestamps_ms,
         timestamp_unit="milliseconds",
+        name_a="raw",
+        name_b="video1",
     )
-    aligner2 = RawMediaAligner(
-        raw_timestamps=raw_timestamps_ms,
-        media_timestamps=video2.timestamps_ms,
+    aligner2 = TimestampAligner(
+        timestamps_a=raw_timestamps_ms,
+        timestamps_b=video2.timestamps_ms,
         timestamp_unit="milliseconds",
+        name_a="raw",
+        name_b="video2",
     )
 
     # Start the browser.

@@ -12,7 +12,7 @@ from mne.datasets import sample
 from qtpy.QtWidgets import QApplication
 
 from videomeg_browser.audio import AudioFileHelsinkiVideoMEG
-from videomeg_browser.raw_media_aligner import RawMediaAligner
+from videomeg_browser.raw_media_aligner import TimestampAligner
 from videomeg_browser.synced_raw_media_browser import browse_raw_with_audio
 
 # Replace this with the path to your audio file.
@@ -50,10 +50,12 @@ def main() -> None:
     raw_timestamps_ms = np.linspace(start_ts, end_ts, raw.n_times, endpoint=False)
 
     # Align the raw data with the audio.
-    aligner = RawMediaAligner(
-        raw_timestamps=raw_timestamps_ms,
-        media_timestamps=audio_timestamps_ms,
+    aligner = TimestampAligner(
+        timestamps_a=raw_timestamps_ms,
+        timestamps_b=audio_timestamps_ms,
         timestamp_unit="milliseconds",
+        name_a="raw",
+        name_b="audio",
     )
 
     # Start the synced raw and audio browsers.

@@ -13,7 +13,7 @@ from numpy.typing import NDArray
 from qtpy.QtWidgets import QApplication
 
 from videomeg_browser.comp_tstamps import comp_tstamps
-from videomeg_browser.raw_media_aligner import RawMediaAligner
+from videomeg_browser.raw_media_aligner import TimestampAligner
 from videomeg_browser.synced_raw_media_browser import browse_raw_with_video
 from videomeg_browser.video import VideoFileHelsinkiVideoMEG
 
@@ -56,9 +56,11 @@ def main() -> None:
     video_timestamps_ms = video_file.timestamps_ms
 
     # Set up mapping between raw data points and video frames
-    aligner = RawMediaAligner(
+    aligner = TimestampAligner(
         raw_timestamps_ms,
         video_timestamps_ms,
+        name_a="raw",
+        name_b="video",
     )
 
     app = QApplication([])

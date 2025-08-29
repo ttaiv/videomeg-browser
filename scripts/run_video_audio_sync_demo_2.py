@@ -13,7 +13,7 @@ from mne.datasets import sample
 from qtpy.QtWidgets import QApplication
 
 from videomeg_browser.audio import AudioFileHelsinkiVideoMEG
-from videomeg_browser.raw_media_aligner import RawMediaAligner
+from videomeg_browser.raw_media_aligner import TimestampAligner
 from videomeg_browser.synced_raw_media_browser import browse_raw_with_video_and_audio
 from videomeg_browser.video import VideoFileHelsinkiVideoMEG
 
@@ -61,20 +61,26 @@ def main() -> None:
     raw_timestamps_ms = np.linspace(start_ts, end_ts, raw.n_times, endpoint=False)
 
     # Create an aligner for each video and audio.
-    vid_aligner1 = RawMediaAligner(
-        raw_timestamps=raw_timestamps_ms,
-        media_timestamps=video1_timestamps_ms,
+    vid_aligner1 = TimestampAligner(
+        timestamps_a=raw_timestamps_ms,
+        timestamps_b=video1_timestamps_ms,
         timestamp_unit="milliseconds",
+        name_a="raw",
+        name_b="video1",
     )
-    vid_aligner2 = RawMediaAligner(
-        raw_timestamps=raw_timestamps_ms,
-        media_timestamps=video2_timestamps_ms,
+    vid_aligner2 = TimestampAligner(
+        timestamps_a=raw_timestamps_ms,
+        timestamps_b=video2_timestamps_ms,
         timestamp_unit="milliseconds",
+        name_a="raw",
+        name_b="video2",
     )
-    audio_aligner = RawMediaAligner(
-        raw_timestamps=raw_timestamps_ms,
-        media_timestamps=audio_timestamps_ms,
+    audio_aligner = TimestampAligner(
+        timestamps_a=raw_timestamps_ms,
+        timestamps_b=audio_timestamps_ms,
         timestamp_unit="milliseconds",
+        name_a="raw",
+        name_b="audio",
     )
 
     # Start the browser.
