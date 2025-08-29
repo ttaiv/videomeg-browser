@@ -17,7 +17,7 @@ from .raw_media_aligner import (
     MappingFailure,
     MappingResult,
     MappingSuccess,
-    RawMediaAligner,
+    TimestampAligner,
 )
 from .syncable_media_browser import SyncableMediaBrowser, SyncStatus
 from .video import VideoFile
@@ -61,7 +61,7 @@ class SyncedRawMediaBrowser(QObject):
         raw_browser: MNEQtBrowser,
         raw: mne.io.Raw,
         media_browsers: list[SyncableMediaBrowser],
-        aligners: list[list[RawMediaAligner]],
+        aligners: list[list[TimestampAligner]],
         media_browser_titles: list[str],
         show: bool = True,
         max_sync_fps: int = 10,
@@ -156,7 +156,7 @@ class SyncedRawMediaBrowser(QObject):
                     f"{browser_idx + 1}/{len(self._media_browsers)} to raw idx: "
                     f"{raw_idx}"
                 )
-                mapping_to_media = aligner.raw_time_to_media_sample_index(raw_idx)
+                mapping_to_media = aligner.a_index_to_b_index(raw_idx)
                 self._update_media(browser_idx, media_idx, mapping_to_media)
 
     def _update_media(
@@ -213,9 +213,7 @@ class SyncedRawMediaBrowser(QObject):
         )
 
         # Update the raw browser view based on the media.
-        mapping_to_raw = browser_aligners[media_idx].media_sample_index_to_raw_time(
-            position_idx
-        )
+        mapping_to_raw = browser_aligners[media_idx].b_index_to_a_index(position_idx)
         mapping_success = self._update_raw(mapping_to_raw)
         if mapping_success:
             browser_that_changed.set_sync_status(SyncStatus.SYNCHRONIZED, media_idx)
@@ -235,7 +233,7 @@ class SyncedRawMediaBrowser(QObject):
                     f"{_browser_idx + 1}/{len(self._media_browsers)} to raw index: "
                     f"{raw_idx}"
                 )
-                mapping_to_media = aligner.raw_time_to_media_sample_index(raw_idx)
+                mapping_to_media = aligner.a_index_to_b_index(raw_idx)
                 self._update_media(_browser_idx, _media_idx, mapping_to_media)
 
     def _update_raw(self, mapping: MappingResult) -> bool:
@@ -366,7 +364,7 @@ def browse_raw_with_video(
     raw_browser: MNEQtBrowser,
     raw: mne.io.Raw,
     videos: list[VideoFile],
-    aligners: list[RawMediaAligner],
+    aligners: list[TimestampAligner],
     video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
     show: bool = True,
     max_sync_fps: int = 10,
@@ -431,7 +429,7 @@ def browse_raw_with_audio(
     raw_browser: MNEQtBrowser,
     raw: mne.io.Raw,
     audio: AudioFile,
-    aligner: RawMediaAligner,
+    aligner: TimestampAligner,
     show: bool = True,
     max_sync_fps: int = 10,
     parent: QObject | None = None,
@@ -485,9 +483,9 @@ def browse_raw_with_video_and_audio(
     raw_browser: MNEQtBrowser,
     raw: mne.io.Raw,
     videos: list[VideoFile],
-    video_aligners: list[RawMediaAligner],
+    video_aligners: list[TimestampAligner],
     audio: AudioFile,
-    audio_aligner: RawMediaAligner,
+    audio_aligner: TimestampAligner,
     video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
     max_sync_fps: int = 10,
     show: bool = True,
