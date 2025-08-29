@@ -39,8 +39,8 @@ class SyncedRawMediaBrowser(QObject):
         The MNE raw data object that was used to create the `raw_browser`.
     media_browsers : list[SyncableMediaBrowser]
         The media browsers to be synchronized with the raw data browser.
-    aligners : list[list[RawMediaAligner]]
-        A list of lists of `RawMediaAligner` instances. aligners[i][j] provides
+    aligners : list[list[TimeStampAligner]]
+        A list of lists of `TimestampAligner` instances. aligners[i][j] provides
         the mapping between raw data time points and media samples for the j-th media
         file in the i-th media browser.
     media_browser_titles : list[str]
@@ -382,8 +382,8 @@ def browse_raw_with_video(
         The MNE raw data object that was used to create the `raw_browser`.
     videos : list[VideoFile]
         The video file object(s) to be displayed in the video browser.
-    aligners : list[RawMediaAligner]
-        A list of `RawMediaAligner` instances, one for each video file.
+    aligners : list[TimestampAligner]
+        A list of `TimestampAligner` instances, one for each video file.
         Each aligner provides the mapping between raw data time points and video frames
         for the corresponding video file. The order of the aligners must match the order
         of the video files in the `videos` parameter.
@@ -446,8 +446,8 @@ def browse_raw_with_audio(
         The MNE raw data object that was used to create the `raw_browser`.
     audio : AudioFile
         The audio file object to be displayed in the audio browser.
-    aligner : RawMediaAligner
-        A `RawMediaAligner` instance that provides the mapping between raw data time
+    aligner : TimestampAligner
+        A `TimestampAligner` instance that provides the mapping between raw data time
         points and audio samples for the audio file.
     max_sync_fps : int, optional
         The maximum frames per second for synchronizing the raw data browser and audio
@@ -503,15 +503,15 @@ def browse_raw_with_video_and_audio(
         The MNE raw data object that was used to create the `raw_browser`.
     videos : list[VideoFile]
         The video file object(s) to be displayed in the video browser.
-    video_aligners : list[RawMediaAligner]
-        A list of `RawMediaAligner` instances, one for each video file.
+    video_aligners : list[TimestampAligner]
+        A list of `TimestampAligner` instances, one for each video file.
         Each aligner provides the mapping between raw data time points and video frames
         for the corresponding video file. The order of the aligners must match the order
         of the video files in the `videos` parameter.
     audio : AudioFile
         The audio file object to be displayed in the audio browser.
-    audio_aligner : RawMediaAligner
-        A `RawMediaAligner` instance that provides the mapping between raw data time
+    audio_aligner : TimestampAligner
+        A `TimestampAligner` instance that provides the mapping between raw data time
         points and audio samples for the audio file.
     video_splitter_orientation : Literal["horizontal", "vertical"], optional
         Whether to show multiple videos in a horizontal or vertical layout.
