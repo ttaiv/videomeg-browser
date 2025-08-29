@@ -52,24 +52,15 @@ def main() -> None:
     end_ts = video1.timestamps_ms[-1]
     raw_timestamps_ms = np.linspace(start_ts, end_ts, raw.n_times, endpoint=False)
 
-    # Define function for converting raw time to index
-    def raw_time_to_index(time: float) -> int:
-        """Convert a time in seconds to the corresponding index in the raw data."""
-        return raw.time_as_index(time, use_rounding=True)[0]
-
     # Create a separate aligner for both videos
     aligner1 = RawMediaAligner(
         raw_timestamps=raw_timestamps_ms,
         media_timestamps=video1.timestamps_ms,
-        raw_times=raw.times,
-        raw_time_to_index=raw_time_to_index,
         timestamp_unit="milliseconds",
     )
     aligner2 = RawMediaAligner(
         raw_timestamps=raw_timestamps_ms,
         media_timestamps=video2.timestamps_ms,
-        raw_times=raw.times,
-        raw_time_to_index=raw_time_to_index,
         timestamp_unit="milliseconds",
     )
 
@@ -79,6 +70,7 @@ def main() -> None:
     raw_browser = raw.plot(block=False, show=False)
     browser = browse_raw_with_video(
         raw_browser,
+        raw,
         [video1, video2],
         [aligner1, aligner2],
         video_splitter_orientation="vertical",

@@ -60,31 +60,20 @@ def main() -> None:
     end_ts = start_ts + 60 * 1000  # End at 60 seconds later (convert to milliseconds)
     raw_timestamps_ms = np.linspace(start_ts, end_ts, raw.n_times, endpoint=False)
 
-    # Define function for converting raw time to index
-    def raw_time_to_index(time: float) -> int:
-        """Convert a time in seconds to the corresponding index in the raw data."""
-        return raw.time_as_index(time, use_rounding=True)[0]
-
     # Create an aligner for each video and audio.
     vid_aligner1 = RawMediaAligner(
         raw_timestamps=raw_timestamps_ms,
         media_timestamps=video1_timestamps_ms,
-        raw_times=raw.times,
-        raw_time_to_index=raw_time_to_index,
         timestamp_unit="milliseconds",
     )
     vid_aligner2 = RawMediaAligner(
         raw_timestamps=raw_timestamps_ms,
         media_timestamps=video2_timestamps_ms,
-        raw_times=raw.times,
-        raw_time_to_index=raw_time_to_index,
         timestamp_unit="milliseconds",
     )
     audio_aligner = RawMediaAligner(
         raw_timestamps=raw_timestamps_ms,
         media_timestamps=audio_timestamps_ms,
-        raw_times=raw.times,
-        raw_time_to_index=raw_time_to_index,
         timestamp_unit="milliseconds",
     )
 
@@ -93,6 +82,7 @@ def main() -> None:
     raw_browser = raw.plot(block=False, show=False)
     browser = browse_raw_with_video_and_audio(
         raw_browser,
+        raw,
         [video1, video2],
         [vid_aligner1, vid_aligner2],
         audio,
