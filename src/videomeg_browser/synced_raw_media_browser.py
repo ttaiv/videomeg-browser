@@ -12,7 +12,7 @@ from qtpy.QtWidgets import QDockWidget
 from .audio import AudioFile
 from .audio_browser import AudioBrowser
 from .raw_browser_manager import RawBrowserInterface, RawBrowserManager
-from .syncable_media_browser import SyncableBrowser, SyncStatus
+from .syncable_browser import SyncableBrowser, SyncStatus
 from .timestamp_aligner import (
     MapFailureReason,
     MappingFailure,

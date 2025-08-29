@@ -7,7 +7,7 @@ import numpy as np
 from mne_qt_browser._pg_figure import MNEQtBrowser
 from qtpy.QtCore import QObject, Signal, Slot  # type: ignore
 
-from .syncable_media_browser import SyncableBrowser
+from .syncable_browser import SyncableBrowser
 from .time_selector import TimeSelector
 
 logger = logging.getLogger(__name__)

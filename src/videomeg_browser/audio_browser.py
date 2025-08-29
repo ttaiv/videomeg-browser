@@ -18,7 +18,7 @@ from qtpy.QtWidgets import (
 
 from . import audio_player, gui_utils
 from .audio import AudioFile
-from .syncable_media_browser import SyncableBrowser
+from .syncable_browser import SyncableBrowser
 from .time_selector import TimeSelector
 
 logger = logging.getLogger(__name__)
