@@ -37,7 +37,7 @@ class SyncedRawMediaBrowser(QObject):
         backend.
     raw : mne.io.Raw
         The MNE raw data object that was used to create the `raw_browser`.
-    media_browsers : list[SyncableMediaBrowser]
+    media_browsers : list[SyncableBrowser]
         The media browsers to be synchronized with the raw data browser.
     aligners : list[list[TimeStampAligner]]
         A list of lists of `TimestampAligner` instances. aligners[i][j] provides
