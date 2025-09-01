@@ -219,28 +219,48 @@ class BrowserSynchronizer(QObject):
         logger.debug(
             "Detected change in primary browser's position, syncing secondary browsers."
         )
-        for browser_idx, aligners in enumerate(self._aligners):
+        for secondary_browser_idx, aligners in enumerate(self._aligners):
             for media_idx, aligner in enumerate(aligners):
                 logger.debug(
                     f"Syncing media {media_idx + 1}/{len(aligners)} of secondary browser "
-                    f"{browser_idx + 1}/{len(self._secondary_browsers)} to primary position idx: "
+                    f"{secondary_browser_idx + 1}/{len(self._secondary_browsers)} to primary position idx: "
                     f"{position_idx}"
                 )
                 mapping = aligner.a_index_to_b_index(position_idx)
-                self._update_browser(browser_idx, media_idx, mapping)
+                self._update_media_in_browser(
+                    self._secondary_browsers[secondary_browser_idx], media_idx, mapping
+                )
 
-    def _update_browser(
-        self, browser_idx: int, media_idx: int, mapping: MappingResult
-    ) -> None:
-        """Update the specified media in the specified browser using mapping result."""
-        # NOTE: The signal=False is used to prevent the media browser from
-        # emitting the sigPositionChanged signal, which would trigger update of the
-        # raw browser and cause an infinite loop of updates.
-        browser_to_update = self._secondary_browsers[browser_idx]
+    def _update_media_in_browser(
+        self, browser_to_update: SyncableBrowser, media_idx: int, mapping: MappingResult
+    ) -> bool:
+        """Update the specified media in the specified browser using mapping result.
+
+        Parameters
+        ----------
+        browser_to_update : SyncableBrowser
+            The media browser to update.
+        media_idx : int
+            The index of the media in the browser to update.
+        mapping : MappingResult
+            The result of mapping the primary browser position index to the media
+            position index.
+
+        Returns
+        -------
+        bool
+            True if the mapping was successful, False if the mapping failed due to
+            source index being out of bounds.
+
+        """
+        # NOTE: The signal=False is used to prevent the browser from emitting the
+        # sigPositionChanged signal, which would cause an infinite loop of updates.
         match mapping:
             case MappingSuccess(result=position_idx):
                 browser_to_update.set_position(position_idx, media_idx, signal=False)
                 browser_to_update.set_sync_status(SyncStatus.SYNCHRONIZED, media_idx)
+                return True
+
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
                 logger.debug(
                     f"Media on index {media_idx} has no data for this small position, "
@@ -248,6 +268,7 @@ class BrowserSynchronizer(QObject):
                 )
                 browser_to_update.jump_to_start(media_idx, signal=False)
                 browser_to_update.set_sync_status(SyncStatus.NO_MEDIA_DATA, media_idx)
+                return False
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
                 logger.debug(
@@ -256,6 +277,7 @@ class BrowserSynchronizer(QObject):
                 )
                 browser_to_update.jump_to_end(media_idx, signal=False)
                 browser_to_update.set_sync_status(SyncStatus.NO_MEDIA_DATA, media_idx)
+                return False
 
             case _:
                 raise ValueError(f"Unexpected mapping result: {mapping}. ")
@@ -279,7 +301,9 @@ class BrowserSynchronizer(QObject):
         mapping_to_primary = browser_aligners[media_idx].b_index_to_a_index(
             position_idx
         )
-        mapping_success = self._update_raw(mapping_to_primary)
+        mapping_success = self._update_media_in_browser(
+            self._primary_browser, media_idx=0, mapping=mapping_to_primary
+        )
         if mapping_success:
             browser_that_changed.set_sync_status(SyncStatus.SYNCHRONIZED, media_idx)
         else:
@@ -302,51 +326,11 @@ class BrowserSynchronizer(QObject):
                     f"{primary_idx}"
                 )
                 mapping = aligner.a_index_to_b_index(primary_idx)
-                self._update_browser(
-                    secondary_browser_idx, secondary_media_idx, mapping
+                self._update_media_in_browser(
+                    self._secondary_browsers[secondary_browser_idx],
+                    secondary_media_idx,
+                    mapping,
                 )
-
-    def _update_raw(self, mapping: MappingResult) -> bool:
-        """Update raw browser view based on mapping from media frame index to raw time.
-
-        If the media frame index is out of bounds of the raw data, moves the raw view
-        to the start or end of the raw data.
-
-        Parameters
-        ----------
-        mapping : MappingResult
-            The result of mapping the media frame index to a raw time point.
-
-        Returns
-        -------
-        bool
-            True if the mapping was successful and yielded a valid raw time point,
-            False if the media frame index was out of bounds of the raw data.
-        """
-        match mapping:
-            case MappingSuccess(result=raw_idx):
-                # Video frame index has a corresponding raw time point
-                logger.debug(f"Setting raw browser to time: {raw_idx:.3f} seconds.")
-                self._primary_browser.set_position(raw_idx, media_idx=0, signal=False)
-                return True
-
-            case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_SMALL):
-                # Video frame index is smaller than the first raw time point
-                logger.debug(
-                    "No raw data for this small video frame, moving raw view to start."
-                )
-                self._primary_browser.jump_to_start(media_idx=0, signal=False)
-                return False
-
-            case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
-                logger.debug(
-                    "No raw data for this large video frame, moving raw view to end."
-                )
-                self._primary_browser.jump_to_end(media_idx=0, signal=False)
-                return False
-
-            case _:
-                raise ValueError(f"Unexpected mapping result: {mapping}. ")
 
     @Slot(int, int, bool)
     def _on_playback_state_changed(
