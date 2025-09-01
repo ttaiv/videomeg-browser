@@ -6,11 +6,14 @@ from qtpy.QtCore import Signal  # type: ignore
 
 
 class SyncStatus(Enum):
-    """Tells the sync status of the video and raw data."""
+    """Synchronization status for data item in a browser."""
 
-    SYNCHRONIZED = "synchronized"  # Video and raw data are synchronized
-    NO_RAW_DATA = "no_raw_data"  # No raw (meg/eeg) data available for the current frame
-    NO_MEDIA_DATA = "no_media_data"  # No media data available for the current raw data
+    # Displayed data is in sync with its counterpart
+    SYNCHRONIZED = "synchronized"
+    # There is no suitable data for the selected position in the counterpart
+    NO_DATA_HERE = "no_data_here"
+    # There is no suitable data in the counterpart for the selected position here
+    NO_DATA_THERE = "no_data_there"
 
 
 class SyncableBrowser:

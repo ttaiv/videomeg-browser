@@ -263,16 +263,16 @@ class BrowserSynchronizer(QObject):
                     "moving media to start."
                 )
                 browser_to_update.jump_to_start(media_idx, signal=False)
-                browser_to_update.set_sync_status(SyncStatus.NO_MEDIA_DATA, media_idx)
+                browser_to_update.set_sync_status(SyncStatus.NO_DATA_HERE, media_idx)
                 return False
 
             case MappingFailure(failure_reason=MapFailureReason.INDEX_TOO_LARGE):
                 logger.debug(
                     f"Media on index {media_idx} has no data for this large position, "
-                    "showing last frame."
+                    "moving media to end."
                 )
                 browser_to_update.jump_to_end(media_idx, signal=False)
-                browser_to_update.set_sync_status(SyncStatus.NO_MEDIA_DATA, media_idx)
+                browser_to_update.set_sync_status(SyncStatus.NO_DATA_HERE, media_idx)
                 return False
 
             case _:
@@ -303,8 +303,8 @@ class BrowserSynchronizer(QObject):
         if mapping_success:
             browser_that_changed.set_sync_status(SyncStatus.SYNCHRONIZED, media_idx)
         else:
-            # Signal that there is no raw data for this video frame index.
-            browser_that_changed.set_sync_status(SyncStatus.NO_RAW_DATA, media_idx)
+            # Signal that there is no data in the primary browser for this position.
+            browser_that_changed.set_sync_status(SyncStatus.NO_DATA_THERE, media_idx)
         # Get the resulting primary browser position index and use
         # it to update other media (if any).
         primary_idx = self._primary_browser.get_current_position(media_idx=0)
