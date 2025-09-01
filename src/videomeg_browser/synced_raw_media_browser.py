@@ -131,6 +131,9 @@ class BrowserSynchronizer(QObject):
         The maximum frames per second for synchronization updates.
         This determines how often the synchronization updates can happen and
         has an effect on the performance.
+    throttle_primary_browser : bool, optional
+        Whether to throttle updates due to changes in the primary browser.
+        This can be useful if the primary browser is updated very frequently.
     parent : QObject, optional
         The parent QObject for this synchronizer, by default None.
     """
@@ -141,6 +144,7 @@ class BrowserSynchronizer(QObject):
         secondary_browsers: list[SyncableBrowser],
         aligners: list[list[TimestampAligner]],
         max_sync_fps: int = 10,
+        throttle_primary_browser: bool = False,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent=parent)
@@ -152,35 +156,57 @@ class BrowserSynchronizer(QObject):
         # Create throttlers that limit the updates due to changes in secondary browsers.
         self._min_sync_interval_ms = int(1000 / max_sync_fps)
         # One throttler for each secondary browser
-        self._throttlers = [
+        self._secondary_throttlers = [
             BufferedThrottler(self._min_sync_interval_ms, parent=self)
             for _ in self._secondary_browsers
         ]
 
         # When the position in a secondary media browser changes,
         # update all other browsers through throttler.
-        for browser_idx, (secondary_browser, throttler) in enumerate(
-            zip(self._secondary_browsers, self._throttlers)
+        for secondary_browser_idx, (secondary_browser, throttler) in enumerate(
+            zip(self._secondary_browsers, self._secondary_throttlers)
         ):
             # browser emits (media_idx, position_idx)
             secondary_browser.sigPositionChanged.connect(throttler.trigger)
             # _sync_all_browsers_to_secondary slot takes
             # (browser_idx, media_idx, position_idx)
             throttler.triggered.connect(
-                functools.partial(self._sync_all_browsers_to_secondary, browser_idx)
+                functools.partial(
+                    self._sync_all_browsers_to_secondary, secondary_browser_idx
+                )
             )
 
         # When selected time in the primary browser changes, update all secondary
-        # browsers without throttling.
+        # browsers. Use throttling if user requested it.
         # NOTE: We assume that primary browser has only one media (index 0).
-        self._primary_browser.sigPositionChanged.connect(
-            lambda media_idx, pos_idx: self._sync_secondary_browsers_to_primary(pos_idx)
-        )
+        if throttle_primary_browser:
+            self._primary_throttler = BufferedThrottler(
+                self._min_sync_interval_ms, parent=self
+            )
+            self._primary_browser.sigPositionChanged.connect(
+                self._primary_throttler.trigger
+            )
+            self._primary_throttler.triggered.connect(
+                lambda media_idx, pos_idx: self._sync_secondary_browsers_to_primary(
+                    pos_idx
+                )
+            )
+        else:
+            # Connect signal directly without throttling.
+            self._primary_browser.sigPositionChanged.connect(
+                lambda media_idx, pos_idx: self._sync_secondary_browsers_to_primary(
+                    pos_idx
+                )
+            )
         # When one browser starts playing, pause all other media browsers
         # to avoid mess in synchronization.
-        for browser_idx, secondary_browser in enumerate(self._secondary_browsers):
+        for secondary_browser_idx, secondary_browser in enumerate(
+            self._secondary_browsers
+        ):
             secondary_browser.sigPlaybackStateChanged.connect(
-                functools.partial(self._on_playback_state_changed, browser_idx)
+                functools.partial(
+                    self._on_playback_state_changed, secondary_browser_idx
+                )
             )
 
         # Synchronize secondary browsers to the initial position of the primary browser.
