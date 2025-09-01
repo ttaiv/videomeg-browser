@@ -69,8 +69,6 @@ class SyncedRawMediaBrowser(QObject):
     ) -> None:
         super().__init__(parent=parent)
         self._media_browsers = media_browsers
-        self._aligners = aligners
-        self._raw_update_max_fps = max_sync_fps
 
         # Wrap the raw browser to a class that exposes the necessary methods.
         raw_browser_interface = RawBrowserInterface(raw_browser, parent=self)
@@ -99,7 +97,57 @@ class SyncedRawMediaBrowser(QObject):
                 dock.hide()
             self._docks.append(dock)
 
-        # Set up synchronization
+        # Set up the synchronizer that keeps the raw and media browsers in sync.
+        self._synchronizer = BrowserSynchronizer(
+            self._raw_browser_manager,
+            self._media_browsers,
+            aligners,
+            max_sync_fps,
+            parent=self,
+        )
+
+    def show(self) -> None:
+        """Show the synchronized raw and video browsers."""
+        self._raw_browser_manager.show_browser()
+        for dock in self._docks:
+            dock.show()
+
+
+class BrowserSynchronizer(QObject):
+    """Synchronizes MNE raw data browser with one or more media browsers.
+
+    Parameters
+    ----------
+    raw_browser_manager : RawBrowserManager
+        The manager for the MNE raw data browser to be synchronized with the media
+        browsers.
+    media_browsers : list[SyncableBrowser]
+        The media browsers to be synchronized with the raw data browser.
+    aligners : list[list[TimeStampAligner]]
+        A list of lists of `TimestampAligner` instances. aligners[i][j] provides
+        the mapping between raw data time points and media samples for the j-th media
+        file in the i-th media browser.
+    max_sync_fps : int, optional
+        The maximum frames per second for synchronizing the raw data browser and media
+        browser. This determines how often the synchronization updates can happen and
+        has an effect on the performance.
+    parent : QObject, optional
+        The parent QObject for this synchronized browser, by default None.
+    """
+
+    def __init__(
+        self,
+        raw_browser_manager: RawBrowserManager,
+        media_browsers: list[SyncableBrowser],
+        aligners: list[list[TimestampAligner]],
+        max_sync_fps: int = 10,
+        parent: QObject | None = None,
+    ) -> None:
+        super().__init__(parent=parent)
+        self._raw_browser_manager = raw_browser_manager
+        self._media_browsers = media_browsers
+        self._aligners = aligners
+        self._raw_update_max_fps = max_sync_fps
 
         # Create throttlers that limit the updates due to media position changes.
         self._min_sync_interval_ms = int(1000 / max_sync_fps)
@@ -136,12 +184,6 @@ class SyncedRawMediaBrowser(QObject):
         # synchronizing the media browsers to the initial raw time.
         initial_raw_time = self._raw_browser_manager.get_current_position(media_idx=0)
         self._sync_media_to_raw(initial_raw_time)
-
-    def show(self) -> None:
-        """Show the synchronized raw and video browsers."""
-        self._raw_browser_manager.show_browser()
-        for dock in self._docks:
-            dock.show()
 
     @Slot(int, int)
     def _sync_media_to_raw(self, raw_idx: int) -> None:
