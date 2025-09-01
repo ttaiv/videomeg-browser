@@ -218,8 +218,9 @@ class BrowserSynchronizer(QObject):
         for secondary_browser_idx, aligners in enumerate(self._aligners):
             for media_idx, aligner in enumerate(aligners):
                 logger.debug(
-                    f"Syncing media {media_idx + 1}/{len(aligners)} of secondary browser "
-                    f"{secondary_browser_idx + 1}/{len(self._secondary_browsers)} to primary position idx: "
+                    f"Syncing media {media_idx + 1}/{len(aligners)} of secondary "
+                    f"browser {secondary_browser_idx + 1}/"
+                    f"{len(self._secondary_browsers)} to primary position idx: "
                     f"{position_idx}"
                 )
                 mapping = aligner.a_index_to_b_index(position_idx)
@@ -290,7 +291,8 @@ class BrowserSynchronizer(QObject):
         logger.debug(
             f"Detected change in media {media_idx + 1}/{len(browser_aligners)} of "
             f"secondary browser {browser_idx + 1}/{len(self._secondary_browsers)} to "
-            f"position index: {position_idx}. Syncing primary and other secondary browsers."
+            f"position index: {position_idx}. Syncing primary and other secondary "
+            "browsers."
         )
 
         # Update the primary browser view based on the media.
@@ -317,8 +319,9 @@ class BrowserSynchronizer(QObject):
                     # Skip the media that triggered the change.
                     continue
                 logger.debug(
-                    f"Syncing media {secondary_media_idx + 1}/{len(aligners)} of secondary browser "
-                    f"{secondary_browser_idx + 1}/{len(self._secondary_browsers)} to primary browser index: "
+                    f"Syncing media {secondary_media_idx + 1}/{len(aligners)} of "
+                    f"secondary browser {secondary_browser_idx + 1}/"
+                    f"{len(self._secondary_browsers)} to primary browser index: "
                     f"{primary_idx}"
                 )
                 mapping = aligner.a_index_to_b_index(primary_idx)
