@@ -200,13 +200,9 @@ class BrowserSynchronizer(QObject):
             )
         # When one browser starts playing, pause all other media browsers
         # to avoid mess in synchronization.
-        for secondary_browser_idx, secondary_browser in enumerate(
-            self._secondary_browsers
-        ):
-            secondary_browser.sigPlaybackStateChanged.connect(
-                functools.partial(
-                    self._on_playback_state_changed, secondary_browser_idx
-                )
+        for browser in self._secondary_browsers + [self._primary_browser]:
+            browser.sigPlaybackStateChanged.connect(
+                functools.partial(self._on_playback_state_changed, browser)
             )
 
         # Synchronize secondary browsers to the initial position of the primary browser.
@@ -332,24 +328,24 @@ class BrowserSynchronizer(QObject):
                     mapping,
                 )
 
-    @Slot(int, int, bool)
+    @Slot(SyncableBrowser, int, bool)
     def _on_playback_state_changed(
-        self, media_browser_idx: int, media_idx: int, is_playing: bool
+        self, browser: SyncableBrowser, media_idx: int, is_playing: bool
     ) -> None:
-        """Prevent other media browsers from playing when one starts playing."""
+        """Prevent other browsers from playing when one starts playing."""
         logger.debug(
             "Received signal about playback state change "
-            f"for media browser {media_browser_idx} to {is_playing}."
+            f"for browser {browser}, is playing: {is_playing}."
         )
         if is_playing:
-            self._pause_other_media_browsers(media_browser_idx)
+            self._pause_other_media_browsers(excluded_browser=browser)
 
-    def _pause_other_media_browsers(self, excluded_browser_idx: int) -> None:
-        """Pause all other media browsers except the one with the given index."""
-        for browser_idx, media_browser in enumerate(self._secondary_browsers):
-            if excluded_browser_idx != browser_idx and media_browser.is_playing:
-                logger.debug(f"Pausing media browser with index {browser_idx}.")
-                media_browser.pause_playback()
+    def _pause_other_media_browsers(self, excluded_browser: SyncableBrowser) -> None:
+        """Pause all other browsers except the one given."""
+        for browser in self._secondary_browsers + [self._primary_browser]:
+            if browser is not excluded_browser and browser.is_playing:
+                logger.debug(f"Pausing browser {browser}.")
+                browser.pause_playback()
 
 
 class BufferedThrottler(QObject):
