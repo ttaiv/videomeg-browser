@@ -1,8 +1,9 @@
-"""Contains the base class for syncable browser widgets."""
+"""Contains interface for syncable browser widgets."""
 
 from enum import Enum
 
-from qtpy.QtCore import Signal  # type: ignore
+from qtpy.QtCore import QObject, Signal  # type: ignore
+from qtpy.QtWidgets import QWidget
 
 
 class SyncStatus(Enum):
@@ -17,21 +18,23 @@ class SyncStatus(Enum):
 
 
 class SyncableBrowser:
-    """Base class for syncable video and audio browser widgets.
+    """Abstract base interface for browser widgets that can be synchronized.
 
-    Defines methods and signal that subclasses must implement.
+    Defines methods that must be implemented by subclasses. Required signals
+    are defined in two helper classes `SyncableBrowserObject` and
+    `SyncableBrowserWidget` below. Actual subclass should inherit from one of these!
 
     NOTE: This class does not inherit from abc.ABC to prevent metaclass conflicts
     with Qt widgets. Instead, it uses `__init_subclass__` to enforce
     implementation of required methods in subclasses.
     """
 
-    # Emits a signal when the displayed frame or sample of any shown media changes.
-    sigPositionChanged = Signal(int, int)  # media index, sample index
-    sigPlaybackStateChanged = Signal(int, bool)  # media index, is playing
-
     def __init_subclass__(cls) -> None:
         """Ensure that subclasses implement required methods."""
+        # Skip validation for mixin classes that are meant to be inherited from
+        if cls.__name__ in ("SyncableBrowserObject", "SyncableBrowserWidget"):
+            return
+
         if cls.set_position is SyncableBrowser.set_position:
             raise TypeError(f"{cls.__name__} must implement set_position method.")
         if cls.jump_to_end is SyncableBrowser.jump_to_end:
@@ -133,3 +136,35 @@ class SyncableBrowser:
     def is_playing(self) -> bool:
         """Return whether the media is currently playing."""
         return False  # Default implementation
+
+
+# Below are helper classes to combine SyncableBrowser with QObject or QWidget.
+# Signals are defined in these classes as they should be defined in QObject subclasses.
+
+
+class SyncableBrowserObject(SyncableBrowser, QObject):
+    """A helper class to combine SyncableBrowser and QObject."""
+
+    # Signal for change in displayed media position
+    # (video frame, audio sample, raw data sample, etc.)
+    sigPositionChanged = Signal(int, int)  # media index, sample index
+    # Signal for change in playback state (playing/paused) of media
+    sigPlaybackStateChanged = Signal(int, bool)  # media index, is playing
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        SyncableBrowser.__init__(self)
+        QObject.__init__(self, parent)
+
+
+class SyncableBrowserWidget(SyncableBrowser, QWidget):
+    """A helper class to combine SyncableBrowser and QWidget."""
+
+    # Signal for change in displayed media position
+    # (video frame, audio sample, raw data sample, etc.)
+    sigPositionChanged = Signal(int, int)  # media index, sample index
+    # Signal for change in playback state (playing/paused) of media
+    sigPlaybackStateChanged = Signal(int, bool)  # media index, is playing
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        SyncableBrowser.__init__(self)
+        QWidget.__init__(self, parent)

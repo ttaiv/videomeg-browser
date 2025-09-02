@@ -21,7 +21,7 @@ from qtpy.QtWidgets import (
 
 import videomeg_browser.gui_utils as gui_utils
 
-from .syncable_browser import SyncableBrowser, SyncStatus
+from .syncable_browser import SyncableBrowserWidget, SyncStatus
 from .video import VideoFile
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 pg.setConfigOptions(imageAxisOrder="row-major")
 
 
-class VideoBrowser(QWidget, SyncableBrowser):
+class VideoBrowser(SyncableBrowserWidget):
     """A browser for viewing video frames from one or more video files.
 
     Parameters
@@ -57,7 +57,7 @@ class VideoBrowser(QWidget, SyncableBrowser):
         video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
         parent: QWidget | None = None,
     ) -> None:
-        super().__init__(parent=parent)
+        super().__init__(parent)
         self._videos = videos
         self._show_sync_status = show_sync_status
 
