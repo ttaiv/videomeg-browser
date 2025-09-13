@@ -166,29 +166,45 @@ def browse_raw_with_video(
     raw_browser: MNEQtBrowser,
     raw: mne.io.Raw,
     videos: list[VideoFile],
-    aligners: list[TimestampAligner],
+    video_aligners: list[TimestampAligner],
+    secondary_raw_browsers: list[MNEQtBrowser] | None = None,
+    secondary_raws: list[mne.io.Raw] | None = None,
+    raw_aligners: list[TimestampAligner] | None = None,
     video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
     show: bool = True,
     max_sync_fps: int = 10,
     parent: QObject | None = None,
 ) -> SyncedRawMediaBrowser:
-    """Synchronize MNE raw data browser with a video browser.
+    """Synchronize MNE raw data browser(s) with a video browser.
 
     Parameters
     ----------
     raw_browser : mne_qt_browser.figure.MNEQtBrowser
-        The MNE raw data browser object to be synchronized with the video browser.
-        This can be created with 'plot' method of MNE raw data object when using qt
-        backend.
+        The primary MNE raw data browser object to be synchronized with the video
+        browser. This can be created with 'plot' method of MNE raw data object when
+        using qt backend. This will act as the master browser controlling the
+        synchronization.
     raw : mne.io.Raw
         The MNE raw data object that was used to create the `raw_browser`.
     videos : list[VideoFile]
         The video file object(s) to be displayed in the video browser.
-    aligners : list[TimestampAligner]
+    video_aligners : list[TimestampAligner]
         A list of `TimestampAligner` instances, one for each video file.
         Each aligner provides the mapping between raw data time points and video frames
         for the corresponding video file. The order of the aligners must match the order
         of the video files in the `videos` parameter.
+    secondary_raw_browsers : list[mne_qt_browser.figure.MNEQtBrowser] | None, optional
+        Optional list of secondary MNE raw data browsers to be synchronized with the
+        primary raw data browser and video browser. If provided, `secondary_raws` and
+        `raw_aligners` must also be provided.
+    secondary_raws : list[mne.io.Raw] | None, optional
+        The MNE raw data objects that were used to create the `secondary_raw_browsers`.
+        Must have the same length as `secondary_raw_browsers` if provided.
+    raw_aligners : list[TimestampAligner] | None, optional
+        A list of `TimestampAligner` instances, one for each secondary raw data
+        browser. Each aligner provides the mapping between primary raw data time points
+        and secondary raw data time points for the corresponding secondary raw browser.
+        Must have the same length as `secondary_raw_browsers` if provided.
     video_splitter_orientation : Literal["horizontal", "vertical"], optional
         Whether to show multiple videos in a horizontal or vertical layout.
         This has no effect if only one video is provided.
@@ -206,8 +222,12 @@ def browse_raw_with_video(
     -------
     SyncedRawMediaBrowser
         An instance of `SyncedRawMediaBrowser`, a Qt controller object that handles
-        synchronization between the raw data browser and the video browser.
+        synchronization between the raw data browser(s) and the video browser.
     """
+    _validate_secondary_raw_parameters(
+        secondary_raw_browsers, secondary_raws, raw_aligners
+    )
+
     # Set up the video browser.
     video_browser = VideoBrowser(
         videos,
@@ -219,8 +239,11 @@ def browse_raw_with_video(
         raw_browser,
         raw,
         [video_browser],
-        [aligners],
+        [video_aligners],
         media_browser_titles=["Video Browser"],
+        secondary_raw_browsers=secondary_raw_browsers,
+        secondary_raws=secondary_raws,
+        raw_aligners=raw_aligners,
         show=show,
         max_sync_fps=max_sync_fps,
         parent=parent,
@@ -231,26 +254,42 @@ def browse_raw_with_audio(
     raw_browser: MNEQtBrowser,
     raw: mne.io.Raw,
     audio: AudioFile,
-    aligner: TimestampAligner,
+    audio_aligner: TimestampAligner,
+    secondary_raw_browsers: list[MNEQtBrowser] | None = None,
+    secondary_raws: list[mne.io.Raw] | None = None,
+    raw_aligners: list[TimestampAligner] | None = None,
     show: bool = True,
     max_sync_fps: int = 10,
     parent: QObject | None = None,
 ) -> SyncedRawMediaBrowser:
-    """Synchronize MNE raw data browser with a audio browser.
+    """Synchronize MNE raw data browser(s) with an audio browser.
 
     Parameters
     ----------
     raw_browser : mne_qt_browser.figure.MNEQtBrowser
-        The MNE raw data browser object to be synchronized with the video browser.
-        This can be created with 'plot' method of MNE raw data object when using qt
-        backend.
+        The primary MNE raw data browser object to be synchronized with the audio
+        browser. This can be created with 'plot' method of MNE raw data object when
+        using qt backend. This will act as the master browser controlling the
+        synchronization.
     raw : mne.io.Raw
         The MNE raw data object that was used to create the `raw_browser`.
     audio : AudioFile
         The audio file object to be displayed in the audio browser.
-    aligner : TimestampAligner
+    audio_aligner : TimestampAligner
         A `TimestampAligner` instance that provides the mapping between raw data time
         points and audio samples for the audio file.
+    secondary_raw_browsers : list[mne_qt_browser.figure.MNEQtBrowser] | None, optional
+        Optional list of secondary MNE raw data browsers to be synchronized with the
+        primary raw data browser and audio browser. If provided, `secondary_raws` and
+        `raw_aligners` must also be provided.
+    secondary_raws : list[mne.io.Raw] | None, optional
+        The MNE raw data objects that were used to create the `secondary_raw_browsers`.
+        Must have the same length as `secondary_raw_browsers` if provided.
+    raw_aligners : list[TimestampAligner] | None, optional
+        A list of `TimestampAligner` instances, one for each secondary raw data
+        browser. Each aligner provides the mapping between primary raw data time points
+        and secondary raw data time points for the corresponding secondary raw browser.
+        Must have the same length as `secondary_raw_browsers` if provided.
     max_sync_fps : int, optional
         The maximum frames per second for synchronizing the raw data browser and audio
         browser. This determines how often the synchronization updates can happen and
@@ -265,16 +304,23 @@ def browse_raw_with_audio(
     -------
     SyncedRawMediaBrowser
         An instance of `SyncedRawMediaBrowser`, a Qt controller object that handles
-        synchronization between the raw data browser and the audio browser.
+        synchronization between the raw data browser(s) and the audio browser.
     """
+    _validate_secondary_raw_parameters(
+        secondary_raw_browsers, secondary_raws, raw_aligners
+    )
+
     # Set up the audio browser.
     audio_browser = AudioBrowser(audio, parent=None)
     return SyncedRawMediaBrowser(
         raw_browser,
         raw,
         [audio_browser],
-        [[aligner]],
+        [[audio_aligner]],
         media_browser_titles=["Audio Browser"],
+        secondary_raw_browsers=secondary_raw_browsers,
+        secondary_raws=secondary_raws,
+        raw_aligners=raw_aligners,
         show=show,
         max_sync_fps=max_sync_fps,
         parent=parent,
@@ -288,19 +334,23 @@ def browse_raw_with_video_and_audio(
     video_aligners: list[TimestampAligner],
     audio: AudioFile,
     audio_aligner: TimestampAligner,
+    secondary_raw_browsers: list[MNEQtBrowser] | None = None,
+    secondary_raws: list[mne.io.Raw] | None = None,
+    raw_aligners: list[TimestampAligner] | None = None,
     video_splitter_orientation: Literal["horizontal", "vertical"] = "horizontal",
     max_sync_fps: int = 10,
     show: bool = True,
     parent: QObject | None = None,
 ) -> SyncedRawMediaBrowser:
-    """Synchronize MNE raw data browser with both video and audio browsers.
+    """Synchronize MNE raw data browser(s) with both video and audio browsers.
 
     Parameters
     ----------
     raw_browser : mne_qt_browser.figure.MNEQtBrowser
-        The MNE raw data browser object to be synchronized with the media browser.
-        This can be created with 'plot' method of MNE raw data object when using qt
-        backend.
+        The primary MNE raw data browser object to be synchronized with the media
+        browsers. This can be created with 'plot' method of MNE raw data object when
+        using qt backend. This will act as the master browser controlling the
+        synchronization.
     raw : mne.io.Raw
         The MNE raw data object that was used to create the `raw_browser`.
     videos : list[VideoFile]
@@ -315,6 +365,18 @@ def browse_raw_with_video_and_audio(
     audio_aligner : TimestampAligner
         A `TimestampAligner` instance that provides the mapping between raw data time
         points and audio samples for the audio file.
+    secondary_raw_browsers : list[mne_qt_browser.figure.MNEQtBrowser] | None, optional
+        Optional list of secondary MNE raw data browsers to be synchronized with the
+        primary raw data browser and media browsers. If provided, `secondary_raws` and
+        `raw_aligners` must also be provided.
+    secondary_raws : list[mne.io.Raw] | None, optional
+        The MNE raw data objects that were used to create the `secondary_raw_browsers`.
+        Must have the same length as `secondary_raw_browsers` if provided.
+    raw_aligners : list[TimestampAligner] | None, optional
+        A list of `TimestampAligner` instances, one for each secondary raw data
+        browser. Each aligner provides the mapping between primary raw data time points
+        and secondary raw data time points for the corresponding secondary raw browser.
+        Must have the same length as `secondary_raw_browsers` if provided.
     video_splitter_orientation : Literal["horizontal", "vertical"], optional
         Whether to show multiple videos in a horizontal or vertical layout.
         This has no effect if only one video is provided.
@@ -331,8 +393,13 @@ def browse_raw_with_video_and_audio(
     -------
     SyncedRawMediaBrowser
         An instance of `SyncedRawMediaBrowser`, a Qt controller object that handles
-        synchronization between the raw data browser and the video and audio browsers.
+        synchronization between the raw data browser(s) and the video and audio
+        browsers.
     """
+    _validate_secondary_raw_parameters(
+        secondary_raw_browsers, secondary_raws, raw_aligners
+    )
+
     # Set up the video browser.
     video_browser = VideoBrowser(
         videos,
@@ -349,7 +416,56 @@ def browse_raw_with_video_and_audio(
         [video_browser, audio_browser],
         [video_aligners, [audio_aligner]],
         media_browser_titles=["Video Browser", "Audio Browser"],
+        secondary_raw_browsers=secondary_raw_browsers,
+        secondary_raws=secondary_raws,
+        raw_aligners=raw_aligners,
         show=show,
         max_sync_fps=max_sync_fps,
         parent=parent,
     )
+
+
+def _validate_secondary_raw_parameters(
+    secondary_raw_browsers: list[MNEQtBrowser] | None,
+    secondary_raws: list[mne.io.Raw] | None,
+    raw_aligners: list[TimestampAligner] | None,
+) -> None:
+    """Validate secondary raw browser parameters.
+
+    Parameters
+    ----------
+    secondary_raw_browsers : list[MNEQtBrowser] | None
+        Optional list of secondary raw browsers.
+    secondary_raws : list[mne.io.Raw] | None
+        Optional list of secondary raw data objects.
+    raw_aligners : list[TimestampAligner] | None
+        Optional list of aligners for secondary raw browsers.
+
+    Raises
+    ------
+    ValueError
+        If parameter validation fails.
+    """
+    # Validate that either all secondary raw variables are None or all are given.
+    secondary_vars = [secondary_raw_browsers, secondary_raws, raw_aligners]
+    if not (
+        all(x is None for x in secondary_vars)
+        or all(x is not None for x in secondary_vars)
+    ):
+        raise ValueError(
+            "Either all of secondary_raw_browsers, secondary_raws, and raw_aligners"
+            " must be None, or all must be provided (not None)."
+        )
+
+    # Validate input lengths if secondary raw browsers are provided
+    if secondary_raw_browsers is not None:
+        assert secondary_raws is not None
+        assert raw_aligners is not None
+        if len(secondary_raw_browsers) != len(secondary_raws):
+            raise ValueError(
+                "secondary_raw_browsers and secondary_raws must have the same length"
+            )
+        if len(secondary_raw_browsers) != len(raw_aligners):
+            raise ValueError(
+                "secondary_raw_browsers and raw_aligners must have the same length"
+            )
