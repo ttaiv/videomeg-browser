@@ -12,7 +12,10 @@ from .audio import AudioFile
 from .audio_browser import AudioBrowser
 from .browser_synchronizer import BrowserSynchronizer
 from .raw_browser_manager import RawBrowserInterface, RawBrowserManager
-from .syncable_browser import SyncableBrowser
+from .syncable_browser import (
+    SyncableBrowserObject,
+    SyncableBrowserWidget,
+)
 from .timestamp_aligner import TimestampAligner
 from .video import VideoFile
 from .video_browser import VideoBrowser
@@ -25,21 +28,31 @@ class SyncedRawMediaBrowser(QObject):
 
     Parameters
     ----------
-    raw_browser : mne_qt_browser.figure.MNEQtBrowser
-        The MNE raw data browser object to be synchronized with the media browser.
+    primary_raw_browser : mne_qt_browser.figure.MNEQtBrowser
+        The primary MNE raw data browser object to be synchronized with other browsers.
         This can be created with 'plot' method of MNE raw data object when using qt
-        backend.
-    raw : mne.io.Raw
-        The MNE raw data object that was used to create the `raw_browser`.
-    media_browsers : list[SyncableBrowser]
-        The media browsers to be synchronized with the raw data browser.
-    aligners : list[list[TimeStampAligner]]
+        backend. The primary raw browser will act as a master browser that controls the
+        time point shown in the secondary browsers.
+    primary_raw : mne.io.Raw
+        The MNE raw data object that was used to create the `primary_raw_browser`.
+    media_browsers : list[SyncableBrowserWidget]
+        The media browsers to be synchronized with the primary raw data browser.
+    media_aligners : list[list[TimeStampAligner]]
         A list of lists of `TimestampAligner` instances. aligners[i][j] provides
-        the mapping between raw data time points and media samples for the j-th media
-        file in the i-th media browser.
+        the mapping between primary raw data samples and media samples for the j-th
+        media file in the i-th media browser.
     media_browser_titles : list[str]
         Titles for the media browsers. Each title corresponds to a media browser in
         `media_browsers`.
+    secondary_raw_browsers : list[mne_qt_browser.figure.MNEQtBrowser] | None, optional
+        Optional list of secondary MNE raw data browsers to be synchronized with the
+        primary raw data browser.
+    secondary_raws : list[mne.io.Raw] | None, optional
+        The MNE raw data objects that were used to create the `secondary_raw_browsers`.
+    raw_aligners : list[TimestampAligner] | None, optional
+        A list of `TimestampAligner` instances, one for each secondary raw data
+        browser. Each aligner provides the mapping between primary raw data samples and
+        secondary raw data samples for the corresponding secondary raw data browser.
     max_sync_fps : int, optional
         The maximum frames per second for synchronizing the raw data browser and media
         browser. This determines how often the synchronization updates can happen and
@@ -52,51 +65,77 @@ class SyncedRawMediaBrowser(QObject):
 
     def __init__(
         self,
-        raw_browser: MNEQtBrowser,
-        raw: mne.io.Raw,
-        media_browsers: list[SyncableBrowser],
-        aligners: list[list[TimestampAligner]],
+        primary_raw_browser: MNEQtBrowser,
+        primary_raw: mne.io.Raw,
+        media_browsers: list[SyncableBrowserWidget],
+        media_aligners: list[list[TimestampAligner]],
         media_browser_titles: list[str],
-        show: bool = True,
+        secondary_raw_browsers: list[MNEQtBrowser] | None = None,
+        secondary_raws: list[mne.io.Raw] | None = None,
+        raw_aligners: list[TimestampAligner] | None = None,
         max_sync_fps: int = 10,
+        show: bool = True,
         parent: QObject | None = None,
     ) -> None:
+        # Validate that either all secondary raw variables are None or all are given.
+        secondary_vars = [secondary_raw_browsers, secondary_raws, raw_aligners]
+        if not (
+            all(x is None for x in secondary_vars)
+            or all(x is not None for x in secondary_vars)
+        ):
+            raise ValueError(
+                "Either all of secondary_raw_browsers, secondary_raws, and raw_aligners"
+                " must be None, or all must be provided (not None)."
+            )
         super().__init__(parent=parent)
-        self._media_browsers = media_browsers
 
-        # Wrap the raw browser to a class that exposes the necessary methods.
-        raw_browser_interface = RawBrowserInterface(raw_browser, parent=self)
-        # Pass interface for manager that contains actual logic for managing the browser
-        # in sync with the video browser.
-        self._raw_browser_manager = RawBrowserManager(
-            raw_browser_interface, raw, parent=self
+        # Wrap the primary raw browser in a manager that enables synchronization.
+        self._raw_browser_manager = self._prepare_raw_browser_manager(
+            primary_raw_browser, primary_raw, show
         )
-        # Make sure that raw browser visibility matches the `show` parameter.
-        if show:
-            self._raw_browser_manager.show_browser()
-        else:
-            self._raw_browser_manager.hide_browser()
 
-        # Dock the media browsers to the raw data browser.
+        # Dock the media browsers to the primary raw data browser.
         self._docks = []
         for media_browser, media_browser_title in zip(
-            self._media_browsers, media_browser_titles
+            media_browsers, media_browser_titles
         ):
-            dock = QDockWidget(media_browser_title, raw_browser)
+            dock = QDockWidget(media_browser_title, primary_raw_browser)
             dock.setWidget(media_browser)
             dock.setFloating(True)
-            raw_browser.addDockWidget(Qt.RightDockWidgetArea, dock)
+            primary_raw_browser.addDockWidget(Qt.RightDockWidgetArea, dock)
             dock.resize(1000, 800)
             if not show:
                 dock.hide()
             self._docks.append(dock)
 
-        # Set up the synchronizer that keeps the raw and media browsers in sync.
+        # Add media browsers to a list of secondary browsers.
+        secondary_browsers: list[SyncableBrowserObject | SyncableBrowserWidget] = list(
+            media_browsers
+        )
+        aligners = media_aligners  # one aligner for each secondary browser
+        # If secondary raw browsers are provided, wrap them in managers and add to the
+        # list of secondary browsers.
+        if (
+            secondary_raw_browsers is not None
+            and secondary_raws is not None
+            and raw_aligners is not None
+        ):
+            for sec_raw_browser, sec_raw, aligner in zip(
+                secondary_raw_browsers, secondary_raws, raw_aligners
+            ):
+                sec_raw_manager = self._prepare_raw_browser_manager(
+                    sec_raw_browser, sec_raw, show
+                )
+                secondary_browsers.append(sec_raw_manager)
+                aligners.append([aligner])
+
+        # Set up the synchronizer that keeps the primary and secondary browsers in sync.
         self._synchronizer = BrowserSynchronizer(
-            self._raw_browser_manager,
-            self._media_browsers,
-            aligners,
-            max_sync_fps,
+            primary_browser=self._raw_browser_manager,
+            secondary_browsers=secondary_browsers,
+            aligners=aligners,
+            max_sync_fps=max_sync_fps,
+            throttle_primary_browser=False,
             parent=self,
         )
 
@@ -105,6 +144,22 @@ class SyncedRawMediaBrowser(QObject):
         self._raw_browser_manager.show_browser()
         for dock in self._docks:
             dock.show()
+
+    def _prepare_raw_browser_manager(
+        self, raw_browser: MNEQtBrowser, raw: mne.io.Raw, show: bool
+    ) -> RawBrowserManager:
+        """Wrap the raw browser in a manager that enables synchronization."""
+        # Wrap the raw browser to a class that exposes the necessary methods.
+        raw_browser_interface = RawBrowserInterface(raw_browser, parent=self)
+        # Pass interface for manager that implements SyncableBrowserObject interface.
+        raw_browser_manager = RawBrowserManager(raw_browser_interface, raw, parent=self)
+        # Make sure that raw browser visibility matches the `show` parameter.
+        if show:
+            raw_browser_manager.show_browser()
+        else:
+            raw_browser_manager.hide_browser()
+
+        return raw_browser_manager
 
 
 def browse_raw_with_video(
