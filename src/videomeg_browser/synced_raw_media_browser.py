@@ -77,16 +77,9 @@ class SyncedRawMediaBrowser(QObject):
         show: bool = True,
         parent: QObject | None = None,
     ) -> None:
-        # Validate that either all secondary raw variables are None or all are given.
-        secondary_vars = [secondary_raw_browsers, secondary_raws, raw_aligners]
-        if not (
-            all(x is None for x in secondary_vars)
-            or all(x is not None for x in secondary_vars)
-        ):
-            raise ValueError(
-                "Either all of secondary_raw_browsers, secondary_raws, and raw_aligners"
-                " must be None, or all must be provided (not None)."
-            )
+        _validate_secondary_raw_parameters(
+            secondary_raw_browsers, secondary_raws, raw_aligners
+        )
         super().__init__(parent=parent)
 
         # Wrap the primary raw browser in a manager that enables synchronization.
