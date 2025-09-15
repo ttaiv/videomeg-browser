@@ -21,6 +21,13 @@ from videomeg_browser.video import VideoFileHelsinkiVideoMEG
 BASE_PATH = (
     "/u/69/taivait1/unix/video_meg_testing/meg2meg_with_raw/2025-09-04--14-44-09_test_1"
 )
+# Assuming that base path contains all these files:
+RAW_FNAME = "2025_09_04__14_44_09_MEG.fif"
+VIDEO1_FNAME = "2025-09-04--14-44-09_video_01.vid"
+VIDEO2_FNAME = "2025-09-04--14-44-09_video_02.vid"
+AUDIO_FNAME = "2025-09-04--14-44-09_audio_00.aud"
+
+# Channel in raw data that contains the timing information
 RAW_TIMING_CHANNEL = "STI009"
 
 
@@ -43,20 +50,12 @@ def main() -> None:
     )
 
     # Load MEG data.
-    raw = mne.io.read_raw_fif(
-        op.join(BASE_PATH, "2025_09_04__14_44_09_MEG.fif"), preload=True
-    )
+    raw = mne.io.read_raw_fif(op.join(BASE_PATH, RAW_FNAME), preload=True)
 
     # Load videos and audio.
-    video1 = VideoFileHelsinkiVideoMEG(
-        op.join(BASE_PATH, "2025-09-04--14-44-09_video_01.vid")
-    )
-    video2 = VideoFileHelsinkiVideoMEG(
-        op.join(BASE_PATH, "2025-09-04--14-44-09_video_02.vid")
-    )
-    audio = AudioFileHelsinkiVideoMEG(
-        op.join(BASE_PATH, "2025-09-04--14-44-09_audio_00.aud")
-    )
+    video1 = VideoFileHelsinkiVideoMEG(op.join(BASE_PATH, VIDEO1_FNAME))
+    video2 = VideoFileHelsinkiVideoMEG(op.join(BASE_PATH, VIDEO2_FNAME))
+    audio = AudioFileHelsinkiVideoMEG(op.join(BASE_PATH, AUDIO_FNAME))
     audio.unpack_audio()
 
     # Print info about video and audio files.
