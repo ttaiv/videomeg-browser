@@ -225,7 +225,7 @@ def browse_raw_with_video(
     _validate_secondary_raw_parameters(
         secondary_raw_browsers, secondary_raws, raw_aligners
     )
-    app = _ensure_existing_qapplication()
+    app = _get_existing_qapplication()
 
     # Set up the video browser.
     video_browser = VideoBrowser(
@@ -319,7 +319,7 @@ def browse_raw_with_audio(
     _validate_secondary_raw_parameters(
         secondary_raw_browsers, secondary_raws, raw_aligners
     )
-    app = _ensure_existing_qapplication()
+    app = _get_existing_qapplication()
 
     # Set up the audio browser.
     audio_browser = AudioBrowser(audio, parent=None)
@@ -421,7 +421,7 @@ def browse_raw_with_video_and_audio(
     _validate_secondary_raw_parameters(
         secondary_raw_browsers, secondary_raws, raw_aligners
     )
-    app = _ensure_existing_qapplication()
+    app = _get_existing_qapplication()
 
     # Set up the video browser.
     video_browser = VideoBrowser(
@@ -501,7 +501,7 @@ def _validate_secondary_raw_parameters(
             )
 
 
-def _ensure_existing_qapplication() -> QCoreApplication:
+def _get_existing_qapplication() -> QCoreApplication:
     """Return the current QApplication instance or raise error if none exists."""
     app = QApplication.instance()
     if app is None:
