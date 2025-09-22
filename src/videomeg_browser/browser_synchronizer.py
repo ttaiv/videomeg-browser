@@ -17,7 +17,7 @@ import logging
 
 from qtpy.QtCore import QElapsedTimer, QObject, QTimer, Signal, Slot  # type: ignore
 
-from .syncable_browser import (
+from .browsers.syncable_browser import (
     SyncableBrowser,
     SyncableBrowserObject,
     SyncableBrowserWidget,

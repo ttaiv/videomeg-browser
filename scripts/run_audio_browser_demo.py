@@ -10,7 +10,7 @@ import sys
 from qtpy.QtWidgets import QApplication
 
 from videomeg_browser.audio import AudioFileHelsinkiVideoMEG
-from videomeg_browser.audio_browser import AudioBrowser
+from videomeg_browser.browsers.audio_browser import AudioBrowser
 
 
 def main() -> None:
