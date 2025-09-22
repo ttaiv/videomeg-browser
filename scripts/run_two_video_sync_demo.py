@@ -13,7 +13,6 @@ import os.path as op
 import mne
 import numpy as np
 from mne.datasets import sample
-from qtpy.QtWidgets import QApplication
 
 from videomeg_browser.synced_raw_media_browser import browse_raw_with_video
 from videomeg_browser.timestamp_aligner import TimestampAligner
@@ -69,17 +68,14 @@ def main() -> None:
     )
 
     # Start the browser.
-
-    app = QApplication([])
     raw_browser = raw.plot(block=False, show=False)
-    browser = browse_raw_with_video(
+    browse_raw_with_video(
         raw_browser,
         raw,
         [video1, video2],
         [aligner1, aligner2],
         video_splitter_orientation="vertical",
     )
-    app.exec_()
 
 
 if __name__ == "__main__":
