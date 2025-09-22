@@ -10,7 +10,6 @@ import os.path as op
 import mne
 import numpy as np
 from mne.datasets import sample
-from qtpy.QtWidgets import QApplication
 
 from videomeg_browser.audio import AudioFileHelsinkiVideoMEG
 from videomeg_browser.synced_raw_media_browser import browse_raw_with_video_and_audio
@@ -84,9 +83,8 @@ def main() -> None:
     )
 
     # Start the browser.
-    app = QApplication([])
     raw_browser = raw.plot(block=False, show=False)
-    browser = browse_raw_with_video_and_audio(
+    browse_raw_with_video_and_audio(
         raw_browser,
         raw,
         [video1, video2],
@@ -95,7 +93,6 @@ def main() -> None:
         audio_aligner,
         video_splitter_orientation="vertical",
     )
-    app.exec_()
 
 
 if __name__ == "__main__":

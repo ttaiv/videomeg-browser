@@ -9,7 +9,6 @@ import numpy as np
 import numpy.typing as npt
 import scipy
 from mne.datasets import sample
-from qtpy.QtWidgets import QApplication
 
 from videomeg_browser.synced_raw_media_browser import browse_raw_with_video
 from videomeg_browser.test_utils import create_fake_video_with_markers
@@ -107,14 +106,8 @@ def main() -> None:
     )
 
     # Launch the synced raw and video browsers.
-
-    app = QApplication([])
-
     raw_browser = raw.plot(block=False, show=False)
-
-    browser = browse_raw_with_video(raw_browser, raw, [video], [aligner])
-
-    app.exec_()  # Start the Qt event loop
+    browse_raw_with_video(raw_browser, raw, [video], [aligner])
 
 
 if __name__ == "__main__":

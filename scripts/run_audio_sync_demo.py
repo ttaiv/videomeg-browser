@@ -9,7 +9,6 @@ import logging
 import mne
 import numpy as np
 from mne.datasets import sample
-from qtpy.QtWidgets import QApplication
 
 from videomeg_browser.audio import AudioFileHelsinkiVideoMEG
 from videomeg_browser.synced_raw_media_browser import browse_raw_with_audio
@@ -59,10 +58,8 @@ def main() -> None:
     )
 
     # Start the synced raw and audio browsers.
-    app = QApplication([])
     raw_browser = raw.plot(block=False, show=False)
-    browser = browse_raw_with_audio(raw_browser, raw, audio, aligner)
-    app.exec_()
+    browse_raw_with_audio(raw_browser, raw, audio, aligner)
 
 
 if __name__ == "__main__":
