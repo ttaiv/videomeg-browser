@@ -11,10 +11,10 @@ import mne
 import numpy as np
 from mne.datasets import sample
 
-from videomeg_browser.audio import AudioFileHelsinkiVideoMEG
+from videomeg_browser.media.audio import AudioFileHelsinkiVideoMEG
 from videomeg_browser.synced_raw_media_browser import browse_raw_with_video_and_audio
 from videomeg_browser.timestamp_aligner import TimestampAligner
-from videomeg_browser.video import VideoFileHelsinkiVideoMEG
+from videomeg_browser.media.video import VideoFileHelsinkiVideoMEG
 
 BASE_PATH = "/u/69/taivait1/unix/video_meg_testing/2025-07-11_MEG2MEG_test/"
 

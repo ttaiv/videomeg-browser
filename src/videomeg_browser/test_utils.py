@@ -3,7 +3,7 @@
 import numpy as np
 import numpy.typing as npt
 
-from videomeg_browser.video import VideoFile
+from videomeg_browser.media.video import VideoFile
 
 
 class FakeVideoFile(VideoFile):

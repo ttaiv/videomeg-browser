@@ -4,7 +4,7 @@ import logging
 
 import matplotlib.pyplot as plt
 
-from videomeg_browser.audio import AudioFileHelsinkiVideoMEG
+from videomeg_browser.media.audio import AudioFileHelsinkiVideoMEG
 
 
 def main() -> None:

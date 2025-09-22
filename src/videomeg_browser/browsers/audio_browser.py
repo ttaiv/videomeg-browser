@@ -19,7 +19,7 @@ from qtpy.QtWidgets import (
 from . import gui_utils
 
 from .. import audio_player
-from ..audio import AudioFile
+from ..media.audio import AudioFile
 from .time_selector import TimeSelector
 from .syncable_browser import SyncableBrowserWidget
 

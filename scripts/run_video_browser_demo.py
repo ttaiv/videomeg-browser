@@ -10,7 +10,7 @@ import sys
 
 from qtpy.QtWidgets import QApplication
 
-from videomeg_browser.video import VideoFileCV2, VideoFileHelsinkiVideoMEG
+from videomeg_browser.media.video import VideoFileCV2, VideoFileHelsinkiVideoMEG
 from videomeg_browser.browsers.video_browser import VideoBrowser
 
 
