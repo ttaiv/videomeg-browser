@@ -5,8 +5,8 @@ from typing import Literal
 
 import mne
 from mne_qt_browser.figure import MNEQtBrowser
-from qtpy.QtCore import QObject, Qt  # type: ignore
-from qtpy.QtWidgets import QDockWidget
+from qtpy.QtCore import QCoreApplication, QObject, Qt  # type: ignore
+from qtpy.QtWidgets import QApplication, QDockWidget
 
 from .audio import AudioFile
 from .audio_browser import AudioBrowser
@@ -167,6 +167,7 @@ def browse_raw_with_video(
     show: bool = True,
     max_sync_fps: int = 10,
     parent: QObject | None = None,
+    block: bool = True,
 ) -> SyncedRawMediaBrowser:
     """Synchronize MNE raw data browser(s) with a video browser.
 
@@ -210,6 +211,10 @@ def browse_raw_with_video(
         by default True.
     parent : QObject, optional
         The parent QObject for this synchronized browser, by default None.
+    block : bool, optional
+        Whether to automatically start the Qt event loop and block until the
+        application is closed, by default True. If False, the caller is responsible
+        for managing the QApplication event loop.
 
     Returns
     -------
@@ -220,6 +225,7 @@ def browse_raw_with_video(
     _validate_secondary_raw_parameters(
         secondary_raw_browsers, secondary_raws, raw_aligners
     )
+    app = _ensure_existing_qapplication()
 
     # Set up the video browser.
     video_browser = VideoBrowser(
@@ -228,7 +234,7 @@ def browse_raw_with_video(
         parent=None,
         video_splitter_orientation=video_splitter_orientation,
     )
-    return SyncedRawMediaBrowser(
+    browser = SyncedRawMediaBrowser(
         raw_browser,
         raw,
         [video_browser],
@@ -242,6 +248,12 @@ def browse_raw_with_video(
         parent=parent,
     )
 
+    if block:
+        # Start the Qt event loop to display the browsers.
+        app.exec_()
+
+    return browser
+
 
 def browse_raw_with_audio(
     raw_browser: MNEQtBrowser,
@@ -254,6 +266,7 @@ def browse_raw_with_audio(
     show: bool = True,
     max_sync_fps: int = 10,
     parent: QObject | None = None,
+    block: bool = True,
 ) -> SyncedRawMediaBrowser:
     """Synchronize MNE raw data browser(s) with an audio browser.
 
@@ -292,6 +305,10 @@ def browse_raw_with_audio(
         by default True.
     parent : QObject, optional
         The parent QObject for this synchronized browser, by default None.
+    block : bool, optional
+        Whether to automatically start the Qt event loop and block until the
+        application is closed, by default True. If False, the caller is responsible
+        for managing the QApplication event loop.
 
     Returns
     -------
@@ -302,10 +319,11 @@ def browse_raw_with_audio(
     _validate_secondary_raw_parameters(
         secondary_raw_browsers, secondary_raws, raw_aligners
     )
+    app = _ensure_existing_qapplication()
 
     # Set up the audio browser.
     audio_browser = AudioBrowser(audio, parent=None)
-    return SyncedRawMediaBrowser(
+    browser = SyncedRawMediaBrowser(
         raw_browser,
         raw,
         [audio_browser],
@@ -318,6 +336,12 @@ def browse_raw_with_audio(
         max_sync_fps=max_sync_fps,
         parent=parent,
     )
+
+    if block:
+        # Start the Qt event loop to display the browsers.
+        app.exec_()
+
+    return browser
 
 
 def browse_raw_with_video_and_audio(
@@ -334,6 +358,7 @@ def browse_raw_with_video_and_audio(
     max_sync_fps: int = 10,
     show: bool = True,
     parent: QObject | None = None,
+    block: bool = True,
 ) -> SyncedRawMediaBrowser:
     """Synchronize MNE raw data browser(s) with both video and audio browsers.
 
@@ -381,6 +406,10 @@ def browse_raw_with_video_and_audio(
         Whether to show the browsers immediately, by default True.
     parent : QObject, optional
         The parent QObject for this synchronized browser, by default None.
+    block : bool, optional
+        Whether to automatically start the Qt event loop and block until the
+        application is closed, by default True. If False, the caller is responsible
+        for managing the QApplication event loop.
 
     Returns
     -------
@@ -392,6 +421,7 @@ def browse_raw_with_video_and_audio(
     _validate_secondary_raw_parameters(
         secondary_raw_browsers, secondary_raws, raw_aligners
     )
+    app = _ensure_existing_qapplication()
 
     # Set up the video browser.
     video_browser = VideoBrowser(
@@ -403,7 +433,8 @@ def browse_raw_with_video_and_audio(
     # Set up the audio browser.
     audio_browser = AudioBrowser(audio, parent=None)
 
-    return SyncedRawMediaBrowser(
+    # Set up synchronized browser.
+    browser = SyncedRawMediaBrowser(
         raw_browser,
         raw,
         [video_browser, audio_browser],
@@ -416,6 +447,12 @@ def browse_raw_with_video_and_audio(
         max_sync_fps=max_sync_fps,
         parent=parent,
     )
+
+    if block:
+        # Start the Qt event loop to display the browsers.
+        app.exec_()
+
+    return browser
 
 
 def _validate_secondary_raw_parameters(
@@ -462,3 +499,15 @@ def _validate_secondary_raw_parameters(
             raise ValueError(
                 "secondary_raw_browsers and raw_aligners must have the same length"
             )
+
+
+def _ensure_existing_qapplication() -> QCoreApplication:
+    """Return the current QApplication instance or raise error if none exists."""
+    app = QApplication.instance()
+    if app is None:
+        raise RuntimeError(
+            "No existing QApplication instance found even though raw.plot() should "
+            "create one. Ensure that you call raw.plot() with qt backend before "
+            "this function."
+        )
+    return app
