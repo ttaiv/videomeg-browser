@@ -8,8 +8,8 @@ import mne
 import numpy as np
 import numpy.typing as npt
 import scipy
+from demo_utils import create_fake_video_with_markers
 from mne.datasets import sample
-from utils import create_fake_video_with_markers
 
 from videomeg_browser import TimestampAligner, browse_raw_with_video
 
