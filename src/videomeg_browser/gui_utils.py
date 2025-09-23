@@ -1,6 +1,7 @@
 """Contains helpers and GUI components for video and audio browser."""
 
 import logging
+import math
 from importlib.resources import files
 
 from qtpy.QtCore import Qt, Signal  # type: ignore
@@ -82,8 +83,15 @@ class ElapsedTimeLabel(QLabel):
         """Update the current time displayed in the label."""
         if current_time_seconds < 0:
             raise ValueError("Current time cannot be negative.")
-        if current_time_seconds > self._max_time_seconds:
-            logger.warning("Current time exceeds maximum time.")
+        if current_time_seconds > self._max_time_seconds and not math.isclose(
+            current_time_seconds,
+            self._max_time_seconds,
+            abs_tol=1e-3,  # allow current time to be less than 1 ms greater than max
+        ):
+            logger.warning(
+                f"Current time {current_time_seconds} exceeds maximum time "
+                f"{self._max_time_seconds}."
+            )
 
         self._current_time_seconds = current_time_seconds
         self._current_time_text = self._format_time(current_time_seconds)
@@ -99,6 +107,7 @@ class ElapsedTimeLabel(QLabel):
             raise ValueError("Maximum time cannot be negative.")
         if max_time_seconds < self._current_time_seconds:
             logger.warning("Maximum time is less than current time.")
+
         if max_time_seconds < 3600:
             self._include_hours = False
         else:
