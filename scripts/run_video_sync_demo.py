@@ -11,10 +11,12 @@ import mne
 import numpy as np
 from numpy.typing import NDArray
 
-from videomeg_browser.comp_tstamps import comp_tstamps
-from videomeg_browser.synced_raw_media_browser import browse_raw_with_video
-from videomeg_browser.timestamp_aligner import TimestampAligner
-from videomeg_browser.video import VideoFileHelsinkiVideoMEG
+from videomeg_browser import (
+    TimestampAligner,
+    VideoFileHelsinkiVideoMEG,
+    browse_raw_with_video,
+    comp_tstamps,
+)
 
 
 def get_raw_timestamps(raw: mne.io.Raw, timing_channel: str) -> NDArray[np.floating]:

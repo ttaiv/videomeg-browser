@@ -16,8 +16,9 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from . import audio_player, gui_utils
-from .audio import AudioFile
+from .. import audio_player
+from ..media.audio import AudioFile
+from . import gui_utils
 from .syncable_browser import SyncableBrowserWidget
 from .time_selector import TimeSelector
 

@@ -8,17 +8,17 @@ from mne_qt_browser.figure import MNEQtBrowser
 from qtpy.QtCore import QCoreApplication, QObject, Qt  # type: ignore
 from qtpy.QtWidgets import QApplication, QDockWidget
 
-from .audio import AudioFile
-from .audio_browser import AudioBrowser
 from .browser_synchronizer import BrowserSynchronizer
-from .raw_browser_manager import RawBrowserInterface, RawBrowserManager
-from .syncable_browser import (
+from .browsers.audio_browser import AudioBrowser
+from .browsers.raw_browser_manager import RawBrowserInterface, RawBrowserManager
+from .browsers.syncable_browser import (
     SyncableBrowserObject,
     SyncableBrowserWidget,
 )
+from .browsers.video_browser import VideoBrowser
+from .media.audio import AudioFile
+from .media.video import VideoFile
 from .timestamp_aligner import TimestampAligner
-from .video import VideoFile
-from .video_browser import VideoBrowser
 
 logger = logging.getLogger(__name__)
 
