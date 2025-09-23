@@ -10,8 +10,8 @@ import sys
 
 from qtpy.QtWidgets import QApplication
 
-from videomeg_browser.browsers.video_browser import VideoBrowser
-from videomeg_browser.media.video import VideoFileCV2, VideoFileHelsinkiVideoMEG
+from videomeg_browser import VideoFileCV2, VideoFileHelsinkiVideoMEG  # noqa: F401
+from videomeg_browser.browsers import VideoBrowser
 
 
 def main() -> None:

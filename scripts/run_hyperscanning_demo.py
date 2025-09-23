@@ -11,11 +11,13 @@ import mne
 import numpy as np
 from numpy.typing import NDArray
 
-from videomeg_browser.comp_tstamps import comp_tstamps
-from videomeg_browser.media.audio import AudioFileHelsinkiVideoMEG
-from videomeg_browser.media.video import VideoFileHelsinkiVideoMEG
-from videomeg_browser.synced_raw_media_browser import browse_raw_with_video_and_audio
-from videomeg_browser.timestamp_aligner import TimestampAligner
+from videomeg_browser import (
+    AudioFileHelsinkiVideoMEG,
+    TimestampAligner,
+    VideoFileHelsinkiVideoMEG,
+    browse_raw_with_video_and_audio,
+    comp_tstamps,
+)
 
 BASE_PATH = (
     "/u/69/taivait1/unix/video_meg_testing/meg2meg_with_raw/2025-09-04--14-44-09_test_1"

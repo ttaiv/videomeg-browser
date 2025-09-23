@@ -4,7 +4,7 @@ import logging
 
 import matplotlib.pyplot as plt
 
-from videomeg_browser.media.audio import AudioFileHelsinkiVideoMEG
+from videomeg_browser import AudioFileHelsinkiVideoMEG
 
 
 def main() -> None:
@@ -13,7 +13,6 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
-
     audio_path = (
         "/u/69/taivait1/unix/video_meg_testing/2025-07-11_MEG2MEG_test/"
         "2025-07-11--18-18-41_audio_00.aud"

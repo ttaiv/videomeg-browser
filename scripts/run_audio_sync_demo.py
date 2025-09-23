@@ -10,9 +10,11 @@ import mne
 import numpy as np
 from mne.datasets import sample
 
-from videomeg_browser.media.audio import AudioFileHelsinkiVideoMEG
-from videomeg_browser.synced_raw_media_browser import browse_raw_with_audio
-from videomeg_browser.timestamp_aligner import TimestampAligner
+from videomeg_browser import (
+    AudioFileHelsinkiVideoMEG,
+    TimestampAligner,
+    browse_raw_with_audio,
+)
 
 # Replace this with the path to your audio file.
 AUDIO_PATH = (
