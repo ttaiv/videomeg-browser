@@ -21,8 +21,8 @@ from qtpy.QtWidgets import (
 
 import videomeg_browser.browsers.gui_utils as gui_utils
 
-from .syncable_browser import SyncableBrowserWidget, SyncStatus
 from ..media.video import VideoFile
+from .syncable_browser import SyncableBrowserWidget, SyncStatus
 
 logger = logging.getLogger(__name__)
 

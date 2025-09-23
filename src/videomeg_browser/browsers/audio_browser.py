@@ -16,12 +16,11 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from . import gui_utils
-
 from .. import audio_player
 from ..media.audio import AudioFile
-from .time_selector import TimeSelector
+from . import gui_utils
 from .syncable_browser import SyncableBrowserWidget
+from .time_selector import TimeSelector
 
 logger = logging.getLogger(__name__)
 
