@@ -604,9 +604,10 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         timestamps_diff = np.diff(audio_timestamps_ms)
         if not np.all(timestamps_diff >= 0):
             logger.warning(
-                f"Piecewise linear regression produced {np.sum(timestamps_diff < 0)} "
-                "decreasing timestamps. Replacing the decreasing timestamps with the "
-                "previous valid timestamp to ensure non-decreasing timestamps."
+                "Piecewise linear regression produced %d decreasing timestamps. "
+                "Replacing the decreasing timestamps with the previous valid timestamp "
+                "to ensure non-decreasing timestamps.",
+                np.sum(timestamps_diff < 0),
             )
             audio_timestamps_ms = np.maximum.accumulate(audio_timestamps_ms)
 
