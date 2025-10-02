@@ -17,8 +17,6 @@ from .helsinki_videomeg_file_utils import UnknownVersionError, read_attrib
 
 logger = logging.getLogger(__name__)
 
-_REGR_SEGM_LENGTH = 20  # seconds, should be integer
-
 
 class AudioFile(ABC):
     """Handles reading audio files."""
@@ -261,12 +259,19 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
     magic_str : str, optional
         Magic string that should be at the beginning of video file.
         Default is "HELSINKI_VIDEO_MEG_PROJECT_AUDIO_FILE".
+    regression_segment_length : int, optional
+        Length of segments (in seconds) used in piecewise linear regression
+        to compute timestamps for all audio samples. Default is 20 seconds.
     """
 
     def __init__(
-        self, fname: str, magic_str: str = "HELSINKI_VIDEO_MEG_PROJECT_AUDIO_FILE"
+        self,
+        fname: str,
+        magic_str: str = "HELSINKI_VIDEO_MEG_PROJECT_AUDIO_FILE",
+        regression_segment_length: int = 20,
     ) -> None:
         super().__init__(fname)
+        self._regression_segment_length = regression_segment_length
         # Open the file to parse metadata and read the audio bytes into memory.
         with open(fname, "rb") as data_file:
             # Check the magic string
@@ -537,6 +542,7 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         based on the buffer timestamps.
         """
         # Create an array that contains the indices of the last sample in each buffer.
+        # These indices correspond to the timestamps we have.
         buffer_end_indices = np.arange(
             self._n_samples_per_buffer - 1, self.n_samples, self._n_samples_per_buffer
         )
@@ -547,7 +553,9 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
 
         # Split the data into segments for piecewise linear regression.
         split_indices = list(
-            range(0, self.n_samples, _REGR_SEGM_LENGTH * self._sampling_rate)
+            range(
+                0, self.n_samples, self._regression_segment_length * self._sampling_rate
+            )
         )
         # the last segment might be up to twice as long as the others
         split_indices[-1] = self.n_samples
