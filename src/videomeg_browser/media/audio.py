@@ -17,8 +17,6 @@ from .helsinki_videomeg_file_utils import UnknownVersionError, read_attrib
 
 logger = logging.getLogger(__name__)
 
-_REGR_SEGM_LENGTH = 20  # seconds, should be integer
-
 
 class AudioFile(ABC):
     """Handles reading audio files."""
@@ -261,12 +259,19 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
     magic_str : str, optional
         Magic string that should be at the beginning of video file.
         Default is "HELSINKI_VIDEO_MEG_PROJECT_AUDIO_FILE".
+    regression_segment_length : int, optional
+        Length of segments (in seconds) used in piecewise linear regression
+        to compute timestamps for all audio samples. Default is 20 seconds.
     """
 
     def __init__(
-        self, fname: str, magic_str: str = "HELSINKI_VIDEO_MEG_PROJECT_AUDIO_FILE"
+        self,
+        fname: str,
+        magic_str: str = "HELSINKI_VIDEO_MEG_PROJECT_AUDIO_FILE",
+        regression_segment_length: int = 20,
     ) -> None:
         super().__init__(fname)
+        self._regression_segment_length = regression_segment_length
         # Open the file to parse metadata and read the audio bytes into memory.
         with open(fname, "rb") as data_file:
             # Check the magic string
@@ -308,6 +313,10 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
                 )
                 self.buffer_timestamps_ms[i] = ts
         # close the file
+
+        # Make sure that the timestamps are increasing
+        if not np.all(np.diff(self.buffer_timestamps_ms) >= 0):
+            raise ValueError("Audio buffer timestamps must be non-decreasing but found decreasing values.")
 
         # Calculate stats for a single sample.
         self._bit_depth = self._get_bit_depth(self.format_string)
@@ -532,39 +541,74 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
         Uses piecewise linear regression to estimate timestamps for all samples
         based on the buffer timestamps.
         """
-        samps = np.arange(
+        # Create an array that contains the indices of the last sample in each buffer.
+        # These indices correspond to the timestamps we have.
+        buffer_end_indices = np.arange(
             self._n_samples_per_buffer - 1, self.n_samples, self._n_samples_per_buffer
         )
 
-        errs = -np.ones(self._n_chunks)
-        audio_ts = -np.ones(self.n_samples)
+        # Prepare arrays to hold the regression errors and the computed timestamps.
+        regression_errors = -np.ones(self._n_chunks)
+        audio_timestamps_ms = -np.ones(self.n_samples)
 
-        # split the data into segments for piecewise linear regression
-        split_indx = list(
-            range(0, self.n_samples, _REGR_SEGM_LENGTH * self._sampling_rate)
+        # Split the data into segments for piecewise linear regression.
+        split_indices = list(
+            range(
+                0, self.n_samples, self._regression_segment_length * self._sampling_rate
+            )
         )
         # the last segment might be up to twice as long as the others
-        split_indx[-1] = self.n_samples
+        split_indices[-1] = self.n_samples
 
-        for i in range(len(split_indx) - 1):
-            sel_indx = np.where(
-                (samps >= split_indx[i]) & (samps < split_indx[i + 1])
-            )  # select one segment
+        # Loop over the segments and perform linear regression.
+        for i in range(len(split_indices) - 1):
+            segment_start_idx = split_indices[i]
+            segment_end_idx = split_indices[i + 1]
+
+            # Find the buffers that have timestamps within the current segment.
+            segment_mask = (buffer_end_indices >= segment_start_idx) & (
+                buffer_end_indices < segment_end_idx
+            )
+            # Take the samples indices and timestamps.
+            timestamp_indices = buffer_end_indices[segment_mask]
+            timestamps_ms = self.buffer_timestamps_ms[segment_mask]
+
+            # Fit a linear regression.
             p = np.polyfit(
-                samps[sel_indx], self.buffer_timestamps_ms[sel_indx], 1
-            )  # compute the regression coefficients
-            errs[sel_indx] = np.abs(
-                np.polyval(p, samps[sel_indx]) - self.buffer_timestamps_ms[sel_indx]
-            )  # compute the regression error
-            audio_ts[split_indx[i] : split_indx[i + 1]] = np.polyval(
-                p, np.arange(split_indx[i], split_indx[i + 1])
-            )  # compute the timestamps with regression
+                timestamp_indices,
+                timestamps_ms,
+                1,
+            )
+            # Compute the regression error for the known timestamps.
+            regression_errors[segment_mask] = np.abs(
+                np.polyval(p, timestamp_indices)
+                - self.buffer_timestamps_ms[segment_mask]
+            )
+            # Compute timestamps for all samples in the segment.
+            audio_timestamps_ms[segment_start_idx:segment_end_idx] = np.polyval(
+                p, np.arange(segment_start_idx, segment_end_idx)
+            )
 
-        assert audio_ts.min() >= 0  # make sure audio_ts was completely filled
-        assert errs.min() >= 0  # make sure errs was completely filled
+        assert audio_timestamps_ms.min() >= 0, "All timestamps should be set"
+        assert regression_errors.min() >= 0, "All regression errors should be set"
+
         logger.info(
-            f"Audio regression fit errors (abs): mean {errs.mean():.3f}, median "
-            f"{np.median(errs):.3f}, max {errs.max():.3f}"
+            "Audio regression fit errors (abs): mean %.3f ms, median %.3f ms, "
+            "max %.3f ms",
+            regression_errors.mean(),
+            np.median(regression_errors),
+            regression_errors.max(),
         )
 
-        self._audio_timestamps_ms = audio_ts
+        # Make sure that the timestamps are non-decreasing.
+        timestamps_diff = np.diff(audio_timestamps_ms)
+        if not np.all(timestamps_diff >= 0):
+            logger.warning(
+                "Piecewise linear regression produced %d decreasing timestamps. "
+                "Replacing the decreasing timestamps with the previous valid timestamp "
+                "to ensure non-decreasing timestamps.",
+                np.sum(timestamps_diff < 0),
+            )
+            audio_timestamps_ms = np.maximum.accumulate(audio_timestamps_ms)
+
+        self._audio_timestamps_ms = audio_timestamps_ms
