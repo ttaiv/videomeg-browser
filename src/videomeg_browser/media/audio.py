@@ -309,6 +309,10 @@ class AudioFileHelsinkiVideoMEG(AudioFile):
                 self.buffer_timestamps_ms[i] = ts
         # close the file
 
+        # Make sure that the timestamps are increasing
+        if not np.all(np.diff(self.buffer_timestamps_ms) >= 0):
+            raise ValueError("Audio buffer timestamps are not non-decreasing.")
+
         # Calculate stats for a single sample.
         self._bit_depth = self._get_bit_depth(self.format_string)
         self._n_bytes_per_sample = struct.calcsize(self.format_string)
