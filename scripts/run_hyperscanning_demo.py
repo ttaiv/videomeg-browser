@@ -70,11 +70,6 @@ def main() -> None:
     audio_timestamps_ms = audio.get_audio_timestamps_ms()
     raw_timestamps_ms = get_raw_timestamps(raw, RAW_TIMING_CHANNEL)
 
-    # For some reason there are two audio timestamps that are smaller than the previous
-    # one. Sort the timestamps to make them non-decreasing and avoid error in aligner
-    # creation.
-    audio_timestamps_ms.sort()
-
     # Use the timestamps to create aligners for videos and audio to sync them with
     # the MEG data.
     vid_aligner1 = TimestampAligner(
